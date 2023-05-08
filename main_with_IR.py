@@ -69,7 +69,7 @@ if 1:
     from neonAIgui import Ui_MainWindow
     full = 1
 else:
-    from GRIMe_AIDownloadManager import Ui_MainWindow
+    from GUIs.GRIMe_AIDownloadManager import Ui_MainWindow
     full = 0
 
 # from tensorflow.python.client import device_lib as dev_lib

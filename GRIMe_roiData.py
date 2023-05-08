@@ -15,6 +15,7 @@ class ROIShape(Enum):
 # ======================================================================================================================
 class GRIMe_roiData:
     def __init__(self):
+        self.trainingImageName = ""
         self.roiName = ""
         self.displayROI = QRect()
         self.imageROI = QRect()
@@ -24,6 +25,21 @@ class GRIMe_roiData:
         self.hist = []
         self.hsvClusterCenters = []
         self.hsvHist = []
+        self.intensity = []
+        self.shannonEntropy = []
+        self.nNumColorClusters = []
+
+    # --------------------------------------------------------------------------------
+    def setTrainingImageName(self, trainingImageName):
+        self.trainingImageName = trainingImageName
+    def getTrainingImageName(self):
+        return(self.trainingImageName)
+
+    # --------------------------------------------------------------------------------
+    def setNumColorClusters(self, nNumColorClusters):
+        self.nNumColorClusters = nNumColorClusters
+    def getNumColorClusters(self):
+        return self.nNumColorClusters
 
     # --------------------------------------------------------------------------------
     def setROIName(self, roiName):
@@ -46,7 +62,7 @@ class GRIMe_roiData:
         return temp
         #return self.imageROI
 
-    # --------------------------------------------------------------------------------
+    # --------------------  ------------------------------------------------------------
     def setImageSize(self, imageSize):
         self.imageSize = imageSize
 

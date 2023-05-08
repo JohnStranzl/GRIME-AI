@@ -1,21 +1,46 @@
-import time
 import datetime
+import requests
+import urllib.request
+import re
 from urllib.request import urlopen
+
+from GRIMe_QProgressWheel import QProgressWheel
+
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
-import requests
 from GRIMe_ImageData import imageData
+
+global bChromeDriverLoaded
+bChromeDriverLoaded = False
+
+global driver
+driver = None
 
 class GRIMe_PhenoCam():
 
     def __init__(self):
-        self.phenoCamURL = 'https://phenocam.sr.unh.edu'
+        self.phenoCamURL = 'https://phenocam.nau.edu'
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def closeChromeDriver(self):
+        global bChromeDriverLoaded
+        global driver
+
+        bChromeDriverLoaded = False
+        driver.close()
+        driver.quit()
 
     # ======================================================================================================================
     # THIS FUNCTION GETS THE LIST OF ALL AVAILABLE VISIBLE IMAGES FOR A GIVEN DATE.
     # ======================================================================================================================
     def getVisibleImages(self, dailyURLvisible, start_time, end_time):
+
+        global bChromeDriverLoaded
+        global driver
 
         dailyImagesList = dailyList([], [])
 
@@ -29,19 +54,34 @@ class GRIMe_PhenoCam():
             # ----------
             # GET THE FILENAMES OF EACH VISIBLE LIGHT IMAGE FOR THE SELECTED DATE
             if 1:
-                driver = webdriver.Chrome('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe')  # Optional argument, if not specified will search path.
-                driver.get(dailyURLvisible)
+                if bChromeDriverLoaded == False:
+                    options = Options()
+                    options.add_argument('--headless')
+                    options.add_argument('--disable-gpu')  # Last I checked this was necessary.
 
-                username = driver.find_element_by_name('username')
-                username.send_keys('JohnStranzl')
-                password = driver.find_element_by_name('password')
-                password.send_keys('V3ntur3s63*')
-                password.submit()
-                #time.sleep(5)  # Let the user actually see something!
+                    driver = webdriver.Chrome('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe', chrome_options=options)  # Optional argument, if not specified will search path.
 
-                driver.get(dailyURLvisible)
+                    driver.minimize_window()
+                    driver.minimize_window()
+                    driver.get(dailyURLvisible)
+                    driver.minimize_window()
+
+                    username = driver.find_element_by_name('username')
+                    username.send_keys('JohnStranzl')
+                    password = driver.find_element_by_name('password')
+                    password.send_keys('V3ntur3s63*')
+                    password.submit()
+                    #time.sleep(5)  # Let the user actually see something!
+
+                    bChromeDriverLoaded = True
+                else:
+                    driver.minimize_window()
+                    driver.get(dailyURLvisible)
+                    driver.minimize_window()
+
                 webContent = driver.page_source
-                driver.quit()
+
+                #driver.quit()
 
                 # PARSE THE HTML TO EXTRACT OUT THE JPG LINKS
                 soup = BeautifulSoup(webContent, 'html5lib')
@@ -80,6 +120,144 @@ class GRIMe_PhenoCam():
 
         return dailyImagesList
 
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def getStartEndDate(self):
+        # providing url
+        url = "https://phenocam.nau.edu/webcam/sites/NEON.D03.BARC.DP1.20002/"
+
+        # opening the url for reading
+        html = urllib.request.urlopen(url)
+
+        # parsing the html file
+        htmlParse = BeautifulSoup(html, 'html5lib')
+
+        delimiter = '-'
+
+        strTemp = htmlParse.text
+        nIndex = strTemp.find("Start")
+        strStartDate = strTemp[nIndex:nIndex+50]
+        arrStartDate = re.search('\d{4}-\d{2}-\d{2}', strStartDate)
+        nStartYear = int(arrStartDate.group().split(delimiter)[0])
+        nStartMonth = int(arrStartDate.group().split(delimiter)[1])
+        nStartDay = int(arrStartDate.group().split(delimiter)[2])
+
+        nIndex = strTemp.find("Last")
+        strLastDate = strTemp[nIndex:nIndex+50]
+        arrLastDate = re.search('\d{4}-\d{2}-\d{2}', strLastDate)
+        nEndYear = int(arrLastDate.group().split(delimiter)[0])
+        nEndMonth = int(arrLastDate.group().split(delimiter)[1])
+        nEndDay = int(arrLastDate.group().split(delimiter)[2])
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def getStartDate():
+
+        # providing url
+        url = "https://phenocam.nau.edu/webcam/sites/NEON.D03.BARC.DP1.20002/"
+
+        try:
+            # opening the url for reading
+            html = urllib.request.urlopen(url)
+
+            # parsing the html file
+            htmlParse = BeautifulSoup(html, 'html5lib')
+
+            delimiter = '-'
+
+            strTemp = htmlParse.text
+            nIndex = strTemp.find("Start")
+            strStartDate = strTemp[nIndex:nIndex+50]
+            arrStartDate = re.search('\d{4}-\d{2}-\d{2}', strStartDate)
+            nYear = int(arrStartDate.group().split(delimiter)[0])
+            nMonth = int(arrStartDate.group().split(delimiter)[1])
+            nDay = int(arrStartDate.group().split(delimiter)[2])
+        except:
+            nYear = 1970
+            nMonth = 1
+            nDay = 1
+
+        return nYear, nMonth, nDay
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def getEndDate():
+        nYear = 1970
+        nMonth = 1
+        nDay = 1
+
+        # providing url
+        url = "https://phenocam.nau.edu/webcam/sites/NEON.D03.BARC.DP1.20002/"
+
+        try:
+            # opening the url for reading
+            html = urllib.request.urlopen(url)
+
+            # parsing the html file
+            htmlParse = BeautifulSoup(html, 'html5lib')
+
+            delimiter = '-'
+
+            strTemp = htmlParse.text
+            nIndex = strTemp.find("Last")
+            strLastDate = strTemp[nIndex:nIndex+50]
+            arrLastDate = re.search('\d{4}-\d{2}-\d{2}', strLastDate)
+            nYear = int(arrLastDate.group().split(delimiter)[0])
+            nMonth = int(arrLastDate.group().split(delimiter)[1])
+            nDay = int(arrLastDate.group().split(delimiter)[2])
+        except:
+            pass
+
+        return nYear, nMonth, nDay
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def getPhenocamImageCount(siteCode, domainCode, start_date, end_date, start_time, end_time):
+
+        imageList = dailyList([], [])
+
+        date = start_date
+
+        progressBar = QProgressWheel()
+        progressBar.setRange(0, (end_date-start_date).days)
+        progressBar.setWindowTitle("Culling images by Date/Time")
+        progressBar.show()
+
+        i = 1
+        while date <= end_date:
+            progressBar.setValue(i)
+
+            PhenocamURL = 'https://phenocam.nau.edu/webcam/browse/NEON.D10.ARIK.DP1.20002' + '/' + str(date.year) + '/' + str(date.month).zfill(2) + '/' + str(date.day).zfill(2)
+
+            PhenocamURL = PhenocamURL.replace('ARIK', siteCode); PhenocamURL = PhenocamURL.replace('D10', domainCode)
+
+            tmpList = GRIMe_PhenoCam().getVisibleImages(PhenocamURL, start_time, end_time)
+
+            imageList.setVisibleList(tmpList.getVisibleList())
+
+            date += datetime.timedelta(days=1)
+
+            i += 1
+
+        progressBar.close()
+        del progressBar
+
+        try:
+            GRIMe_PhenoCam.closeChromeDriver()
+        except:
+            pass
+
+        nImageCount = len(imageList.visibleList)
+
+        del imageList
+
+        return nImageCount
+
 # ======================================================================================================================
 # THIS CLASS WILL HOLD THE NAMES OF ALL THE VISIBLE AND INFRARED (IR) IMAGES FOR A SPECIFIED DATE RANGE
 # ======================================================================================================================
@@ -90,7 +268,7 @@ class dailyList:
 
     def clear(self):
         self.visibleList = []
-        self.IRList= []
+        self.IRList = []
 
     def setVisibleList(self, visibleList):
         self.visibleList.extend(visibleList)
@@ -103,4 +281,5 @@ class dailyList:
 
     def getIRList(self):
         return self.IRList
+
 

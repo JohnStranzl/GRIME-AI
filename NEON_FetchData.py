@@ -23,8 +23,9 @@ class NEON_FetchData:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def NEON_FetchData(self, SiteCode, nProductID, strStartDate, strEndDate, downloadsFilePath):
-        strProduct = 'DP1.' + str(nProductID).zfill(5) + '.001'
+    def NEON_FetchData(self, SiteCode, strProduct, strStartDate, strEndDate, downloadsFilePath):
+        foldername = strProduct.split('.')[1].zfill(5) + ' -' + strProduct.split('.')[2].split(':')[1]
+        strProduct = 'DP1.' + strProduct.split('.')[1] + '.001'
 
         progressBar = QProgressWheel()
         progressBar.setRange(0, 100)
@@ -46,10 +47,10 @@ class NEON_FetchData:
             progressBar.setValue(40)
 
             # PATH WHERE THE zipsByProduct PLACED THE DOWNLOADED ZIP FILES
-            myFolderPath = downloadsFilePath + '\\filesToStack' + str(nProductID).zfill(5)
+            myFolderPath = downloadsFilePath + '\\filesToStack' + strProduct.split('.')[1].zfill(5)
 
             # PATH WHERE WE WANT TO PLACE THE STACKED FILES (i.e., CONCATENATED MONTHLY DATA FILES) WILL BE STORED
-            mySavePath = downloadsFilePath + '\\' + str(nProductID).zfill(5)
+            mySavePath = downloadsFilePath + '\\' + foldername
             if os.path.exists(mySavePath):
                 shutil.rmtree(mySavePath)
 
@@ -68,8 +69,8 @@ class NEON_FetchData:
 
             # LET'S REMOVE ONE LEVEL OF INDIRECTION AND MOVE THE FILES STACKED BY stackByTable TO THE ROOT PRODUCT FOLDER IN THE
             # DOWNLOAD DIRECTORY
-            src = downloadsFilePath + '\\' + str(nProductID).zfill(5) + '\\stackedFiles'
-            dest = downloadsFilePath + '\\' + str(nProductID).zfill(5)
+            src = downloadsFilePath + '\\' + foldername + '\\stackedFiles'
+            dest = downloadsFilePath + '\\' + foldername
             if os.path.exists(src) and os.path.exists(dest):
                 filenames = os.listdir(src)
                 for filename in filenames:

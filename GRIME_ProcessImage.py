@@ -1,0 +1,292 @@
+import cv2
+import sobelData
+import numpy as np
+
+from PIL import Image, ImageQt
+from PyQt5.QtGui import QPixmap, QImage
+from constants import edgeMethodsClass, featureMethodsClass
+
+class GRIMe_ProcessImage:
+    def __init__(self):
+        self.className = "GRIMe_ProcessImage"
+
+    def processCanny(self, img1, gray):
+
+        # JEShighThreshold = self.spinBoxCannyHighThreshold.value()
+        # JESlowThreshold = self.spinBoxCannyLowThreshold.value()
+        # JESkernelSize = self.spinBoxCannyKernel.value()
+        highThreshold = 100
+        lowThreshold = 50
+        kernelSize = 3
+
+        temp = gray
+        # temp = gray[0:myImage.size().height(), 0:myImage.size().width()]
+
+        # Find Canny edges
+        edges = cv2.Canny(temp, highThreshold, lowThreshold, kernelSize)
+
+        # Find Contours
+        # Use a copy of the image e.g. edged.copy() since findContours alters the image
+        contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+        # Draw all contours (-1 = draw all contours)
+        cv2.drawContours(img1, contours, -1, (0, 255, 0), 2)
+
+        # lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
+        # for line in lines:
+        # x1, y1, x2, y2 = line[0]
+        # cv2.line(img1, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        # cv2.imwrite('C:/Users/Astrid Haugen/Documents/houghlines5.jpg', img1)
+        # q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
+        # q_img = QImage(temp.data, temp.shape[1], temp.shape[0], QImage.Format_Grayscale8)
+
+        # QImage BYTE ORDER IS B, G, R
+        q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_BGR888)
+
+        return(QPixmap(q_img))
+
+
+    def processSobel(self, img1, method):
+        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+
+        mySobel = sobelData.sobelData()
+
+        # JES sobelKernelSize = self.spinBoxSobelKernel.value()
+        sobelKernelSize = 5  # TEST
+        mySobel.setSobelX(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
+        mySobel.setSobelY(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
+        mySobel.setSobelXY(cv2.Sobel(gray, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
+
+        if method == edgeMethodsClass.SOBEL_X:
+            # edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
+            edges = mySobel.getSobelX().astype(np.uint8)
+            q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
+            pix = QPixmap(q_img)
+
+        elif method == edgeMethodsClass.SOBEL_Y:
+            # edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
+            edges = mySobel.getSobelY().astype(np.uint8)
+            q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
+            pix = QPixmap(q_img)
+
+        elif method == edgeMethodsClass.SOBEL_XY:
+            # edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
+            edges = mySobel.getSobelXY().astype(np.uint8)
+            q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
+            pix = QPixmap(q_img)
+
+        return(pix)
+
+
+    def processLaplacian(self, img1):
+        # convert from RGB color-space to YCrCb
+        ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
+
+        # equalize the histogram of the Y channel
+        ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
+
+        gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
+
+        # convert back to RGB color-space from YCrCb
+        lapImg = laplace_of_gaussian(gray)
+        gray = cv2.equalizeHist(lapImg)
+        cv2.dilate(gray, (5, 5), gray)
+        cv2.erode(gray, (5, 5), gray)
+
+        gray = Image.fromarray(gray)
+        q_img = ImageQt.toqimage(gray)
+
+        return(QPixmap.fromImage(q_img))
+
+
+    def processSIFT(self, img1, gray):
+        edges = calcSIFT(img1, gray)
+        q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
+        pix = QPixmap(q_img)
+
+
+    def processORB(self, img1, gray):
+        value = self.spinBoxOrbMaxFeatures.value()
+
+        # convert from RGB color-space to YCrCb
+        ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
+
+        # equalize the histogram of the Y channel
+        ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
+
+        gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
+
+        lapImg = laplace_of_gaussian(gray)
+        gray = cv2.equalizeHist(lapImg)
+        cv2.dilate(gray, (5, 5), gray)
+        cv2.erode(gray, (5, 5), gray)
+
+        # gray = Image.fromarray(gray)
+
+        gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
+        edges = calcOrb(gray, value)
+        q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
+
+        del gray
+        del grayEQ
+        del grayBlur
+        # del lapImg
+        del edges
+
+        return(QPixmap(q_img))
+
+# ======================================================================================================================
+# THIS FUNCTION WILL PROCESS THE CURRENT IMAGE BASED UPON THE SETTINGS SELECTED BY THE END-USER.
+# THE IMAGE STORAGE TYPE IS mat
+# ======================================================================================================================
+def processImageMat(self, myImage):
+    edges = []
+    img2 = []
+    imageFormat = 0
+
+    if not myImage == []:
+        img1 = myImage
+
+        if self.checkboxKMeans.isChecked():
+            myGRIMe_Color = GRIMe_Color()
+            qImg, clusterCenters, hist = myGRIMe_Color.KMeans(self, img1, self.spinBoxColorClusters.value())
+
+            checkColorMatch(clusterCenters, hist, self.roiList)
+
+        # CONVERT COLOR IMAGE TO GRAY SCALE
+        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+
+        # REMOVE NOISE FROM THE IMAGE
+        if len(gray) != 0:
+            gray = cv2.GaussianBlur(gray, (3, 3), 0)
+
+        # EDGE DETECTION METHODS
+        if len(gray) != 0:
+            if self.radioButtonCanny.isChecked():
+                highThreshold = self.spinBoxCannyHighThreshold.value()
+                lowThreshold = self.spinBoxCannyLowThreshold.value()
+                kernelSize = self.spinBoxCannyKernel.value()
+                edges = cv2.Canny(img1, highThreshold, lowThreshold, kernelSize)
+                # lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
+                # for line in lines:
+                # x1, y1, x2, y2 = line[0]
+                # cv2.line(img1, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                # cv2.imwrite('C:/Users/Astrid Haugen/Documents/houghlines5.jpg', img1)
+
+            elif self.radioButtonSIFT.isChecked():
+                edges = calcSIFT(img1, gray)
+            elif self.radioButtonORB.isChecked():
+                value = self.spinBoxOrbMaxFeatures.value()
+                edges = calcOrb(img1, value)
+                # edges = cv2.cvtColor(edges, cv2.COLOR_RGBA2RGB)
+            elif self.radioButtonLaplacian.isChecked():
+                edges = cv2.Laplacian(img1, cv2.CV_64F)
+            elif self.radioButtonSobelX.isChecked() or self.radioButtonSobelY.isChecked() or self.radioButtonSobelXY.isChecked():
+                mySobel = sobelData()
+                sobelKernelSize = self.spinBoxSobelKernel.value()
+                mySobel.setSobelX(cv2.Sobel(img1, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
+                mySobel.setSobelY(cv2.Sobel(img1, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
+                mySobel.setSobelXY(cv2.Sobel(img1, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
+                if self.radioButtonSobelX.isChecked():
+                    edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
+                elif self.radioButtonSobelY.isChecked():
+                    edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
+                elif self.radioButtonSobelXY.isChecked():
+                    edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
+
+            if self.radioButtonSIFT.isChecked():
+                imageFormat = QImage.Format_RGB888
+            elif self.radioButtonORB.isChecked():
+                imageFormat = QImage.Format_RGB888
+            else:
+                imageFormat = QImage.Format_Grayscale8
+
+    return edges, imageFormat
+
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def laplace_of_gaussian(gray_img, sigma=1., kappa=0.75, pad=False):
+    """
+    Applies Laplacian of Gaussians to grayscale image.
+
+    :param gray_img: image to apply LoG to
+    :param sigma:    Gauss sigma of Gaussian applied to image, <= 0. for none
+    :param kappa:    difference threshold as factor to mean of image values, <= 0 for none
+    :param pad:      flag to pad output w/ zero border, keeping input image size
+    """
+    assert len(gray_img.shape) == 2
+    img = cv2.GaussianBlur(gray_img, (0, 0), sigma) if 0. < sigma else gray_img
+    img = cv2.Laplacian(img, cv2.CV_64F)
+    rows, cols = img.shape[:2]
+    # min/max of 3x3-neighbourhoods
+    min_map = np.minimum.reduce(list(img[r:rows - 2 + r, c:cols - 2 + c]
+                                     for r in range(3) for c in range(3)))
+    max_map = np.maximum.reduce(list(img[r:rows - 2 + r, c:cols - 2 + c]
+                                     for r in range(3) for c in range(3)))
+    # bool matrix for image value positiv (w/out border pixels)
+    pos_img = 0 < img[1:rows - 1, 1:cols - 1]
+    # bool matrix for min < 0 and 0 < image pixel
+    neg_min = min_map < 0
+    neg_min[1 - pos_img] = 0
+    # bool matrix for 0 < max and image pixel < 0
+    pos_max = 0 < max_map
+    pos_max[pos_img] = 0
+    # sign change at pixel?
+    zero_cross = neg_min + pos_max
+    # values: max - min, scaled to 0--255; set to 0 for no sign change
+    value_scale = 255. / max(1., img.max() - img.min())
+    values = value_scale * (max_map - min_map)
+    values[1 - zero_cross] = 0.
+    # optional thresholding
+    if 0. <= kappa:
+        thresh = float(np.absolute(img).mean()) * kappa
+        values[values < thresh] = 0.
+    log_img = values.astype(np.uint8)
+    if pad:
+        log_img = np.pad(log_img, pad_width=1, mode='constant', constant_values=0)
+
+    return log_img
+
+
+# ======================================================================================================================
+# THIS FUNCTION WILL USE THE SIFT FEATURE DETECTION ALGORITHM TO FIND FEATURES IN THE IMAGE THAT IS PASSED TO THIS FUNCTION.
+# ======================================================================================================================
+def calcSIFT(image, gray):
+    # REMOVE NOISE FROM THE IMAGE
+    img1 = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    sift = cv2.SIFT_create()
+    kp, des = sift.detectAndCompute(img1, None)
+    edges = cv2.drawKeypoints(gray, kp, img1)
+
+    return edges
+
+
+# ======================================================================================================================
+# ThIS FUNCTION WILL USE THE ORB FEATURE DETECTION ALGORITHM TO FIND FEATURES IN THE IMAGE THAT IS
+# PASSED TO THIS FUNCTION.
+# ======================================================================================================================
+def calcOrb(image, nMaxFeatures):
+
+    if len(image.shape) == 3:
+       imageBW = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        imageBW = image
+
+    orb = cv2.ORB_create()
+
+    orb.setEdgeThreshold(50)
+    orb.setNLevels(10)
+    orb.setPatchSize(30)
+    orb.setMaxFeatures(nMaxFeatures)
+
+    kp = orb.detect(imageBW, None)
+    kp, des = orb.compute(imageBW, kp)
+
+    edges = cv2.drawKeypoints(image, kp, None, color=(0, 255, 0), flags=0)
+
+    return edges
+
+

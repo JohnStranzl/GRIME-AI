@@ -19,21 +19,23 @@ class GRIMe_ProductTable():
         self.delta = self.end_date - self.start_date
 
     def fetchTableDates(self, productTable, nRow):
-        self.nStartYear = productTable.cellWidget(nRow, 4).date().year()
-        self.nStartMonth = productTable.cellWidget(nRow, 4).date().month()
-        self.nStartDay = productTable.cellWidget(nRow, 4).date().day()
+        self.nStartYear = productTable.cellWidget(nRow, 5).date().year()
+        self.nStartMonth = productTable.cellWidget(nRow, 5).date().month()
+        self.nStartDay = productTable.cellWidget(nRow, 5).date().day()
         self.strStartDate = str(self.nStartYear) + '-' + str(self.nStartMonth).zfill(2)
         self.start_date = datetime.date(self.nStartYear, self.nStartMonth, self.nStartDay)
-        self.startTime = productTable.cellWidget(nRow, 6).dateTime().toPyDateTime().time()
+        self.startTime = productTable.cellWidget(nRow, 7).dateTime().toPyDateTime().time()
 
-        self.nEndYear = productTable.cellWidget(nRow, 5).date().year()
-        self.nEndMonth = productTable.cellWidget(nRow, 5).date().month()
-        self.nEndDay = productTable.cellWidget(nRow, 5).date().day()
+        self.nEndYear = productTable.cellWidget(nRow, 6).date().year()
+        self.nEndMonth = productTable.cellWidget(nRow, 6).date().month()
+        self.nEndDay = productTable.cellWidget(nRow, 6).date().day()
         self.strEndDate = str(self.nEndYear) + '-' + str(self.nEndMonth).zfill(2)
         self.end_date = datetime.date(self.nEndYear, self.nEndMonth, self.nEndDay)
-        self.endTime = productTable.cellWidget(nRow, 7).dateTime().toPyDateTime().time()
+        self.endTime = productTable.cellWidget(nRow, 8).dateTime().toPyDateTime().time()
 
         self.delta = self.end_date - self.start_date
+
+        return self.start_date, self.startTime, self.end_date, self.endTime
 
     def getStartDate(self):
         return self.strStartDate

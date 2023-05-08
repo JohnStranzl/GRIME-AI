@@ -79,7 +79,7 @@ class NEON_20033_NitrateData:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def DP1_20033_FetchNitrateData(self, SiteCode, nProductID, strStartDate, strEndDate, downloadsFilePath):
+    def DP1_20033_FetchNitrateData(self, SiteCode, strProduct, strStartDate, strEndDate, downloadsFilePath):
         progressBar = QProgressWheel()
         progressBar.show()
 
@@ -87,7 +87,9 @@ class NEON_20033_NitrateData:
 
         progressBar.setValue(20)
 
-        strProduct = 'DP1.' + str(nProductID).zfill(5) + '.001'
+        foldername = strProduct.split('.')[1].zfill(5) + ' -' + strProduct.split('.')[2].split(':')[1]
+
+        strProduct = 'DP1.' + strProduct.split('.')[1].zfill(5) + '.001'
         neonUtilities.zipsByProduct(dpID=strProduct,
                                     site=SiteCode,
                                     savepath=downloadsFilePath,
@@ -99,10 +101,10 @@ class NEON_20033_NitrateData:
         progressBar.setValue(40)
 
         # PATH WHERE THE zipsByProduct PLACED THE DOWNLOADED ZIP FILES
-        myFolderPath = downloadsFilePath + '\\filesToStack' + str(nProductID).zfill(5)
+        myFolderPath = downloadsFilePath + '\\filesToStack' + strProduct.split('.')[1].zfill(5)
 
         # PATH WHERE WE WANT TO PLACE THE STACKED FILES (i.e., CONCATENATED MONTHLY DATA FILES) WILL BE STORED
-        mySavePath = downloadsFilePath + '\\' + str(nProductID)
+        mySavePath = downloadsFilePath + '\\' + foldername
         if os.path.exists(mySavePath):
             shutil.rmtree(mySavePath)
 
@@ -121,8 +123,8 @@ class NEON_20033_NitrateData:
 
         # LET'S REMOVE ONE LEVEL OF INDIRECTION AND MOVE THE FILES STACKED BY stackByTable TO THE ROOT PRODUCT FOLDER IN THE
         # DOWNLOAD DIRECTORY
-        src = downloadsFilePath + '\\' + str(nProductID) + '\\stackedFiles'
-        dest = downloadsFilePath + '\\' + str(nProductID)
+        src = downloadsFilePath + '\\' + foldername + '\\stackedFiles'
+        dest = downloadsFilePath + '\\' + foldername
         if os.path.exists(src) and os.path.exists(dest):
             filenames = os.listdir(src)
             for filename in filenames:

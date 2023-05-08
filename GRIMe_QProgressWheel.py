@@ -12,14 +12,12 @@ from PyQt5.QtWidgets import QWidget, QApplication
 class QProgressWheel(QWidget):
 
     # CONSTANTS
-
     PositionLeft = 180
     PositionTop = 90
     PositionRight = 0
     PositionBottom = -90
 
     # CONSTRUCTOR ---------------------------------------------------
-
     def __init__(self, startVal=0, maxVal=0, parent=None):
         super(QProgressWheel, self).__init__(parent)
         self.m_min = 0
@@ -64,7 +62,7 @@ class QProgressWheel(QWidget):
 
         self.move(QApplication.desktop().screen().rect().center() - self.rect().center())
 
-        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.FramelessWindowHint, False)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
 

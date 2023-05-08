@@ -1,6 +1,9 @@
 # !/usr/bin/env python
+# !/usr/bin/env python
 # coding: utf-8
+import webbrowser
 
+import webdriver_manager.chrome
 # 1. SCRAPE FIELD SITE TABLE (CSV) FILE FROM https://www.neonscience.org/field-sites/explore-field-sites
 #
 # 2. PERSIST A COPY OF THE CONTENTS OF THE FIELD SITE TABLE
@@ -19,14 +22,15 @@
 
 # import pycurl
 
-import colorsys
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
+
 import csv
 import datetime
 import math
-import os
-import re
+#import os
+#import re
+from enum import Enum
 import shutil
-import ssl
 import sys
 import time
 import pathlib
@@ -35,38 +39,62 @@ from configparser import ConfigParser
 from pathlib import Path
 from urllib.request import urlopen
 
-import PIL
 import imageio
 import cv2
-import matplotlib.pyplot as plt
 # import tensorflow as tf
 import numpy as np
 import promptlib
 #import torch
 # print(torch.__version__)
 import requests
-import scipy.misc
+
 from PIL import Image, ImageQt
+
+#from playsound import playsound
+
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
+from PyQt5.uic import loadUi
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QCoreApplication
-from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen
+from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QSplashScreen
-from bs4 import BeautifulSoup
+    QGraphicsScene, QMessageBox, QSplashScreen, QAction, QSpinBox, QDialog
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from sklearn.cluster import KMeans
+
+from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
+from GRIME_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
+from GRIME_EdgeDetectionDlg import GRIME_EdgeDetectionDlg
+from GRIME_ImageNavigationDlg import GRIME_ImageNavigationDlg
+from GRIME_ColorSegmentationDlg import GRIME_ColorSegmentationDlg
+from GRIME_FileUtilitiesDlg import GRIME_FileUtilitiesDlg
+from GRIME_MaskEditorDlg import GRIME_MaskEditorDlg
+
+#import GRIME_KMeans
 
 import sobelData
 from GRIMe_Color import GRIMe_Color
+from GRIME_ProcessImage import GRIMe_ProcessImage
+
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from chrome_driver import *
+
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+#from webdriver_manager.core.utils import ChromeType
+
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
 from GRIMe_Diagnostics import GRIMe_Diagnostics
 from GRIMe_ImageData import imageData
+
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
@@ -76,20 +104,44 @@ from GRIMe_QMessageBox import GRIMe_QMessageBox
 from GRIMe_QProgressWheel import QProgressWheel
 from GRIMe_Utils import GRIMe_Utils
 from GRIMe_roiData import GRIMe_roiData, ROIShape
+from GRIMe_QLabel import DrawingMode
+
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
 from NEON_20033_NitrateData import NEON_20033_NitrateData
 from NEON_FetchData import NEON_FetchData
+from NEON_DownloadLatestImage import NEON_DownloadLatestImage
+from NEON_DownloadFieldSiteTableFiles import NEON_DownloadFieldSiteTableFiles
+from NEON_FetchSiteInfoFromNEON import NEON_FetchSiteInfoFromNEON
+from NEON_FetchFieldSiteTableURL import NEON_FetchFieldSiteTableURL
+
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
+from constants import edgeMethodsClass, featureMethodsClass
+
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
 from exifData import EXIFData
 from GRIMe_ImageStats import GRIMe_ImageStats
 from USGS_HIVIS import USGS_HIVIS
 
-if 1:
+global full
+full = 1
+
+if full == 1:
     from neonAIgui import Ui_MainWindow
+elif full == 2:
+    from GUIs.GRIMe_AIDownloadManager import Ui_MainWindow
+elif full == 3:
+    from GUIs.guiTesting import Ui_MainWindow
+elif full == 4:
+    from GRIME_AI_NSF import Ui_MainWindow
 
-    full = 1
-else:
-    from GRIMe_AIDownloadManager import Ui_MainWindow
-
-    full = 0
+global bStartupComplete
+bStartupComplete = False
 
 # from tensorflow.python.client import device_lib as dev_lib
 
@@ -116,6 +168,11 @@ try:
 except:
     pass
 
+try:
+    import skimage
+except:
+    pass
+
 # ------------------------------------------------------------
 # Get the base directory
 # ------------------------------------------------------------
@@ -133,49 +190,25 @@ if 0:
 # PIL LIBRARIES AND IMPORTS
 # ------------------------------------------------------------
 
-global SITECODE
 SITECODE = 'ARIK'
-
-global DOMAINCODE
 DOMAINCODE = 'D10'
-
-global SITENAME
 SITENAME = ''
-
-global originalImg
 originalImg = []
-
-global dailyImagesList
 dailyImagesList = dailyList([], [])
-
-global currentImage
 currentImage = []
-
-global currentImageIndex
 currentImageIndex = -1
-
-global latestImage
 latestImage = []
-
 siteList = []
-
-global nStop
 nStop = 0
-
-global gWebImageCount
 gWebImageCount = 0
-
-global gWebImagesAvailable
 gWebImagesAvailable = 0
-
-global gFrameCount
 gFrameCount = 0
-
-global gProcessClick
 gProcessClick = 0
-
+currentImageFilename = ""
+frame = 0
 # Define the maximum number of gray levels
 gray_level = 16
+imageFileFolder = ""
 
 # URLS
 # url = "http://maps.googleapis.com/maps/api/geocode/json?address=googleplex&sensor=false"
@@ -184,6 +217,35 @@ root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 MSTFolder = 'C:/Users/Astrid Haugen/Documents/000 - MeanStride'
 
+class greennessIndex():
+    GCC  = False
+    GLI  = False
+    ExG  = False
+    RGI  = False
+    NDVI = False
+
+class features():
+    shannonEntropy = True
+    intensity      = True
+    color_hsv      = True
+    texture        = False
+
+class regionSelect():
+    wholeImage = False
+    ROIShape   = True
+
+class displayOptions():
+    displayROIs = True
+
+g_displayOptions   = displayOptions()
+g_regionSelect     = regionSelect()
+#g_featureDetection = featureDetection()
+#g_edgeDetection    = edgeDetection()
+#g_features         = features()
+g_greennessIndex   = greennessIndex()
+
+g_edgeMethodSettings = edgeMethodsClass()
+g_featureMethodSettings = featureMethodsClass()
 
 # ======================================================================================================================
 #
@@ -195,7 +257,6 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -204,6 +265,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     yStart = 0
     roiList = []
     imageStatsList = []
+
+    # INITIALIZE POP-UP DIALOG BOXES
+    fileFolderDlg        = None
+    edgeDetectionDlg     = None
+    colorSegmentationDlg = None
+    TriageDlg            = None
+    maskEditorDlg        = None
+    imageNavigationDlg   = None
+    releaseNotesDlg      = None
 
     # def eventFilter(self, source, event):
     #     if (event.type() == QtCore.QEvent.MouseMove and source is self.label):
@@ -219,9 +289,81 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # menuBar = QMenuBar(self)
     # self.setMenuBar(menuBar)
 
-    # --------------------------------------------------
-    # --------------------------------------------------
+    def createToolBar(self):
+        # ====================================================================================================
+        # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
+        # ====================================================================================================
+        toolbar = QToolBar("GRIMe-AI Toolbar")
+        self.addToolBar(toolbar)
+        toolbar.setIconSize(QtCore.QSize(48, 48))
 
+        #COLOR SEGMENTATION ----------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/FileFolder_1.png")
+        button_action = QAction(QIcon(icon_path), "Folder Operations", self)
+        button_action.setStatusTip("Select input and output folder locations")
+        button_action.triggered.connect(self.onMyToolBarFileFolder)
+        toolbar.addAction(button_action)
+
+        # IMAGE TRIAGE ---------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/Triage_2.png")
+        button_action = QAction(QIcon(icon_path), "Image Triage", self)
+        button_action.setStatusTip("Move images that are of poor quality")
+        button_action.triggered.connect(toolbarButtonImageTriage)
+        toolbar.addAction(button_action)
+
+        #MASK EDITOR -------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/ImageNav_3.png")
+        button_action = QAction(QIcon(icon_path), "Image Navigation", self)
+        button_action.setStatusTip("Navigate (scroll) through images")
+        button_action.triggered.connect(self.onMyToolBarImageNavigation)
+        toolbar.addAction(button_action)
+
+        #IMAGE NAVIGATION -------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/Mask.png")
+        button_action = QAction(QIcon(icon_path), "Create Masks", self)
+        button_action.setStatusTip("Draw polygons to create image masks")
+        button_action.triggered.connect(self.onMyToolBarCreateMask)
+        toolbar.addAction(button_action)
+
+        #COLOR SEGMENTATION ----------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/ColorWheel_4.png")
+        button_action = QAction(QIcon(icon_path), "Color Segmentation", self)
+        button_action.setStatusTip("Create ROIs to segment regions by color")
+        button_action.triggered.connect(self.onMyToolBarColorSegmentation)
+        toolbar.addAction(button_action)
+
+        # EDGE FILTERS-----------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/EdgeFilters_2.png")
+        button_action = QAction(QIcon(icon_path), "Edge and Feature Detection", self)
+        button_action.setStatusTip("Edge Detection Filters")
+        button_action.triggered.connect(self.toolbarButtonEdgeDetection)
+        toolbar.addAction(button_action)
+
+        # SETTINGS --------------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/Settings_1.png")
+        button_action = QAction(QIcon(icon_path), "Settings", self)
+        button_action.setStatusTip("Change options and settings")
+        button_action.triggered.connect(self.onMyToolBarSettings)
+        toolbar.addAction(button_action)
+
+        # GRIME2 -----------------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/grime2_StopSign.png")
+        button_action = QAction(QIcon(icon_path), "GRIME2", self)
+        button_action.setStatusTip("GRIME2 - Water Level Measurement")
+        button_action.triggered.connect(self.toolbarButtonGRIME2)
+        toolbar.addAction(button_action)
+
+        # HELP -----------------------------------------------------------------------------------------------
+        icon_path = str(Path(__file__).parent / "icons/Help_2.png")
+        button_action = QAction(QIcon(icon_path), "Help", self)
+        button_action.setStatusTip("Help and Release Notes")
+        button_action.triggered.connect(self.toolbarButtonReleaseNotes)
+        toolbar.addAction(button_action)
+
+        # ====================================================================================================
+        #self.actionRelease_Notes.triggered.connect(self.ReleaseNotes)
+
+        toolbar.addAction(button_action)
 
     # --------------------------------------------------
     # --------------------------------------------------
@@ -229,6 +371,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global SITECODE
         global gWebImagesAvailable
         global gProcessClick
+        global latestImage
+        global gWebImageCount
 
         if gProcessClick == 0:
             gProcessClick = 1
@@ -237,22 +381,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             updateSiteProducts(self, item)
 
-            nErrorCode = downloadLatestImage(SITECODE, DOMAINCODE)
+            nErrorCode, latestImage, gWebImageCount = NEON_DownloadLatestImage(SITECODE, DOMAINCODE)
             if nErrorCode == 404:
                 gWebImagesAvailable = 0
                 self.labelLatestImage.setText("No Images Available")
-
-                self.radioButtonWebSiteImages.setDisabled(True)
-                self.radioButtonHardDriveImages.setChecked(True)
             else:
                 gWebImagesAvailable = 1
-
-                if full == 1:
-                    self.radioButtonWebSiteImages.setDisabled(False)
-                    self.radioButtonWebSiteImages.setChecked(True)
-
-                    self.radioButtonHardDriveImages.setChecked(False)
-                    self.radioButtonHardDriveImages.show()
 
                 displayLatestImage(self)
 
@@ -261,106 +395,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # --------------------------------------------------
     # --------------------------------------------------
     def productClicked(self, item):
-        updateSelectedProductsTable(self, item)
+        updateNEONProductTable(self, item)
 
     # --------------------------------------------------
     # --------------------------------------------------
 
-    def pushButtonRetrieveDataClicked(self, item):
+    def pushButton_RetrieveNEONDataClicked(self, item):
         downloadProductDataFiles(self, item)
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def spinBoxChanged(self):
-        global currentImageIndex
-        global gFrameCount
 
-        #if self.radioButtonWebSiteImages.isChecked():
-        #    currentImageIndex = self.spinBoxDailyImage.value()
-        #    processSpinBoxImage(self, currentImageIndex)
-        #    refreshImage(self)
-        #elif self.radioButtonHardDriveImages.isChecked():
-        if currentImageIndex != self.spinBoxDailyImage.value():
-            currentImageIndex = self.spinBoxDailyImage.value()
-            imageFolder = self.lineEditHardDriveFolder.text()
-            if len(imageFolder) > 0:
-                if gFrameCount > 0:
-                    processLocalImage(self)
+    # ======================================================================================================================
+    # THIS FUNCTION WILL CALL THE FUNCTION THAT PROCESSES THE IMAGE BASED UPON THE SETTINGS SELECTED BY THE
+    # END-USER AND THEN UPDATE THE GUI TO DISPLAY THE PROCESSED IMAGE.
+    # ======================================================================================================================
+    def refreshImage(self):
+        global currentImage
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateCanny(self):
-        imageNumber = self.spinBoxDailyImage.value()
-        #self.spinBoxChanged()
-        refreshImage(self)
+        '''// PROCESS THE ORIGINAL IMAGE //'''
+        pix = processImage(self, currentImage)
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def spinBoxCannyHighThresholdChanged(self):
-        imageNumber = self.spinBoxDailyImage.value()
-        #self.spinBoxChanged()
-        refreshImage(self)
+        '''// DISPLAY PROCESSED ORIGINAL IMAGE //'''
+        if not pix == []:
+            self.labelEdgeImage.setPixmap(
+                pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+            img = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def spinBoxCannyLowThresholdChanged(self):
-        imageNumber = self.spinBoxDailyImage.value()
-        self.labelOriginalImage.clear()
-        #self.spinBoxChanged()
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def spinBoxCannyKernelChanged(self):
-        imageNumber = self.spinBoxDailyImage.value()
-        #self.spinBoxChanged()
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateSobelX(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateSobelY(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateSobelXY(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def spinBoxSobelKernelChanged(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateSIFT(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateORB(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def updateLaplacian(self):
-        refreshImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def initTab3(self):
-        if processSpinBoxImage(self, self.spinBoxDailyImage.value()) == 0:
-            refreshImage(self)
+        # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
+        QCoreApplication.processEvents()
 
     # --------------------------------------------------
     # --------------------------------------------------
     def spinBoxOrbMaxFeaturesChanged(self):
-        refreshImage(self)
+        self.refreshImage()
 
     # --------------------------------------------------
     # --------------------------------------------------
@@ -383,6 +449,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # --------------------------------------------------
     # --------------------------------------------------
     def updateImageSource(self):
+        # WE NO LONGER OPERATE ON IMAGES LIVE FROM THE WEBSITE.
+        # WE NO LONGER OPERATE ON IMAGES LIVE FROM THE WEBSITE.
+        # WE NOW DOWNLOAD IMAGES IN THE TIME/DATE RANGE SELECTED BY THE USER BEFORE WORKING WITH THE IMAGE.
+        '''
         global gFrameCount
         global dailyImagesList
         global SITENAME
@@ -416,6 +486,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.labelImageCountNumber.setText(str(gFrameCount))
 
             refreshImage(self)
+        '''
 
     # --------------------------------------------------
     # --------------------------------------------------
@@ -461,33 +532,148 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # --------------------------------------------------
     # --------------------------------------------------
-    def MSTVideoFolderChanged(self):
-        global gFrameCount
-
-        frameFolder = self.lineEditHardDriveFolder.text() + '/' + self.MSTlineEditFrameFolder.text()
-        nFrameCount = MSTGetFrameCount(self, frameFolder)
-
-        strFrameCount = 'Frame Count: ' + nFrameCount.__str__()
-        self.MSTFrameCount.setText(strFrameCount)
-
-        self.spinBoxDailyImage.setMinimum(1)
-        self.spinBoxDailyImage.setMaximum(nFrameCount)
-        self.spinBoxDailyImage.setValue(1)
-
-        gFrameCount = nFrameCount
-
-    # --------------------------------------------------
-    # --------------------------------------------------
     def MSTStop(self):
         global nStop
         nStop = 1
 
-    def pushButtonCreateVideoClicked(self):
-        createVideo(self)
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def GRIMePlay(self):
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def getMaxNumColorClusters(self):
+        maxColorClusters = 0
+
+        for roiObj in self.roiList:
+            if roiObj.getNumColorClusters() > maxColorClusters:
+                maxColorClusters = roiObj.getNumColorClusters()
+
+        return maxColorClusters
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def buildImageScalarHeader(self, header):
+
+        nClusters = self.getMaxNumColorClusters()
+
+        if self.checkBox_GCC.isChecked():
+            header = header + ", GCC"
+
+        if self.checkBox_GLI.isChecked():
+            header = header + ", GLI"
+
+        if self.checkBox_NDVI.isChecked():
+            header = header + ", NDVI"
+
+        if self.checkBox_ExG.isChecked():
+            header = header + ", ExG"
+
+        if self.checkBox_RGI.isChecked():
+            header = header + ", RGI"
+
+        if self.checkBox_Intensity.isChecked():
+            header = header + ", Intensity"
+
+        if self.checkBox_ShannonEntropy.isChecked():
+            header = header + ", Entropy"
+
+        if self.checkBox_Texture.isChecked():
+            header = header + ", Texture"
+
+        if self.checkBoxColor_HSV.isChecked():
+            template = ', ' + 'Image_' + '#'
+
+            if nClusters == 1:
+                header = (header + template).replace('#', 'H')
+                header = (header + template).replace('#', 'S')
+                header = (header + template).replace('#', 'V')
+            else:
+                for idx in range(nClusters):
+                    header = (header + template).replace('#', 'H') + (': ' + idx.__str__())
+                    header = (header + template).replace('#', 'S') + (': ' + idx.__str__())
+                    header = (header + template).replace('#', 'V') + (': ' + idx.__str__())
+
+        return header
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def buildROI_ScalarHeader(self, header):
+
+        newHeader = header
+
+        # ADD HEADER TO CSV FILE FOR EACH ROI ASSUMING ROIs HAVE BEEN CREATED
+        for roiObj in self.roiList:
+            template = ', ' + (roiObj.getROIName() + ': ') + '#'
+
+            if self.checkBox_GCC.isChecked():
+                newHeader = (newHeader + template).replace('#', 'GCC')
+
+            if self.checkBox_GLI.isChecked():
+                newHeader = (newHeader + template).replace('#', 'GLI')
+
+            if self.checkBox_NDVI.isChecked():
+                newHeader = (newHeader + template).replace('#', 'NDVI')
+
+            if self.checkBox_ExG.isChecked():
+                newHeader = (newHeader + template).replace('#', 'ExG')
+
+            if self.checkBox_RGI.isChecked():
+                newHeader = (newHeader + template).replace('#', 'RGI')
+
+            if self.checkBox_Intensity.isChecked():
+                newHeader = (newHeader + template).replace('#', 'Intensity')
+
+            if self.checkBox_ShannonEntropy.isChecked():
+                newHeader = (newHeader + template).replace('#', 'Entropy')
+
+            if self.checkBox_Texture.isChecked():
+                newHeader = (newHeader + template).replace('#', 'Texture')
+
+                    # IF THERE IS MORE THAN ONE (1) ROI, APPEND AN INDEX ONTO THE HEADER LABEL
+
+            nClusters = roiObj.getNumColorClusters()
+
+            if self.checkBoxColor_HSV.isChecked():
+                template = ', ' + (roiObj.getROIName() + ': ') + '#'
+
+                if nClusters == 1:
+                    newHeader = (newHeader + template).replace('#', 'H')
+                    newHeader = (newHeader + template).replace('#', 'S')
+                    newHeader = (newHeader + template).replace('#', 'V')
+                else:
+                    for idx in range(nClusters):
+                        newHeader = (newHeader + template).replace('#', 'H') + ('_' + idx.__str__())
+                        newHeader = (newHeader + template).replace('#', 'S') + ('_' + idx.__str__())
+                        newHeader = (newHeader + template).replace('#', 'V') + ('_' + idx.__str__())
+
+        newHeader = newHeader + '\n'
+
+        return newHeader
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def buildScalarHeader(self, nClusters):
+
+        # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
+        header = 'Image, Date (ISO), Time (ISO)'
+
+        if self.checkBoxScalarRegion_WholeImage.isChecked():
+            header = self.buildImageScalarHeader(header)
+
+        if self.checkBoxScalarRegion_ROI.isChecked():
+            header = self.buildROI_ScalarHeader(header)
+
+        return header
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def GRIMe_NSF_Build(self):
         global dailyImagesList
         global nStop
         global gWebImageCount
@@ -495,128 +681,449 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         bCreateEXIFFile = False
         bCreateVideos = False
 
-        hardDriveImageFolder = self.lineEditHardDriveFolder.text() + '/'
+        myGRIMe_Color = GRIMe_Color()
 
-        # ----------------------------------------------------------------------------------------------------
+        global imageFileFolder
+        hardDriveImageFolder = imageFileFolder + '/'
+
         # GENERATE LIST OF IMAGE FILES IN FOLDER
-        # ----------------------------------------------------------------------------------------------------
         videoFileList = dailyImagesList.getVisibleList()
         nFrameCount = len(videoFileList)
 
-        if len(videoFileList) > 0:
-            nImageIndex = self.spinBoxDailyImage.value()
-            if nImageIndex > gFrameCount:
-                nImageIndex = gFrameCount
-
-            inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
-
-            nStop = 0
+        if nFrameCount > 0:
 
             # ----------------------------------------------------------------------------------------------------
-            # READ THE FIRST IMAGE IN THE LIST IN ORDER TO GET ITS HEIGHT, WIDTH AND LAYER INFORMATION
-            # THE ASSUMPTION IS THAT ALL THE IMAGES IN THE FOLDER ARE OF THE SAME SIZE
+            # CREATE AND OPEN NEW TRAINING DATA CSV FILE AND LABEL COLUMNS
             # ----------------------------------------------------------------------------------------------------
-            filename = videoFileList[0].fullPathAndFilename
-
-            nFrameCount = gWebImageCount
-
-            img = GRIMe_Color.loadColorImage(self.radioButtonWebSiteImages, filename)
-            height, width, layers = img.shape
-            size = (width, height)
+            csvFilename = 'TrainingData_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
+            imageQualityFile = os.path.join(hardDriveImageFolder, csvFilename)
+            csvFile = open(imageQualityFile, 'a', newline='')
 
             # ----------------------------------------------------------------------------------------------------
-            # EXTRACT EXIF DATA
+            # OUTPUT THE TRAINING FILE a) NAMES, b) TRAINED COLOR CLUSTERS, c) IMAGE INTENSITY, d) ETC.
             # ----------------------------------------------------------------------------------------------------
-            if self.radioButtonHardDriveImages.isChecked() and self.checkBoxCreateEXIFFile.isChecked():
-                # open the file in the write mode
-                EXIFFolder = self.EditEXIFOutputFolder.text()
-                csvFile = open(EXIFFolder + '/' + 'EXIFData.csv', 'w', newline='')
+            nMaxNumColorClusters = self.getMaxNumColorClusters()
 
-                # create the csv writer
-                if bCreateEXIFFile:
-                    writer = csv.writer(csvFile)
+            for roiObj in self.roiList:
+                strOutputString = 'Training Filename'
 
-                myEXIFData = EXIFData()
+                strOutputString = strOutputString + ',Date (ISO),Time (ISO),Greenness,Intensity,Entropy'
 
-                for i in range(0, nFrameCount - 1):
+                template = ', ' + (roiObj.getROIName() + ': ') + '#'
 
-                    myEXIFData.extractEXIFData(videoFileList[i])
+                if nMaxNumColorClusters == 1:
+                    strOutputString = (strOutputString + template).replace('#', 'H')
+                    strOutputString = (strOutputString + template).replace('#', 'S')
+                    strOutputString = (strOutputString + template).replace('#', 'V')
+                else:
+                    for idx in range(nMaxNumColorClusters):
+                        strOutputString = (strOutputString + template).replace('#', 'H') + ('_' + idx.__str__())
+                        strOutputString = (strOutputString + template).replace('#', 'S') + ('_' + idx.__str__())
+                        strOutputString = (strOutputString + template).replace('#', 'V') + ('_' + idx.__str__())
+                strOutputString = strOutputString + "\n"
 
-                    # WRITE THE HEADER ONLY ONCE WHEN THE FIRST FILE IS PROCESSED
-                    if bCreateEXIFFile:
-                        if i == 0:
-                            writer.writerow(myEXIFData.getHeader())
-                        writer.writerow(myEXIFData.getEXIF())
+                csvFile.write(strOutputString)
 
-                # CLOSE THE EXIF FILE
-                if bCreateEXIFFile:
-                    csvFile.close()
+                # LOAD THE IMAGE FILE
+                img = myGRIMe_Color.loadColorImage(roiObj.getTrainingImageName())
 
-            # ----------------------------------------------------------------------------------------------------
-            # PROCESS THE ORIGINAL IMAGE
-            # ----------------------------------------------------------------------------------------------------
-            if bCreateVideos:
-                videoFolder = self.EditVideoOutputFolder.text()
-                out = cv2.VideoWriter(videoFolder + '/' + 'Original.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 15, size)
-                out2 = cv2.VideoWriter(videoFolder + '/' + 'Edges.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 15, size)
+                # BLUR THE IMAGE
+                gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-            i = self.spinBoxDailyImage.value()
+                height, width = gray.shape
+                gray = cv2.resize(gray, (width, height))
 
-            while i < nFrameCount and nStop == 0:
-                self.spinBoxDailyImage.setValue(i)
+                # IMAGE INTENSITY CALCULATIONS
+                intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
-                filename = videoFileList[i].fullPathAndFilename
+                # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                entropyValue = self.calcEntropy(gray)[0]
 
-                origImg = GRIMe_Color.loadColorImage(self.radioButtonWebSiteImages, filename)
+                texture = -999
 
-                # WRITE THE ORIGINAL IMAGE TO A VIDEO FILE
-                if bCreateVideos:
-                    ii = 0
-                    while ii < 10:
-                        out.write(origImg)
-                        ii = ii + 1
+                red, green, blue = separateChannels(img)
+                redSum, greenSum, blueSum = sumChannels(red, green, blue)
 
-                # NO NEED TO DISPLAY IMAGE IF THE IMAGE TAB IS NOT SELECTED
-                if self.tabWidget.currentIndex() == 2:
-                    # DISPLAY THE ORIGINAL IMAGE
-                    qImg = QImage(origImg.data, origImg.shape[1], origImg.shape[0], QImage.Format_RGB888)
-                    pix = QPixmap(qImg)
-                    self.labelOriginalImage.setPixmap(
-                        pix.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
-                                   QtCore.Qt.SmoothTransformation))
+                # CREATE HYPERLINK TO FILE
+                strOutputString = '=HYPERLINK(' + '"' + roiObj.getTrainingImageName() + '"' + ')'
+                strOutputString = strOutputString + ','     # DATE
+                strOutputString = strOutputString + ','     # TIME
 
-                # PROCESS THE ORIGINAL IMAGE
-                edges, imageFormat = processImageMat(self, origImg)
+                strOutputString = strOutputString + ',' + self.computeGreennessValue(redSum, greenSum, blueSum)
 
-                # WRITE THE PROCESSED IMAGE TO A VIDEO FILE
-                if bCreateVideos:
-                    out2.write(edges)
+                strOutputString = strOutputString + ',' + '%3.4f' % intensity
+                strOutputString = strOutputString + ',' + '%3.4f' % entropyValue
 
-                # NO NEED TO DISPLAY IMAGE IF THE IMAGE TAB IS NOT SELECTED
-                if self.tabWidget.currentIndex() == 2:
-                    # DISPLAY THE PROCESSED IMAGE
-                    qImg = QImage(edges.data, edges.shape[1], edges.shape[0], imageFormat)
-                    pix = QPixmap(qImg)
-                    # pix = QPixmap.fromImage(QImage(edges.data, edges.cols, edges.rows, QImage.Format_BGR888))
-                    self.labelEdgeImage.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+                hsvClusterCenters, hist = roiObj.getHSVClusterCenters()
+                for i in range(nMaxNumColorClusters):
+                    strOutputString = strOutputString + ',' + str(hsvClusterCenters[i][0]) + ',' + str(hsvClusterCenters[i][1]) + ',' + str(hsvClusterCenters[i][2])
+                strOutputString = strOutputString + '\n'
 
-                # INCREMENT INDEX TO NEXT IMAGE FILE
-                i = i + 1
+                csvFile.write(strOutputString)
 
-                # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
-                QCoreApplication.processEvents()
+            # ONCE THE NUMBER OF COLOR CLUSTERS HAS BEEN SELECTED AND AN ROI TRAINED, LOCK THE NUMBER OF COLOR CLUSTERS
+            # AND TRAIN ALL SUBSEQUENT ROIs FOR THE SAME NUMBER OF COLOR CLUSTERS
+            nClusters = self.spinBoxColorClusters.value()
+
+            header = '\n' + self.buildScalarHeader(nClusters)
+
+            # WRITE THE HEADER TO THE CSV
+            csvFile.write(header)
 
             # ----------------------------------------------------------------------------------------------------
-            # HOUSEKEEPING (CLOSE FILES, RESET VARIABLES, ETC.)
+            # CREATE PROGRESS WHEEL
             # ----------------------------------------------------------------------------------------------------
-            nStop = 0
+            progressBar = QProgressWheel(0, (len(self.roiList) * len(videoFileList)) + 1)
+            progressBar.show()
+            progressBarIndex = 1
 
-            if bCreateVideos:
-                out.release()
-                out2.release()
+            # ----------------------------------------------------------------------------------------------------
+            # PROCESS IMAGES
+            # ----------------------------------------------------------------------------------------------------
+            #E:\\000 - University of Nebraska\\2022_USGS104b\\imagery\\PBT_MittelstetsMeanderCam\\20220709
+            for fname in videoFileList:
 
-    # --------------------------------------------------
-    # --------------------------------------------------
+                if os.path.isfile(fname.fullPathAndFilename):
+
+                    # LOAD THE IMAGE FILE
+                    img = myGRIMe_Color.loadColorImage(fname.fullPathAndFilename)
+
+                    # CREATE HYPERLINK TO FILE
+                    strHyperlink = '=HYPERLINK(' + '"' + fname.fullPathAndFilename + '"' + ')'
+
+                    # EXTRACT DATE/TIME STAMP FROM IMAGE EXIF DATA
+                    image_date, image_time = self.extractEXIFdata(fname.fullPathAndFilename)
+                    strDate = image_date.isoformat().strip()
+                    strTime = image_time.isoformat().strip()
+
+                    strOutputString = '%s,%s,%s' % (strHyperlink, strDate, strTime)
+
+                    # ------------------------------------------------------------------------------------------
+                    # CALCULATE THE FEATURE SCALARS FOR THE ENTIRE IMAGE AND SAVE THEM TO THE CSV FILE
+                    # ------------------------------------------------------------------------------------------
+                    if self.checkBoxScalarRegion_WholeImage.isChecked():
+                        # BLUR THE IMAGE
+                        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+                        # IMAGE INTENSITY CALCULATIONS
+                        intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+
+                        # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                        entropyValue = self.calcEntropy(gray)[0]
+
+                        # EXTRACT 'n' DOMINANT HSV COLORS
+                        hist, clusterCenters = myGRIMe_Color.extractDominant_HSV(img, nClusters)
+
+                        texture = -999
+
+                        red, green, blue = separateChannels(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                        redSum, greenSum, blueSum = sumChannels(red, green, blue)
+
+                        strOutputString = strOutputString + ',' + self.computeGreennessValue(redSum, greenSum, blueSum)
+
+                        if self.checkBox_Intensity.isChecked():
+                            strOutputString = strOutputString + ', %3.4f' % intensity
+                        if self.checkBox_ShannonEntropy.isChecked():
+                            strOutputString = strOutputString + ', %3.4f' % entropyValue
+                        if self.checkBox_Texture.isChecked():
+                            strOutputString = strOutputString + ', %3.2f' % texture
+
+                        if self.checkBoxColor_HSV.isChecked():
+                            for idx in range(nClusters):
+                                # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
+                                h = float(clusterCenters[idx][0])
+                                s = float(clusterCenters[idx][1])
+                                v = float(clusterCenters[idx][2])
+                                strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
+
+                    # ------------------------------------------------------------------------------------------
+                    #
+                    # ------------------------------------------------------------------------------------------
+                    progressBar.setValue(progressBarIndex)
+                    progressBarIndex = progressBarIndex + 4
+
+                    if self.checkBoxScalarRegion_ROI.isChecked():
+
+                        strROI = self.calculateROIScalars(img)
+
+                        strOutputString = strOutputString + strROI
+
+
+                    # WRITE STRING TO CSV FILE
+                    strOutputString = strOutputString  + '\n'
+                    csvFile.write(strOutputString)
+
+            csvFile.close()
+
+            # CLOSE AND DELETE THE PROGRESSBAR
+            progressBar.close()
+            del progressBar
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def trainROI(self, roiParameters):
+        global currentImage
+
+        if currentImage:
+            myGRIMe_Color = GRIMe_Color()
+
+            # CREATE AN ROI OBJECT
+            roiObj = GRIMe_roiData()
+
+            # POPULATE ROI OBJECT WITH ROI INFORMATION
+            # --------------------------------------------------
+            if len(roiParameters.strROIName) > 0:
+                roiObj.setROIName(roiParameters.strROIName)
+            else:
+                msgBox = GRIMe_QMessageBox('ROI Error', 'A name for the ROI is required!')
+                response = msgBox.displayMsgBox()
+                return
+
+            # --------------------------------------------------
+            rectROI = self.labelOriginalImage.getROI()
+
+            if rectROI != None:
+                roiObj.setDisplayROI(rectROI)
+            else:
+                msgBox = GRIMe_QMessageBox('ROI Error', 'Please draw the ROI on the image!')
+                response = msgBox.displayMsgBox()
+                return
+
+            # --------------------------------------------------
+            try:
+                roiObj.setImageSize(currentImage.size())
+                scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+                roiObj.setDisplaySize(scaledCurrentImage.size())
+                roiObj.calcROI()
+
+                if full == 1:
+                    roiObj.setROIShape(ROIShape.RECTANGLE)
+                    #if self.radioButton_ROIShapeRectangle.isChecked():
+                    #roiObj.setROIShape(ROIShape.RECTANGLE)
+                    #else:
+                    #roiObj.setROIShape(ROIShape.ELLIPSE)
+                else:
+                    roiObj.setROIShape(ROIShape.RECTANGLE)
+            except:
+                msgBox = GRIMe_QMessageBox('ROI Error',
+                                           'An unexpected error occurred calculating the ROI of the full resolution image!')
+                response = msgBox.displayMsgBox()
+
+                return
+
+            # ----------------------------------------------------------------------------------------------------
+            # CALCULATE COLOR CLUSTERS FOR THE ROI AND SAVE THEM TO THE ROI LIST
+            # ----------------------------------------------------------------------------------------------------
+            # EXTRACT THE ROI FROM THE ORIGINAL IMAGE
+            img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
+            rgb = extractROI(roiObj.getImageROI(), img1)
+
+            roiObj.setNumColorClusters(roiParameters.numColorClusters)
+
+            # EXTRACT DOMINANT RGB COLORS AND ADD THEM TO THE ROI OBJECT
+            qImg, clusterCenters, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
+            roiObj.setClusterCenters(clusterCenters, hist)
+
+            # EXTRACT DOMINANT HSV COLORS AND ADD THEM TO THE ROI OBJECT
+            hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+            roiObj.setHSVClusterCenters(colorClusters, hist)
+
+            roiObj.setTrainingImageName(currentImageFilename)
+
+            self.roiList.append(roiObj)
+
+            # ----------------------------------------------------------------------------------------------------
+            # DISPLAY IN FEATURE TABLE
+            # ----------------------------------------------------------------------------------------------------
+            # CREATE NEW ROW IN ROI TABLE
+            nRow = self.tableWidget_ROIList.rowCount()
+            self.tableWidget_ROIList.insertRow(nRow)
+
+            # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+            colorBar = self.createColorBar(hist, colorClusters)
+
+            # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+            qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+
+            # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+            self.label = QtWidgets.QLabel()
+            self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
+            self.tableWidget_ROIList.setCellWidget(nRow, 1, self.label)
+
+            # INSERT ROI NAME INTO TABLE
+            nCol = 0
+            self.tableWidget_ROIList.setItem(nRow, nCol, QTableWidgetItem(roiParameters.strROIName))
+
+            self.tableWidget_ROIList.resizeColumnsToContents()
+
+            #JES pix = QPixmap(QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888))
+            #JES self.labelDominantColors.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+
+            # self.tableWidget_ROIList.setCellWidget(nRow, nCol, QCheckBox())
+
+            # ----------------------------------------------------------------------------------------------------
+            #
+            # ----------------------------------------------------------------------------------------------------
+            global currentImageIndex
+
+            processLocalImage(self, currentImageIndex)
+            self.refreshImage()
+
+            # ----------------------------------------------------------------------------------------------------
+            # ONCE AN ROI IS DEFINED FOR A SPECIFIC NUMBER OF COLOR CLUSTERS, DISABLE THE CONTROL SO THAT THE USER
+            # CANNOT CHANGE THE VALUE FOR SUBSEQUENT TRAINED ROIs.
+            # ----------------------------------------------------------------------------------------------------
+            #JES self.spinBoxColorClusters.setDisabled(True)
+
+
+    # ------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------
+    def computeGreennessValue(self, redSum, greenSum, blueSum):
+        if self.checkBox_GCC.isChecked():
+            return('%3.2f' % computeGreennessIndex(redSum, greenSum, blueSum))
+        if self.checkBox_GLI.isChecked():
+            return('%3.2f' % computeGreenLeafIndex(redSum, greenSum, blueSum))
+        if self.checkBox_NDVI.isChecked():
+            return('%3.2f' % computeNormalizedDifferenceVegetationIndex(redSum, greenSum))
+        if self.checkBox_ExG.isChecked():
+            return('%3.2f' % computeExcessGreenIndex(redSum, greenSum, blueSum))
+        if self.checkBox_RGI.isChecked():
+            return('%3.4f' % computeRedGreenIndex(redSum, greenSum))
+
+
+    # ------------------------------------------------------------------------------------------
+    # CALCULATE THE FEATURE SCALARS FOR THE VARIOUS ROIs AND SAVE THEM TO THE CSV FILE
+    # ------------------------------------------------------------------------------------------
+    def calculateROIScalars(self, img):
+
+        strOutputString = ''
+
+        for roiObj in self.roiList:
+            texture = -999
+
+            nClusters = roiObj.getNumColorClusters()
+
+            rgb = extractROI(roiObj.getImageROI(), img)
+
+            # CONVERT THE IMAGE FROM BGR TO RGB AND HSV
+            hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+
+            # IMAGE INTENSITY CALCULATIONS
+            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+
+            # COMPUTE ENTROPY FOR ROI
+            entropyValue = self.calcEntropy(gray)
+
+            # EXTRACT 'n' DOMINANT HSV COLORS
+            myGRIMe_Color = GRIMe_Color()
+            qhsvImg, hsvClusterCenters, hist = myGRIMe_Color.KMeans(hsv, nClusters)
+
+            # KMeans QUANTIZES THE HUE VALUE TO 0..180 WHEN THE ACTUAL HSV COLOR SPACE HUE VALUE 0..360.
+            # THEREFORE WE MULTIPLY THE KMeans HUE VALUE BY 2 TO STANDARDIZE ON THE ACTUAL COLOR SPACE HUE RANGE.
+            hsvClusterCenters[:, 0] = hsvClusterCenters[:, 0] * 2.0
+
+            red, green, blue = separateChannels(rgb)
+            redSum, greenSum, blueSum = sumChannels(red, green, blue)
+
+            strOutputString = strOutputString + ',' + self.computeGreennessValue(redSum, greenSum, blueSum)
+
+            if self.checkBox_Intensity.isChecked():
+                strOutputString = strOutputString + ', %3.4f' % intensity
+            if self.checkBox_ShannonEntropy.isChecked():
+                strOutputString = strOutputString + ', %3.4f' % entropyValue
+            if self.checkBox_Texture.isChecked():
+                strOutputString = strOutputString + ', %3.2f' % texture
+            if self.checkBoxColor_HSV.isChecked():
+                for idx in range(nClusters):
+                    # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
+                    h = float(hsvClusterCenters[idx][0])
+                    s = float(hsvClusterCenters[idx][1])
+                    v = float(hsvClusterCenters[idx][2])
+                    strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
+
+        return strOutputString
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def calcEntropy(self, img):
+        entropy = []
+
+        hist = cv2.calcHist([img], [0], None, [256], [0, 255])
+        total_pixel = img.shape[0] * img.shape[1]
+
+        for item in hist:
+            probability = item / total_pixel
+            if probability == 0:
+                en = 0
+            else:
+                en = -1 * probability * (np.log(probability) / np.log(2))
+            entropy.append(en)
+
+        try:
+            sum_en = np.sum(entropy)
+        except:
+            sum_en = 0.0
+
+        return sum_en
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def extractEXIFdata(self, fullPathAndFilename):
+        nYear = 1970
+        nMonth = 1
+        nDay = 1
+
+        try:
+            # extract EXIF info to determine what time the image was acquired. If EXIF info is not found,
+            # throw an exception and see if the information is embedded in the filename. Currently, we are
+            # working with images from NEON and PBT. The PBT images have EXIF data and the NEON/PhenoCam
+            # do not appear to have EXIF data.
+            myEXIFData = EXIFData()
+            myEXIFData.extractEXIFData(fullPathAndFilename)
+
+            strTemp = str(myEXIFData.getEXIF()[8])
+            dateOriginal = re.search('\d{4}:\d{2}:\d{2}', strTemp).group(0)
+            timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
+
+            nYear = int(str(dateOriginal[0:4]))
+            nMonth = int(str(dateOriginal[5:7]))
+            nDay = int(str(dateOriginal[8:10]))
+
+            nHours = int(str(timeOriginal[1:3]))
+            nMins = int(str(timeOriginal[4:6]))
+            nSecs = int(str(timeOriginal[7:9]))
+
+            bEXIFDataFound = True
+        except:
+            # assume the filename contains the timestamp for the image (assumes the image file is a PBT image)
+            bEXIFDataFound = False
+
+            try:
+                nHours = int(str(strTime[0:2]))
+                nMins = int(str(strTime[2:4]))
+                nSecs = int(str(strTime[4:6]))
+            except:
+                nHours = 0
+                nMins = 0
+                nSecs = 0
+
+        image_date = datetime.date(nYear, nMonth, nDay)
+        image_time = datetime.time(nHours, nMins, nSecs)
+
+        return(image_date, image_time)
+
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
     def saveSettings(self):
         configFilePath = os.path.expanduser('~')
         configFilePath = os.path.join(configFilePath, 'Documents')
@@ -643,125 +1150,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         config.write(f)
         f.close()
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def trainROI(self):
-        global currentImage
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def createColorBar(self, hist, centroids):
+        # initialize the bar chart representing the relative frequency of each of the colors
+        # bar = np.zeros((50, 300, 3), dtype="uint8")
+        colorBar = np.zeros((50, 100, 3), dtype="uint8")
 
-        if currentImage:
-            # CREATE AN ROI OBJECT
-            roiObj = GRIMe_roiData()
+        startX = 0
 
-            # POPULATE ROI OBJECT WITH ROI INFORMATION
-            # --------------------------------------------------
-            roiName = self.lineEdit_roiName.text()
-            if len(roiName) > 0:
-                roiObj.setROIName(roiName)
-            else:
-                msgBox = GRIMe_QMessageBox('ROI Error', 'A name for the ROI is required!')
-                response = msgBox.displayMsgBox()
-                return
+        # if only some of the clusters are used, we must rescale their size based upon their percentages to fill the bitmap
+        multiplier = 1.0 / hist.sum()
 
-            # --------------------------------------------------
-            rectROI = self.labelOriginalImage.getROI()
+        centroids[:, 0] = centroids[:, 0] / 2.0
+        for (percent, color) in zip(hist, centroids):
+            # plot the relative percentage of each cluster
+            endX = startX + (percent * multiplier * 100)
+            cv2.rectangle(colorBar, (int(startX), 0), (int(endX), 100), color.astype("uint8").tolist(), -1)
 
-            if rectROI != None:
-                roiObj.setDisplayROI(rectROI)
-            else:
-                msgBox = GRIMe_QMessageBox('ROI Error', 'Please draw the ROI on the image!')
-                response = msgBox.displayMsgBox()
-                return
+            startX = endX
 
-            # --------------------------------------------------
-            try:
-                roiObj.setImageSize(currentImage.size())
-                roiObj.setDisplaySize(self.labelOriginalImage.size())
-                roiObj.calcROI()
-                if self.radioButton_ROIShapeRectangle.isChecked():
-                    roiObj.setROIShape(ROIShape.RECTANGLE)
-                else:
-                    roiObj.setROIShape(ROIShape.ELLIPSE)
-            except:
-                msgBox = GRIMe_QMessageBox('ROI Error',
-                                           'An unexpected error occurred calculating the ROI of the full resolution image!')
-                response = msgBox.displayMsgBox()
+        # CONVERT HSV TO RGB
+        colorBar = cv2.cvtColor(colorBar, cv2.COLOR_HSV2RGB)
 
-                return
+        # RETURN THE COLOR BAR
+        return colorBar
 
-            # EXTRACT THE ROI FROM THE ORIGINAL IMAGE
-            img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-            img1 = cv2.blur(img1, ksize=(5, 5))
-            rect = roiObj.getImageROI()
-            rgb = img1[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()]
-
-            # EXTRACT DOMINANT RGB COLORS
-            rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)  # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-            qImg, clusterCenters, hist = myKMeans(self, rgb)
-            roiObj.setClusterCenters(clusterCenters, hist)
-
-            # EXTRACT DOMINANT HSV COLORS
-            hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
-            qhsvImg, hsvClusterCenters, hist = myKMeans(self, hsv)
-            roiObj.setHSVClusterCenters(hsvClusterCenters, hist)
-
-            minHSV = hsvClusterCenters[:][0]
-            lower_hsv = np.array([min(hsvClusterCenters[:,0]), 0, 20])
-            upper_hsv = np.array([max(hsvClusterCenters[:,0]), 150, 255])
-
-            hsvImage = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
-            colorMask = cv2.inRange(hsvImage, lower_hsv, upper_hsv)
-
-            chickImg = cv2.bitwise_and(img1, img1, mask=colorMask)
-
-            cv2.imshow("Mask", chickImg)
-
-            # SAVE FRAME USING FRAME INDEX TO GENERATE FILENAME
-            sum = np.sum(colorMask)
-
-
-            # APPEND THE ROI TO THE LIST
-            self.roiList.append(roiObj)
-
-            # CREATE NEW ROW IN ROI TABLE
-            nRow = self.tableWidget_ROIList.rowCount()
-            self.tableWidget_ROIList.insertRow(nRow)
-
-            # INSERT ROI NAME INTO TABLE
-            nCol = 0
-            # self.tableWidget_ROIList.setCellWidget(nRow, nCol, QCheckBox())
-            # nCol += 1
-            self.tableWidget_ROIList.setItem(nRow, nCol, QTableWidgetItem(self.lineEdit_roiName.text()))
-
-            # INSERT THE DOMINANT COLORS INTO THE TABLE
-            self.label = QtWidgets.QLabel()
-            pix = QPixmap(qImg)
-            self.label.setPixmap(pix)
-            nWidth = qImg.size().width()
-            nCol += 1
-            self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.label)
-
-            processLocalImage(self)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def deleteAllROI(self):
-        del self.roiList[:]
-        self.tableWidget_ROIList.clearContents()
-        self.tableWidget_ROIList.setRowCount(0)
-        #processSpinBoxImage(self, self.spinBoxDailyImage.value())
-        processLocalImage(self)
 
     # --------------------------------------------------
     # --------------------------------------------------
     def displayROIs(self):
         processLocalImage(self)
-        #refreshImage(self)
+        self.refreshImage()
+
 
     # --------------------------------------------------
     # --------------------------------------------------
     def initProductTable(self):
-        headerList = ['Select', 'Product ID', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time',
-                      'End Time']
+        headerList = ['<-Select', 'Site', "Image Count", ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
         header = self.tableProducts.horizontalHeader()
 
@@ -783,12 +1210,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             self.tableWidget_ROIList.horizontalHeader().setVisible(True)
         except:
-            pass
+             pass
 
     # --------------------------------------------------
     # --------------------------------------------------
     def initUSGS_Table(self):
-        headerList = ['Site', 'Image Count', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
+        headerList = ['Select', 'Site', 'Image Count', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
         header = self.table_USGS_Sites.horizontalHeader()
 
@@ -811,10 +1238,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # --------------------------------------------------
     # --------------------------------------------------
     def initROITable(self):
-        headerList = ['ROI Name', 'Ref. Image', 'Cur. Image']
+        headerList = ['ROI Name', 'Ref. Image', 'Cur. Image', 'Greenness', 'Intensity', 'Entropy']
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
         header = self.tableWidget_ROIList.horizontalHeader()
-        self.tableWidget_ROIList.setColumnCount(3)
+        self.tableWidget_ROIList.setColumnCount(len(headerList))
         i = 0
         for item in headerList:
             headerItem = QTableWidgetItem(item)
@@ -830,49 +1257,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tableWidget_ROIList.horizontalHeader().setVisible(True)
 
     # --------------------------------------------------
-    # IMAGE INPUT FOLDER
-    # --------------------------------------------------
-    def pushButtonBrowseImageFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.lineEditHardDriveFolder.setText(folder)
-            self.radioButtonHardDriveImages.setChecked(True)
-            #self.checkBoxCreateEXIFFile.setEnabled(True)
-
-            # RECURSE AND TRAVERSE FOLDERS FROM ROOT DOWNWARD TO GET A LIST OF
-            strStartDate, strEndDate = getLocalFileDates(folder)
-
-            updateProductTableDateRange(self.tableProducts, 0, strStartDate, strEndDate)
-
-            processLocalImage(self)
-
-    # --------------------------------------------------
-    # OUTPUT FOLDERS
-    # --------------------------------------------------
-    def pushButtonBrowseVideoOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditVideoOutputFolder.setText(prompter.dir())
-
-    def pushButtonBrowseSaveImagesOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditSaveImagesOutputFolder.setText(prompter.dir())
-
-    def pushButtonBrowseEXIFOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditEXIFOutputFolder.setText(prompter.dir())
-
-    # --------------------------------------------------
     # --------------------------------------------------
     def radioButtonHardDriveImagesClicked(self):
         #self.checkBoxCreateEXIFFile.setEnabled(True)
@@ -881,22 +1265,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if os.path.exists(self.lineEditHardDriveFolder.text()):
                 self.updateImageSource()
 
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def radioButtonWebSiteImagesClicked(self):
-        #self.checkBoxCreateEXIFFile.setEnabled(False)
-        self.lineEditHardDriveFolder.setEnabled(False)
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def pushButtonResetImageIndexClicked(self):
-        self.spinBoxDailyImage.setValue(1)
-        refreshImage(self)
-
     def tabWidgetChanged(self, index):
-        if full == 1:
-            if self.tabWidget_ToolPalette.currentIndex() == 0:
-                self.tabWidget_ToolPalette.setCurrentIndex(1)
+        #JES if full == 1 or full == 4:
+        #JES     if self.tabWidget_ToolPalette.currentIndex() == 0:
+        #JES        self.tabWidget_ToolPalette.setCurrentIndex(1)
+        pass
 
     def ROIShapeClicked(self):
         if self.radioButton_ROIShapeRectangle.isChecked() == True:
@@ -906,6 +1279,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def pushButtonColorSegmentationClicked(self):
         global currentImage
+
+        myGRIMe_Color = GRIMe_Color()
 
         if len(self.roiList) == 0:
             strError = "You must train at least one ROI before segmenting the image."
@@ -917,20 +1292,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # DISPLAY IMAGE FROM NEON SITE
         # ----------------------------------------------------------------------------------------------------
         if currentImage:
-            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
-                                                     QtCore.Qt.SmoothTransformation)
+            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
             width = scaledCurrentImage.width()
             height = scaledCurrentImage.height()
 
             # KMeans EXPECTS THE BYTE ORDER TO BE RGB
             img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
 
-            img1 = cv2.blur(img1, ksize=(11, 11))
-
-            rgb = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+            rgb = cv2.blur(img1, ksize=(11, 11))
 
             # convert image to HSV
-            hsv = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+            hsv = cv2.cvtColor(img1, cv2.COLOR_RGB2HSV)
 
             if len(self.roiList) > 0:
                 # DIAGNOSTICS
@@ -940,49 +1312,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     GRIMe_Diagnostics.plotHSVChannelsColor(hsv)
 
                 # segment colors
-                rgb1 = GRIMe_Color.segmentColors(rgb, hsv, self.roiList)
+                rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
 
             # display the segemented image on the GUI
             qImg = QImage(rgb1.data, rgb1.shape[1], rgb1.shape[0], QImage.Format_BGR888)
             pix = QPixmap(qImg)
-            self.labelColorSegmentation.setPixmap(
-                pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio,
-                           QtCore.Qt.SmoothTransformation))
+            self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
 
     def checkboxNEONSitesClicked(self):
         if self.checkBoxNEONSites.isChecked():
             # GET LIST OF ALL SITES ON NEON
             siteList = readFieldSiteTable()
 
-            '''
-            if len(siteList) > 0:
-                self.radioButtonHardDriveImages.setChecked(True)
-                self.radioButtonHardDriveImages.setDisabled(False)
-
-                # DISABLE AND UNCHECK THE RADIO BUTTON FOR WEB SITE IMAGES IF INFORMATION CANNOT BE ACCESSED FROM THE NEON SITE
-                self.radioButtonWebSiteImages.setChecked(False)
-                self.radioButtonWebSiteImages.setDisabled(True)
-            '''
-
     def pushButton_USGSDownloadClicked(self):
-        fetchUSGSImages()
-
-    def cleanImagesButton(self):
-        folder = self.lineEditHardDriveFolder.text()
-
-
-        cleanImages(folder,\
-                    self.doubleSpinBoxBlurThreshhold.value(),\
-                    self.spinBoxShiftSize.value(),\
-                    self.doubleSpinBoxBrightnessMin.value(),\
-                    self.doubleSpinBoxBrightnessMax.value(),\
-                    self.checkBoxTriageImagesReport.isChecked(),\
-                    self.checkBoxTriageImagesMove.isChecked(), \
-                    self.radioButtonWebSiteImages)
-
-    def pushButtonFetchImageListClicked(self):
-        fetchLocalImageList(self, self.lineEditHardDriveFolder.text(), False)
-                            #start_date, end_date, start_time, end_time)
+        fetchUSGSImages(self.table_USGS_Sites, self.EditSaveImages_USGS_DownloadFolder)
 
     def pushButtonTrainGoodTriggered(self):
         blur, intensity = computeBlurAndBrightness(self.spinBoxShiftSize.value())
@@ -1000,6 +1343,341 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         imageStats.setLabel('bad')
         self.imageStatsList.append(imageStats)
 
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def toolbarButtonReleaseNotes(self):
+        releaseNotesDlg = GRIME_ReleaseNotesDlg(frame)
+
+        releaseNotesDlg.show()
+
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def toolbarButtonGRIME2(self):
+        strMessage = 'Potential future home for GRIME2 Water Level/Stage measurement functionality.'
+        msgBox = GRIMe_QMessageBox('Water Level Measurement', strMessage, QMessageBox.Close)
+        response = msgBox.displayMsgBox()
+
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def toolbarButtonEdgeDetection(self):
+        self.edgeDetectionDlg = GRIME_EdgeDetectionDlg(frame)
+
+        self.edgeDetectionDlg.edgeDetectionSignal.connect(self.edgeDetectionMethod)
+        self.edgeDetectionDlg.featureDetectionSignal.connect(self.featureDetectionMethod)
+
+        self.edgeDetectionDlg.show()
+
+    def edgeDetectionMethod(self, edgeMethod):
+        global g_edgeMethodSettings
+        g_edgeMethodSettings.method = edgeMethod.method
+        g_edgeMethodSettings.selected = edgeMethod.selected
+
+        processLocalImage(self)
+        self.refreshImage()
+
+    def featureDetectionMethod(self, featureMethod):
+        global g_featureMethodSettings
+        g_featureMethodSettings.method = featureMethod.method
+        g_featureMethodSettings.selected = featureMethod.selected
+
+        processLocalImage(self)
+        self.refreshImage()
+
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def onMyToolBarFileFolder(self):
+        self.fileFolderDlg = GRIME_FileUtilitiesDlg(frame)
+        self.fileFolderDlg.fetchImageList_Signal.connect(self.fetchImageList)
+
+        global imageFileFolder
+        if len(imageFileFolder) > 0 and os.path.exists(imageFileFolder):
+            self.fileFolderDlg.setImageFolder(imageFileFolder)
+
+        self.fileFolderDlg.show()
+
+        try:
+            global gFrameCount
+            self.imageNavigationDlg.setImageCount(gFrameCount)
+            self.imageNavigationDlg.reset()
+        except:
+            pass
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def onMyToolBarImageNavigation(self):
+
+        if self.imageNavigationDlg == None:
+            global gFrameCount
+            global currentImageCount
+
+            if gFrameCount > 0:
+                self.imageNavigationDlg = GRIME_ImageNavigationDlg(frame)
+                self.imageNavigationDlg.imageIndexSignal.connect(self.getImageIndex)
+
+                self.imageNavigationDlg.accepted.connect(self.closeNavigationDlg)
+                self.imageNavigationDlg.rejected.connect(self.closeNavigationDlg)
+
+                self.imageNavigationDlg.setImageIndex(currentImageIndex)
+                self.imageNavigationDlg.setImageCount(gFrameCount)
+                #self.imageNavigationDlg.reset()
+
+                self.imageNavigationDlg.show()
+            else:
+                strMessage = 'You must first fetch images to navigate and/or operate on.'
+                msgBox = GRIMe_QMessageBox('Image Navigation', strMessage, QMessageBox.Close)
+                response = msgBox.displayMsgBox()
+
+    def getImageIndex(self, imageIndex):
+        global currentImageIndex
+
+        currentImageIndex = imageIndex
+
+        processLocalImage(self, imageIndex)
+        self.refreshImage()
+
+    def closeNavigationDlg(self):
+        del self.imageNavigationDlg
+
+        self.imageNavigationDlg = None
+
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    #@pyqtSlot()
+    def onMyToolBarColorSegmentation(self):
+        if self.maskEditorDlg == None:
+            self.labelOriginalImage.setDrawingMode(DrawingMode.COLOR_SEGMENTATION)
+
+            self.colorSegmentationDlg = GRIME_ColorSegmentationDlg()
+
+            self.colorSegmentationDlg.colorSegmentation_Signal.connect(self.colorSegmentation)
+            self.colorSegmentationDlg.addROI_Signal.connect(self.trainROI)
+            self.colorSegmentationDlg.deleteAllROI_Signal.connect(self.deleteAllROI)
+            self.colorSegmentationDlg.close_signal.connect(self.closeColorSegmentationDlg)
+
+            self.colorSegmentationDlg.accepted.connect(self.closeColorSegmentationDlg)
+            self.colorSegmentationDlg.rejected.connect(self.closeColorSegmentationDlg)
+
+            self.colorSegmentationDlg.show()
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    def closeColorSegmentationDlg(self):
+        if self.colorSegmentationDlg != None:
+            self.colorSegmentationDlg.close()
+            del self.colorSegmentationDlg
+            self.colorSegmentationDlg = None
+
+        self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------------------------
+    def colorSegmentation(self, int):
+        global dailyImagesList
+        videoFileList = dailyImagesList.getVisibleList()
+
+        myGRIMe_Color = GRIMe_Color()
+
+        nImageIndex = 1
+
+        if len(videoFileList) > 0:
+            if nImageIndex > gFrameCount:
+                nImageIndex = gFrameCount
+
+            inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
+
+            if os.path.isfile(inputFrame):
+                global currentImageFilename
+                currentImageFilename = inputFrame
+                numpyImage = myGRIMe_Color.loadColorImage(inputFrame)
+
+                hsv = cv2.cvtColor(numpyImage, cv2.COLOR_BGR2HSV)
+
+                # Threshold of blue in HSV space
+                lower_blue = np.array([60, 35, 140])
+                upper_blue = np.array([180, 255, 255])
+
+                # preparing the mask to overlay
+                mask = cv2.inRange(hsv, lower_blue, upper_blue)
+
+                # The black region in the mask has the value of 0,
+                # so when multiplied with original image removes all non-blue regions
+                result = cv2.bitwise_and(numpyImage, numpyImage, mask=mask)
+
+                cv2.imshow('frame', numpyImage)
+                cv2.imshow('mask', mask)
+                cv2.imshow('result', result)
+
+                tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
+                currentImage = QPixmap(tempCurrentImage)
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def onMyToolBarCreateMask(self):
+
+        if self.colorSegmentationDlg == None:
+            self.labelOriginalImage.setDrawingMode(DrawingMode.MASK)
+
+            self.maskEditorDlg = GRIME_MaskEditorDlg()
+
+            self.maskEditorDlg.addMask_Signal.connect(self.addMask)
+            self.maskEditorDlg.generateMask_Signal.connect(self.generateMask)
+            self.maskEditorDlg.drawingColorChange_Signal.connect(self.changePolygonColor)
+            self.maskEditorDlg.reset_Signal.connect(self.resetMask)
+            self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
+            self.maskEditorDlg.polygonFill_Signal.connect(self.fillPolygonChanged)
+
+            self.maskEditorDlg.show()
+
+    def fillPolygonChanged(self, bFill):
+        self.labelOriginalImage.enablePolygonFill(bFill)
+
+    def maskDialogClose(self):
+        if self.maskEditorDlg == None:
+            self.maskEditorDlg.close()
+            del self.maskEditorDlg
+            self.maskEditorDlg = None
+
+        self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
+
+    def resetMask(self):
+        self.labelOriginalImage.resetMask()
+        self.labelOriginalImage.update()
+
+    def addMask(self):
+        self.labelOriginalImage.incrementPolygon()
+
+    def generateMask(self):
+
+        #global imageFileFolder
+        global currentImageFilename
+
+        scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
+                                                 QtCore.Qt.SmoothTransformation)
+
+        widthMultiplier = currentImage.size().width() / scaledCurrentImage.size().width()
+        heightMultiplier = currentImage.size().height() / scaledCurrentImage.size().height()
+
+        # CONVERT IMAGE TO A MAT FORMAT TO USE ITS PARAMETERS TO CREATE A MASK IMAGE TEMPLATE
+        # ------------------------------------------------------------------------------------------------------------------------
+        img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
+
+        # CREATE A MASK IMAGE
+        mask = np.zeros(img1.shape[:2], np.uint8)
+
+        # ITERATE THROUGH EACH ONE OF THE POLYGONS
+        # ------------------------------------------------------------------------------------------------------------------------
+        polygonList = self.labelOriginalImage.getPolygon()
+
+        for polygon in polygonList:
+            myPoints = []
+            for i in range(polygon.count()):
+                myPoints.append([polygon.point(i).x() * widthMultiplier, polygon.point(i).y() * heightMultiplier])
+
+            cv2.fillPoly(mask, np.int32([myPoints]), color=(255, 255, 255))
+
+        masked = cv2.bitwise_and(img1, img1, mask=mask)
+
+        # DISPLAY THE MASK IN THE GUI
+        # ------------------------------------------------------------------------------------------------------------------------
+        qImg = QImage(masked.data, masked.shape[1], masked.shape[0], QImage.Format_BGR888)
+        pix = QPixmap(qImg)
+        self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+
+        # SAVE THE MASK RASTER AND POLYGON TO FILE
+        if self.maskEditorDlg.getCheckBox_Save():
+            # Extract image folder path to create a mask subfolder
+            maskFolderPath = os.path.join(os.path.dirname(currentImageFilename), 'Masks')
+
+            # Check for the existence of the filename path and create if it doesn't exist
+            if not os.path.exists(maskFolderPath):
+                os.mkdir(maskFolderPath)
+
+            # Extract image filename to be used for creating the mask and polygon filenames
+            filename = os.path.basename(currentImageFilename)
+            filename_without_ext = filename[:filename.rindex('.')]
+            extension = filename[filename.rindex('.'):]
+
+            # Create filenames with fully qualified paths
+            mask_filename = os.path.join(maskFolderPath, (filename_without_ext+'.mask.bmp'))
+            poly_filename = os.path.join(maskFolderPath, (filename_without_ext+'.poly.csv'))
+
+            bSave = True
+            # Check for the existence of the files. If they exist, display overwrite option dialog box
+            if os.path.isfile(mask_filename) or os.path.isfile(mask_filename):
+                strMessage = 'The mask and/or polygon file exist. Overwrite files?'
+                msgBox = GRIMe_QMessageBox('Save Mask Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+                response = msgBox.displayMsgBox()
+
+                if response == QMessageBox.No:
+                    bSave = False
+
+            if bSave:
+                # Write the mask to a file
+                cv2.imwrite(mask_filename, mask)
+
+                csvFile = open(poly_filename, 'w', newline='')
+
+                # Write the polygon(s) vertices to a file
+                for polygon in polygonList:
+                    csvFile.write('mask\n')
+                    csvFile.write('x, y\n')
+
+                    for myPoints in polygon:
+                        x = (int)(myPoints.x() * widthMultiplier)
+                        y = (int)(myPoints.y() * heightMultiplier)
+                        outputString = "{0}, {1}\n".format(x, y)
+                        csvFile.write(outputString)
+
+                # WRITE ALL POLYGONS BEFORE CLOSING FILE
+                csvFile.close()
+
+                # EXTRACT DOMINANT RGB COLORS
+                myGRIMe_Color = GRIMe_Color()
+
+                _, _, hist = myGRIMe_Color.KMeans(masked, 6)
+
+                # EXTRACT DOMINANT HSV COLORS
+                hist, colorClusters = myGRIMe_Color.extractDominant_HSV(masked, 6)
+
+                # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+                colorBar = self.createColorBar(hist, colorClusters[0:5])
+
+                # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+                qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+
+    def changePolygonColor(self, polygonColor):
+        self.labelOriginalImage.setBrushColor(polygonColor)
+        self.labelOriginalImage.drawPolygon()
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def deleteAllROI(self):
+        del self.roiList[:]
+        self.tableWidget_ROIList.clearContents()
+        self.tableWidget_ROIList.setRowCount(0)
+
+        processLocalImage(self)
+
+        #JES self.spinBoxColorClusters.setDisabled(False)
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def onMyToolBarSettings(self):
+        pass
+
     # --------------------------------------------------
     # --------------------------------------------------
     def __init__(self, parent=None, win=None, session=None):
@@ -1008,19 +1686,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.session = session
         self.ui = Ui_MainWindow()
 
-        global dailyImagesList
-        dailyImagesList = dailyList([], [])
-
+        # --------------------------------------------------------------------------------------------------------------
+        # MainWindow stuff: create toolbars, setup UI, set window titles and so forth and so on
+        # --------------------------------------------------------------------------------------------------------------
         self.setWindowTitle("GRIMe-AI: John E. Stranzl Jr.")
-        toolbar = QToolBar("GRIMe-AI Toolbar")
-        self.addToolBar(toolbar)
 
         self.setupUi(self)
 
-        self.initUSGS_Table()
+        self.createToolBar()
+
+        # --------------------------------------------------------------------------------------------------------------
+        # create and/or initialize variables
+        # --------------------------------------------------------------------------------------------------------------
+        global dailyImagesList
+        dailyImagesList = dailyList([], [])
+
+        if full == 1:
+            self.initUSGS_Table()
 
         self.initProductTable()
-        if full == 1:
+        if full == 1 or full == 4:
             self.initROITable()
 
         self.listboxNEONSites.itemDoubleClicked.connect(self.itemClicked)
@@ -1028,119 +1713,60 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.listboxNEONSites.currentItemChanged.connect(self.itemClicked)
         self.listboxSiteProducts.itemClicked.connect(self.productClicked)
 
-        self.pushButtonRetrieveData.clicked.connect(self.pushButtonRetrieveDataClicked)
 
-        #        self.labelLatestImage = GRIMe_QLabel()
+        #JES self.pushButtonRetrieveData.clicked.connect(self.pushButton_RetrieveNEONDataClicked)
+
         self.labelLatestImage.mouseDoubleClickEvent = labelMouseDoubleClickEvent
         self.labelLatestImage.installEventFilter(self)
 
+        #JES self.pushButtonBrowseSaveImagesOutputFolder.clicked.connect(self.pushButtonBrowseSaveImagesOutputFolderClicked)
+
         #        self.splitter.splitterMoved.connect(self.splitterMoved)
         # ****************************************************************************************************
+
         # SCALED BACK FUNCTIONALITY
         # ****************************************************************************************************
-        if full == 1:
-            self.spinBoxDailyImage.setKeyboardTracking(False)
-            self.spinBoxDailyImage.editingFinished.connect(self.spinBoxChanged)
-            self.spinBoxDailyImage.valueChanged.connect(self.spinBoxChanged)
-
-            # self.labelOriginalImage.mouseDoubleClickEvent = labelOriginalImageDoubleClickEvent
+        if full == 1 or full == 4:
+            #self.labelOriginalImage.mouseDoubleClickEvent = labelOriginalImageDoubleClickEvent
 
             self.labelEdgeImage.installEventFilter(self)
             self.labelOriginalImage.installEventFilter(self)
 
-            # EDGE DETECTION METHODS
-            self.radioButtonCanny.clicked.connect(self.updateCanny)
-            self.spinBoxCannyHighThreshold.valueChanged.connect(self.spinBoxCannyHighThresholdChanged)
-            self.spinBoxCannyLowThreshold.valueChanged.connect(self.spinBoxCannyLowThresholdChanged)
-            self.spinBoxCannyKernel.valueChanged.connect(self.spinBoxCannyKernelChanged)
+            #JES self.pushButton_BuildFeatureFile.clicked.connect(self.GRIMe_NSF_Build)
 
-            self.radioButtonSobelX.clicked.connect(self.updateSobelX)
-            self.radioButtonSobelY.clicked.connect(self.updateSobelY)
-            self.radioButtonSobelXY.clicked.connect(self.updateSobelXY)
-            self.spinBoxSobelKernel.valueChanged.connect(self.spinBoxSobelKernelChanged)
-
-            self.radioButtonSIFT.clicked.connect(self.updateSIFT)
-
-            self.radioButtonORB.clicked.connect(self.updateORB)
-            self.spinBoxOrbMaxFeatures.valueChanged.connect(self.spinBoxOrbMaxFeaturesChanged)
-
-            self.radioButtonLaplacian.clicked.connect(self.updateLaplacian)
-
-            self.spinBoxCannyHighThreshold.setKeyboardTracking(False)
-            self.spinBoxCannyLowThreshold.setKeyboardTracking(False)
-
-            # EDGE TAB
-            # self.tabWidget.currentChanged.connect(self.initTab3())
-
-            # TRAIN TAB
-            self.pushButtonAddROI.clicked.connect(self.trainROI)
-            self.pushButton_deleteAllROIs.clicked.connect(self.deleteAllROI)
-            self.checkBoxDisplayROIs.clicked.connect(self.displayROIs)
-
-            # VIDEO FUNCTIONS
-            self.pushButtonFetchVideoFilenames.clicked.connect(self.MSTFetchVideoFilenames)
-            self.pushButtonExtractFrames.clicked.connect(self.MSTExtractFrames)
-            self.MSTlineEditFrameFolder.textChanged.connect(self.MSTFrameCountUpdate)
-            self.pushButtonPlay.clicked.connect(self.GRIMePlay)
-            self.pushButtonStop.clicked.connect(self.MSTStop)
-            self.lineEditHardDriveFolder.textChanged.connect(self.MSTVideoFolderChanged)
+            self.pushButton_BuildFeatureFile.clicked.connect(self.GRIMe_NSF_Build)
 
             #
-            self.radioButtonHardDriveImages.clicked.connect(self.updateImageSource)
-            self.radioButtonWebSiteImages.clicked.connect(self.updateImageSource)
+            #JES if full == 1:
+            #JES     self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
+            #JES     self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
 
             #
-            self.pushButtonBrowseVideoOutputFolder.clicked.connect(self.pushButtonBrowseVideoOutputFolderClicked)
-            self.pushButtonBrowseImageFolder.clicked.connect(self.pushButtonBrowseImageFolderClicked)
-            self.pushButtonBrowseSaveImagesOutputFolder.clicked.connect(
-                self.pushButtonBrowseSaveImagesOutputFolderClicked)
-            self.pushButtonBrowseEXIFOutputFolder.clicked.connect(self.pushButtonBrowseEXIFOutputFolderClicked)
+            #JES self.pushButton_ColorSegmentation.clicked.connect(self.pushButtonColorSegmentationClicked)
 
             #
-            self.radioButtonHardDriveImages.clicked.connect(self.radioButtonHardDriveImagesClicked)
-            self.radioButtonWebSiteImages.clicked.connect(self.radioButtonWebSiteImagesClicked)
+            if full == 1:
+                self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
-            #
-            self.pushButtonResetImageIndex.clicked.connect(self.pushButtonResetImageIndexClicked)
+            # THE DESIGN NOW HAS A TAB FOR EACH SPECIFIC WEBSITE SO A DROP DOWN IS NO LONGER USED ON THE 'NEON' TAB
+            #ImageWebSiteList = []
+            #ImageWebSiteList.append("NEON")
+            #self.listWidgetImageWebSites.addItems(ImageWebSiteList)
 
-            #
-            self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
-            self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
-
-            #
-            self.pushButton_ColorSegmentation.clicked.connect(self.pushButtonColorSegmentationClicked)
-
-            #
-            self.pushButtonCreateVideo.clicked.connect(self.pushButtonCreateVideoClicked)
-
-            #
-            self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
-
-            #
-            self.checkBoxNEONSites.clicked.connect(self.checkboxNEONSitesClicked)
-            self.pushButtonFetchImageList.clicked.connect(self.pushButtonFetchImageListClicked)
             # INITIALIZE WIDGETS
-            ImageWebSiteList = []
-            ImageWebSiteList.append("NEON")
-            self.listWidgetImageWebSites.addItems(ImageWebSiteList)
-
             maxRows = self.tableWidget_ROIList.rowCount()
             nCol = 0
             for i in range(0, maxRows):
                 self.tableWidget_ROIList.removeRow(0)
 
-            self.pushButton_TrainGood.clicked.connect(self.pushButtonTrainGoodTriggered)
-            self.pushButton_TrainBad.clicked.connect(self.pushButtonTrainBadTriggered)
+            #JES self.pushButton_TrainGood.clicked.connect(self.pushButtonTrainGoodTriggered)
+            #JES self.pushButton_TrainBad.clicked.connect(self.pushButtonTrainBadTriggered)
 
         # SAVE AND RECALL SETTINGS
         self.actionSave_Settings.triggered.connect(self.saveSettings)
 
         #
         self.tabWidget.currentChanged.connect(self.tabWidgetChanged)
-
-        #
-        self.actionClean.triggered.connect(self.cleanImagesButton)
-        self.pushButtonTriageImages.clicked.connect(self.cleanImagesButton)
 
         # GRAPH TAB(S)
 
@@ -1155,7 +1781,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # INFORMATION, VIEWS, POP-UP MENUS AND DRAWING REGIONS-OF-INTEREST (ROI) AROUND SPECIFIC AREAS OF AN IMAGE.
     # ------------------------------------------------------------------------------------------------------------------
     def eventFilter(self, source, event):
-        if full == 1:
+
+        if full == 1 or full == 4:
             if event.type() == QtCore.QEvent.MouseMove and source is self.labelEdgeImage:
                 # print("A")
                 pass
@@ -1172,13 +1799,510 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # print("B")
                 pass
 
-        if full == 1:
-            if event.type() == QtCore.QEvent.MouseButtonDblClick and source is self.labelOriginalImage:
-                # labelEdgeImageDoubleClickEvent(self)
-                # labelMouseDoubleClickEvent(self)
-                labelOriginalImageDoubleClickEvent(self)
+        #if full == 1 or full == 4:
+        #    if event.type() == QtCore.QEvent.MouseButtonDblClick and source is self.labelOriginalImage:
+        #        # labelEdgeImageDoubleClickEvent(self)
+        #        # labelMouseDoubleClickEvent(self)
+        #        labelOriginalImageDoubleClickEvent(self)
 
         return super(MainWindow, self).eventFilter(source, event)
+
+
+    def closeEvent(self, event):
+        # DESTROY ANY MODELESS DIALOG BOXES THAT ARE OPEN
+        if self.edgeDetectionDlg != None:
+            self.edgeDetectionDlg.close()
+
+        if self.colorSegmentationDlg != None:
+            self.colorSegmentationDlg.close()
+
+        if self.TriageDlg != None:
+            self.TriageDlg.close()
+
+        if self.fileFolderDlg != None:
+            self.fileFolderDlg.close()
+
+        if self.maskEditorDlg != None:
+            self.maskEditorDlg.close()
+
+        if self.imageNavigationDlg != None:
+            self.imageNavigationDlg.close()
+
+        if self.releaseNotesDlg != None:
+            self.releaseNotesDlg.close()
+
+        webdriver.Chrome.quit()
+
+        QMainWindow.closeEvent(self, event)
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def fetchImageList(self, imageFolder, bRecursive):
+        global imageFileFolder
+        imageFileFolder = imageFolder
+        fetchLocalImageList(self, imageFileFolder, bRecursive, False)  # start_date, end_date, start_time, end_time)
+
+        try:
+            global gFrameCount
+            self.imageNavigationDlg.setImageCount(gFrameCount)
+            self.imageNavigationDlg.reset()
+        except:
+            pass
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_date=datetime.date(1970, 1, 1),
+                        end_date=datetime.date(2099, 12, 31), start_time='000000', end_time='000000'):
+    global gWebImageCount
+    global dailyImagesList
+
+    # CLEAR THE PREVIOUSLY DOWNLOADED IMAGE LIST, IF ANY
+    dailyImagesList.clear()
+
+    # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
+    extensions = ('.jpg', '.jpeg', '.png', '.bmp')
+
+    # INITIALIZE VARIABLES TO A KNOWN VALUE
+    nStartDate = 99999999
+    nEndDate = -1
+    strStartDate = ""
+    strEndDate = ""
+    List = []
+
+    # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
+    bSaveImages = True
+    imageOutputFolder = self.EditSaveImagesOutputFolder.text()
+
+    # if self.checkBoxSaveImages.isChecked():
+    #    bSaveImages = True
+    #    imageOutputFolder = self.EditSaveImagesOutputFolder.text()
+
+    # create the csv writer
+    if bCreateEXIFFile:
+        # open the file in the write mode
+        EXIFFolder = self.EditEXIFOutputFolder.text()
+        csvFile = open(EXIFFolder + '/' + 'EXIFData.csv', 'w', newline='')
+
+        writer = csv.writer(csvFile)
+
+        bWriteHeader = True
+
+    # count the number of images that will potentially be processed and possibly saved with the specified extension
+    # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
+    # of images will help determine whether or not there is enough disk space to accomodate storing the images.
+    imageCount = GRIMe_Utils.getImageCount(filePath, extensions)
+
+    progressBar = QProgressWheel()
+    progressBar.setRange(0, imageCount + 1)
+    progressBar.show()
+
+    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
+    imageIndex = 0
+
+    files = GRIMe_Utils.getFileList(filePath, extensions, bFetchRecursive)
+
+    # traverse all files in folder that meet the criteria for retrieval
+    # 1. does the file have the specified file extension
+    # 2. extract the date from the filename
+    # 3. does the file meet the date criteria? if "yes," then continue; if "no" check next file in the list
+    # 4. if the files meets the date criteria, extract the EXIF data from the file to ascertain the time at
+    #    which the image was acquired
+    # 5. if the file meets the time range criteria, add the file to a list of images to be used for the session
+    #    and also add the file's EXIF data to a CSV EXIF log file if the option is selected by the user. Last but
+    #    not least, if the user selects the option to copy the image to a separate folder, then copy the file to
+    #    the folder specified by the user
+    for file in files:
+        progressBar.setWindowTitle(file)
+        progressBar.setValue(imageIndex)
+        progressBar.repaint()
+        imageIndex += 1
+
+        ext = os.path.splitext(file)[-1].lower()
+
+        if ext in extensions:
+            fileDate, fileTime = GRIMe_Utils.extractDateFromFilename(file)
+
+            if fileDate >= start_date and fileDate <= end_date:
+                fullPathAndFilename = file
+
+                try:
+                    # extract EXIF info to determine what time the image was acquired. If EXIF info is not found,
+                    # throw an exception and see if the information is embedded in the filename. Currently, we are
+                    # working with images from NEON and PBT. The PBT images have EXIF data and the NEON/PhenoCam
+                    # do not appear to have EXIF data.
+                    myEXIFData = EXIFData()
+                    myEXIFData.extractEXIFData(fullPathAndFilename)
+
+                    strTemp = str(myEXIFData.getEXIF()[8])
+                    timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
+
+                    nHours = int(str(timeOriginal[1:3]))
+                    nMins = int(str(timeOriginal[4:6]))
+                    nSecs = int(str(timeOriginal[7:9]))
+
+                    bEXIFDataFound = True
+                except:
+                    # assume the filename contains the timestamp for the image (assumes the image file is a PBT image)
+                    bEXIFDataFound = False
+
+                    try:
+                        nHours = int(str(strTime[0:2]))
+                        nMins = int(str(strTime[2:4]))
+                        nSecs = int(str(strTime[4:6]))
+                    except:
+                        nHours = 0
+                        nMins = 0
+                        nSecs = 0
+
+                image_time = datetime.time(nHours, nMins, nSecs)
+
+                # if ((start_time == datetime.time(0, 0, 0)) and (end_time == datetime.time(0, 0, 0))) or \
+                #        ((image_time >= start_time) and (image_time <= end_time)):
+
+                # WRITE THE HEADER ONLY ONCE WHEN THE FIRST FILE IS PROCESSED
+                if bCreateEXIFFile and bEXIFDataFound:
+                    if bWriteHeader:
+                        writer.writerow(myEXIFData.getHeader())
+                        bWriteHeader = False
+                    else:
+                        writer.writerow(myEXIFData.getEXIF())
+
+                List.append(imageData(fullPathAndFilename, 0, 0, 0))
+
+                if bSaveImages:
+                    shutil.copy(fullPathAndFilename, imageOutputFolder)
+
+                # delete EXIFData object
+                del myEXIFData
+
+    dailyImagesList.setVisibleList(List)
+
+    global gFrameCount
+    gFrameCount = len(dailyImagesList.getVisibleList())
+    gWebImageCount = len(dailyImagesList.getVisibleList())
+
+    # INIT SPINBOX CONTROLS BASED UPON NUMBER OF IMAGES AVAILABLE
+    # dailyURLvisible = []
+
+    # clean-up before exiting function
+    # 1. close and delete the progress bar
+    # 2. close the EXIF log file, if opened
+    progressBar.close()
+    del progressBar
+
+    if bCreateEXIFFile:
+        csvFile.close()
+
+    if len(files) > 0:
+        processLocalImage(self)
+        #refreshImage(self)
+
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def processLocalImage(self, nImageIndex=0):
+    global currentImage
+    global imageFileFolder
+
+
+    myGRIMe_Color = GRIMe_Color()
+
+    if os.path.exists(imageFileFolder):
+        # videoFilePath = Path(frameFolder)
+        ## JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
+        # videoFileList = [str(pp) for pp in videoFilePath.glob("*.jpg")]
+
+        global dailyImagesList
+        videoFileList = dailyImagesList.getVisibleList()
+
+        if len(videoFileList) > 0:
+            if nImageIndex > gFrameCount:
+                nImageIndex = gFrameCount
+
+            inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
+
+            if os.path.isfile(inputFrame):
+                global currentImageFilename
+                currentImageFilename = inputFrame
+                numpyImage = myGRIMe_Color.loadColorImage(inputFrame)
+
+                tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
+                currentImage = QPixmap(tempCurrentImage)
+
+    # ----------------------------------------------------------------------------------------------------
+    # DISPLAY IMAGE FROM NEON SITE
+    # ----------------------------------------------------------------------------------------------------
+    if currentImage:
+
+        # CALCULATE THE GREENNESS INDEX (PHENOCAM GCC) FOR THE ENTIRE IMAGE
+        if currentImage != []:
+            numpyImg = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
+            #JES self.label_GreennessIndex_Value.setText(str(computeGreennessIndex(numpyImg)))
+
+        scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+
+        width = scaledCurrentImage.width()
+        height = scaledCurrentImage.height()
+
+        currentImageRescaled = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+
+        if g_displayOptions.displayROIs:
+            painter = QPainter(currentImageRescaled)
+
+        img = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
+
+        if g_regionSelect.wholeImage:
+            # BLUR THE IMAGE
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+            red, green, blue = separateChannels(img)
+            redSum, greenSum, blueSum = sumChannels(red, green, blue)
+            strGCC = '%3.3f' % (computeGreennessIndex(redSum, greenSum, blueSum))
+            self.label_GreennessIndex_Value.setText(strGCC)
+
+            # IMAGE INTENSITY CALCULATIONS
+            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+            strIntensity = '%3.3f' % (intensity)
+            self.label_ImageIntensityValue.setText(strIntensity)
+
+            # COMPUTE ENTROPY FOR ENTIRE IMAGE
+            entropyValue = self.calcEntropy(gray)
+            strEntropy = '%3.3f' % (entropyValue)
+            self.label_ImageEntropyValue.setText(strEntropy)
+        else:
+            self.label_GreennessIndex_Value.setText("")
+            self.label_ImageIntensityValue.setText("")
+            self.label_ImageEntropyValue.setText("")
+
+        progressBar = QProgressWheel()
+        progressBar.setRange(0, len(self.roiList) + 1)
+        #JES progressBar.show()
+
+        nRow = 0
+        for roiObj in self.roiList:
+            progressBar.setValue(nRow+1)
+            progressBar.repaint()
+
+            try:
+                #JES if self.checkBoxCalcColors.isChecked():
+                if (1):
+                    # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
+                    rgb = extractROI(roiObj.getImageROI(), img)
+
+                    gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+
+                    # CALCULATE THE GREENNESS INDEX FOR THE ROI
+                    red, green, blue = separateChannels(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+                    redSum, greenSum, blueSum = sumChannels(red, green, blue)
+                    strGreennessIndex = "{:.4f}".format(computeGreennessIndex(redSum, greenSum, blueSum))
+                    self.greennessLabel = QtWidgets.QLabel()
+                    self.greennessLabel.setText(strGreennessIndex)
+                    self.tableWidget_ROIList.setCellWidget(nRow, 3, self.greennessLabel)
+
+                    try:
+                        # CALCULATE THE INTENSITY FOR THE ROI
+                        strIntensity = "{:.4f}".format(cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+                        self.intensityLabel = QtWidgets.QLabel()
+                        self.intensityLabel.setText(strIntensity)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 4, self.intensityLabel)
+                    except:
+                        pass
+
+                    try:
+                        # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                        strEntropyValue = "{:.4f}".format(self.calcEntropy(gray)[0])
+                        self.entropyLabel = QtWidgets.QLabel()
+                        self.entropyLabel.setText(strEntropyValue)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 5, self.entropyLabel)
+                    except:
+                        pass
+
+                    # EXTRACT DOMINANT RGB COLORS
+                    _, _, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
+
+                    # EXTRACT DOMINANT HSV COLORS
+                    hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+
+                    # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+                    colorBar = self.createColorBar(hist, colorClusters)
+
+                    # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+                    qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+
+                    # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+                    self.label = QtWidgets.QLabel()
+                    self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
+                    self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
+
+                    self.tableWidget_ROIList.resizeColumnsToContents()
+
+                    # INSERT COLOR INTO THE CONTROL ON THE COLOR SEGMENTATION TAB
+                    #JES self.labelDominantColors.setPixmap(QPixmap(qImg).scaled(self.labelEdgeImage.size()))
+
+                nRow = nRow + 1
+            except:
+                nErrorCode = -1
+
+            # OVERLAY ROI BOUNDARY ON IMAGE
+            #JESif self.checkBoxDisplayROIs.isChecked():
+            if (1):
+                pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
+                painter.setPen(pen)
+
+                if roiObj.getROIShape() == ROIShape.RECTANGLE:
+                    painter.drawRect(roiObj.getDisplayROI())
+                elif roiObj.getROIShape() == ROIShape.ELLIPSE:
+                    painter.drawEllipse(roiObj.getDisplayROI())
+
+                font = painter.font()
+                font.setPointSize(8)
+                painter.setPen(QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine))
+                painter.setFont(font)
+                painter.drawText(roiObj.getDisplayROI().x(), roiObj.getDisplayROI().y() - 16, 50, 16, QtCore.Qt.AlignLeft, roiObj.getROIName())
+
+        if g_displayOptions.displayROIs:
+            painter.end()
+
+        # close and delete the progress bar
+        progressBar.close()
+        del progressBar
+
+        self.labelOriginalImage.setPixmap(currentImageRescaled)
+
+        pix = processImage(self, currentImage)
+        gray = cv2.cvtColor(numpyImage, cv2.COLOR_BGR2GRAY)
+
+        '''
+        entropy_image = entropy(gray, disk(7))
+        npa = np.asarray(entropy_image, dtype=np.float64) * 255
+        npa = npa.astype(np.uint8)
+        colorImg = cv2.applyColorMap(npa, cv2.COLORMAP_MAGMA)
+        qImg = QImage(colorImg.data, colorImg.shape[1], colorImg.shape[0], QImage.Format_RGB888)
+        pix = QPixmap(qImg)
+
+        self.labelEdgeImage.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+        '''
+
+        del currentImageRescaled
+        del scaledCurrentImage
+
+    # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
+    QCoreApplication.processEvents()
+
+
+# ======================================================================================================================
+# THIS FUNCTION WILL PROCESS THE CURRENT IMAGE BASED UPON THE SETTINGS SELECTED BY THE END-USER.
+# THE IMAGE STORAGE TYPE IS QImage
+# ======================================================================================================================
+def processImage(self, myImage):
+    global g_edgeMethodSettings
+    global g_featureMethodSettings
+
+    pix = []
+
+    if not myImage == []:
+        # CONVERT IMAGE FROM QImage FORMAT TO Mat FORMAT (BYTE ORDER IS R, G, B)
+        img1 = GRIMe_Utils.convertQImageToMat(myImage.toImage())
+
+        #JES if self.checkboxKMeans.isChecked():
+        #    myGRIMe_Color = GRIMe_Color()
+        #    qImg, clusterCenters, hist = myGRIMe_Color.KMeans(img1, self.spinBoxColorClusters.value())
+
+        # CONVERT COLOR IMAGE TO GRAY SCALE
+        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+
+        # REMOVE NOISE FROM THE IMAGE
+        if len(gray) != 0:
+            grayEQ = cv2.equalizeHist(gray)
+            grayBlur = cv2.GaussianBlur(grayEQ, (15, 15), 0)
+            cv2.erode(grayBlur, (7,7), gray)
+
+        # EDGE DETECTION METHODS
+        if len(gray) != 0:
+
+            myProcessImage = GRIMe_ProcessImage()
+
+            if g_edgeMethodSettings.method == edgeMethodsClass.CANNY:
+                pix = myProcessImage.processCanny(img1, gray)
+
+            elif g_edgeMethodSettings.method == edgeMethodsClass.LAPLACIAN:
+                pix = myProcessImage.processLaplacian(img1)
+
+            elif g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_X or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_Y or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_XY:
+                pix = myProcessImage.processSobel(img1, g_edgeMethodSettings.method)
+
+            elif g_featureMethodSettings.method == featureMethodsClass.SIFT:
+                pix = myProcessImage.processSIFT(img1, gray)
+
+            elif g_featureMethodSettings.method == featureMethodsClass.ORB:
+                pix = myProcessImage.processORB(img1, gray)
+
+    return pix
+
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def toolbarButtonImageTriage(checkBox_FetchRecursive):
+    strMessage = 'You are about to perform Image Triage. Would you like to continue?'
+    msgBox = GRIMe_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+    response = msgBox.displayMsgBox()
+
+    if response == QMessageBox.Yes:
+        prompter = promptlib.Files()
+        folder = prompter.dir()
+
+        if len(folder) == 0:
+            strMessage = 'ERROR! Please specify an image folder containing images to triage.'
+            msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+            response = msgBox.displayMsgBox()
+        else:
+#            global TriageDlg
+            TriageDlg = GRIME_TriageOptionsDlg()
+
+            response = TriageDlg.exec_()
+
+            if response == 1:
+                cleanImages(folder, \
+                            True, \
+                            TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
+                            TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
+                            TriageDlg.getCreateReport(), TriageDlg.getMoveImages())
+
+                strMessage = 'Image triage is complete.'
+                msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                response = msgBox.displayMsgBox()
+            else:
+                strMessage = 'ABORT! You cancelled the triage operation.'
+                msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                response = msgBox.displayMsgBox()
+    else:
+        strMessage = 'ABORT! You cancelled the triage operation.'
+        msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+        response = msgBox.displayMsgBox()
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def resizeImage(image, scale_percent):
+    # --------------------------------------------------------------------------------
+    # reshape the image to be a list of pixels
+    # --------------------------------------------------------------------------------
+    if scale_percent == 100.0:
+        return image
+    else:
+        width = int(image.shape[1] * scale_percent / 100)
+        height = int(image.shape[0] * scale_percent / 100)
+
+        dim = (width, height)
+
+        resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+
+        return resized
 
 
 # ======================================================================================================================
@@ -1188,7 +2312,10 @@ def computeBlurAndBrightness(shiftSize):
     global currentImage
 
     img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-    grayImage = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    grayImage = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+
+    # DECIMATE IMAGE
+    grayImage = resizeImage(grayImage, 50.0)
 
     hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
 
@@ -1232,81 +2359,10 @@ def computeBlurAndBrightness(shiftSize):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def createVideo(self):
-
-    out = None
-
-    rootFolder = self.EditVideoOutputFolder.text()
-
-    filePath = os.path.join(rootFolder, "Videos")
-    if not os.path.exists(filePath):
-        os.mkdir(filePath)
-
-    # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
+def cleanImages(folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport, bMoveImages):
     extensions = ('.jpg', '.jpeg', '.png')
 
-    imageCount = GRIMe_Utils.getImageCount(rootFolder, extensions)
-
-    progressBar = QProgressWheel(0, imageCount + 1)
-    progressBar.show()
-
-    filenames = []
-    imageIndex = 1
-
-    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    for root, dirs, files in os.walk(rootFolder):
-        path = root.split(os.sep)
-
-        for file in files:
-            ext = os.path.splitext(file)[-1].lower()
-
-            if ext in extensions:
-                progressBar.setValue(imageIndex)
-                imageIndex += 1
-
-                imgFile = os.path.join(root, file)
-
-                filenames.append(imgFile)
-
-                img = GRIMe_Color.loadColorImage(self.radioButtonWebSiteImages, imgFile)
-                height, width, layers = img.shape
-
-                # WE CAN'T OPEN THE VIDEO STREAM UNTIL WE KNOW THE SIZE OF ONE OF THE IMAGES WHICH ALSO ASSUMES THAT
-                # ALL IMAGES ARE OF THE SAME SIZE.
-                if out == None:
-                    videoFile = 'Original_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.mp4'
-                    out = cv2.VideoWriter(filePath + '/' + videoFile, cv2.VideoWriter_fourcc(*'mp4v'), 15, (width, height))
-
-                    # processedVideoFile = 'Processed_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.mp4'
-                    # out2 = cv2.VideoWriter(filePath + '/' + processedVideoFile, cv2.VideoWriter_fourcc(*'mp4v'), 15, (width, height))
-
-                out.write(img)
-
-                # PROCESS THE ORIGINAL IMAGE
-                #edges, imageFormat = processImageMat(self, img)
-
-                # WRITE THE PROCESSED IMAGE TO A VIDEO FILE
-                #out2.write(edges)
-
-    images = []
-    gifFile = 'Original_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.gif'
-    for filename in filenames:
-        images.append(imageio.imread(filename))
-
-    gifFile = os.path.join(filePath, gifFile)
-    imageio.mimsave(gifFile, images, duration=0.25)
-
-    out.release()
-    #out2.release()
-
-    del images
-    del progressBar
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def cleanImages(folder, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport, bMoveImages, bWebSiteImages):
-    extensions = ('.jpg', '.jpeg', '.png')
+    myGRIMe_Color = GRIMe_Color()
 
     if bCreateReport:
         csvFilename = 'ImageTriage_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
@@ -1326,93 +2382,97 @@ def cleanImages(folder, blurThreshhold, shiftSize, brightnessMin, brightnessMAX,
 
     # process images to determine which ones are too dark/too light, blurry/clear, etc and move them into a subfolder
     # created so they are not processed with nominal images.
-    for root, dirs, files in os.walk(folder):
-        path = root.split(os.sep)
+    files = GRIMe_Utils.getFileList(folder, extensions, bFetchRecursive)
 
-        # create a subfolder beneath the current root folder if the option to move less than nominal images is selected
-        if bMoveImages:
-            tempFolder = os.path.join(root, "temp")
-            if not os.path.exists(tempFolder):
-                os.mkdir(tempFolder)
+    for file in files:
+        progressBar.setWindowTitle(file)
+        progressBar.setValue(imageIndex)
+        progressBar.repaint()
+        imageIndex += 1
 
-        for file in files:
-            progressBar.setWindowTitle(file)
-            progressBar.setValue(imageIndex)
-            progressBar.repaint()
-            imageIndex += 1
+        ext = os.path.splitext(file)[-1].lower()
 
-            ext = os.path.splitext(file)[-1].lower()
+        if ext in extensions:
+            filename = os.path.join(folder, file)
+            numpyImage = myGRIMe_Color.loadColorImage(filename)
+            grayImage = cv2.cvtColor(numpyImage, cv2.COLOR_RGB2GRAY)
 
-            if ext in extensions:
-                filename = os.path.join(folder, file)
-                numpyImage = GRIMe_Color.loadColorImage(bWebSiteImages, filename)
-                grayImage = cv2.cvtColor(numpyImage, cv2.COLOR_RGB2GRAY)
-                hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
+            # DECIMATE IMAGE TO SPEED UP PROCESSING
+            grayImage = resizeImage(grayImage, 50.0)
 
-                ''' BLUR DETECTION CALCULATIONS'''
-                # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
-                (h, w) = grayImage.shape
-                (cX, cY) = (int(w / 2.0), int(h / 2.0))
+            hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
 
-                fft = np.fft.fft2(grayImage)
-                fftShift = np.fft.fftshift(fft)
+            ''' BLUR DETECTION CALCULATIONS'''
+            # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
+            (h, w) = grayImage.shape
+            (cX, cY) = (int(w / 2.0), int(h / 2.0))
 
-                # compute the magnitude spectrum of the transform
-                magnitude = 20 * np.log(np.abs(fftShift))
+            fft = np.fft.fft2(grayImage)
+            fftShift = np.fft.fftshift(fft)
 
-                # zero-out the center of the FFT shift (i.e., remove low frequencies),
-                # apply the inverse shift such that the DC component once again becomes the top-left,
-                # and then apply the inverse FFT
-                fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
-                fftShift = np.fft.ifftshift(fftShift)
-                recon = np.fft.ifft2(fftShift)
+            # compute the magnitude spectrum of the transform
+            magnitude = 20 * np.log(np.abs(fftShift))
 
-                # compute the magnitude spectrum of the reconstructed image,
-                # then compute the mean of the magnitude values
-                magnitude = 20 * np.log(np.abs(recon))
-                mean = np.mean(magnitude)
+            # zero-out the center of the FFT shift (i.e., remove low frequencies),
+            # apply the inverse shift such that the DC component once again becomes the top-left,
+            # and then apply the inverse FFT
+            fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
+            fftShift = np.fft.ifftshift(fftShift)
+            recon = np.fft.ifft2(fftShift)
 
-                # IMAGE INTENSITY CALCULATIONS
-                # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
-                blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
-                intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+            # compute the magnitude spectrum of the reconstructed image,
+            # then compute the mean of the magnitude values
+            magnitude = 20 * np.log(np.abs(recon))
+            mean = np.mean(magnitude)
 
-                # DECISION LOGIC
-                bMove = False
-                strFFTFocusMetric = 'Nominal'
-                strFocusMetric = 'N/A'
-                strIntensity = 'Nominal'
+            # IMAGE INTENSITY CALCULATIONS
+            # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
+            blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
+            intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
-                # CHECK MEAN AGAINST THRESHHOLD TO DETERMINE IF THE IMAGE IS BLURRY/FOGGY/OUT-OF-FOCUS/ETC.
-                if mean <= blurThreshhold:
-                    strFFTFocusMetric = "Blurry"
-                    bMove = True
+            # DECISION LOGIC
+            bMove = False
+            strFFTFocusMetric = 'Nominal'
+            strFocusMetric = 'N/A'
+            strIntensity = 'Nominal'
 
-                # CHECK TO SEE IF THE OVERALL IMAGE IS TOO DARK OR TOO BRIGHT
-                if intensity < brightnessMin:
-                    strIntensity = "Too Dark"
-                    bMove = True
-                elif intensity > brightnessMAX:
-                    strIntensity = "Too Light"
-                    bMove = True
+            # CHECK MEAN AGAINST THRESHHOLD TO DETERMINE IF THE IMAGE IS BLURRY/FOGGY/OUT-OF-FOCUS/ETC.
+            if mean <= blurThreshhold:
+                strFFTFocusMetric = "Blurry"
+                bMove = True
 
-                # MOVE THE IMAGE REJECTS TO A SUBFOLDER IF THE USER CHOOSE THIS OPTION
-                if bMoveImages and bMove:
-                    shutil.move(filename, tempFolder)
-                    filename = os.path.join(folder, 'MovedImages', file)
+            # CHECK TO SEE IF THE OVERALL IMAGE IS TOO DARK OR TOO BRIGHT
+            if intensity < brightnessMin:
+                strIntensity = "Too Dark"
+                bMove = True
+            elif intensity > brightnessMAX:
+                strIntensity = "Too Light"
+                bMove = True
 
-                # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
-                if bCreateReport:
-                    strHyperlink = '=HYPERLINK(' + '"' + filename + '"' + ')'
-                    strOutputString = '%3.2f,%s,%3.2f,%s,%s\n' % (
-                    mean, strFFTFocusMetric, intensity, strIntensity, strHyperlink)
-                    csvFile.write(strOutputString)
+            # MOVE THE IMAGE REJECTS TO A SUBFOLDER IF THE USER CHOOSE THIS OPTION
+            if bMoveImages and bMove:
+                # create a subfolder beneath the current root folder if the option to move less than nominal images is selected
+                filename = os.path.basename(file)
+                filepath = os.path.dirname(file)
+                tempFolder = os.path.join(filepath, "MovedImages")
+                if not os.path.exists(tempFolder):
+                    os.mkdir(tempFolder)
 
-                # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
-                del fftShift
-                del fft
-                del recon
-                del blur
+                shutil.move(file, tempFolder)
+
+                filename = os.path.join(tempFolder, filename)
+
+            # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
+            if bCreateReport:
+                strHyperlink = '=HYPERLINK(' + '"' + filename + '"' + ')'
+                strOutputString = '%3.2f,%s,%3.2f,%s,%s\n' % (mean, strFFTFocusMetric, intensity, strIntensity, strHyperlink)
+                csvFile.write(strOutputString)
+
+            # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
+            del fftShift
+            del fft
+            del recon
+            del blur
 
     # clean-up before exiting function
     # 1. close and delete the progress bar
@@ -1426,97 +2486,13 @@ def cleanImages(folder, blurThreshhold, shiftSize, brightnessMin, brightnessMAX,
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def laplace_of_gaussian(gray_img, sigma=1., kappa=0.75, pad=False):
-    """
-    Applies Laplacian of Gaussians to grayscale image.
+def updateProductTableDateRange(productTable, nRow, startDate, endDate):
 
-    :param gray_img: image to apply LoG to
-    :param sigma:    Gauss sigma of Gaussian applied to image, <= 0. for none
-    :param kappa:    difference threshold as factor to mean of image values, <= 0 for none
-    :param pad:      flag to pad output w/ zero border, keeping input image size
-    """
-    assert len(gray_img.shape) == 2
-    img = cv2.GaussianBlur(gray_img, (0, 0), sigma) if 0. < sigma else gray_img
-    img = cv2.Laplacian(img, cv2.CV_64F)
-    rows, cols = img.shape[:2]
-    # min/max of 3x3-neighbourhoods
-    min_map = np.minimum.reduce(list(img[r:rows - 2 + r, c:cols - 2 + c]
-                                     for r in range(3) for c in range(3)))
-    max_map = np.maximum.reduce(list(img[r:rows - 2 + r, c:cols - 2 + c]
-                                     for r in range(3) for c in range(3)))
-    # bool matrix for image value positiv (w/out border pixels)
-    pos_img = 0 < img[1:rows - 1, 1:cols - 1]
-    # bool matrix for min < 0 and 0 < image pixel
-    neg_min = min_map < 0
-    neg_min[1 - pos_img] = 0
-    # bool matrix for 0 < max and image pixel < 0
-    pos_max = 0 < max_map
-    pos_max[pos_img] = 0
-    # sign change at pixel?
-    zero_cross = neg_min + pos_max
-    # values: max - min, scaled to 0--255; set to 0 for no sign change
-    value_scale = 255. / max(1., img.max() - img.min())
-    values = value_scale * (max_map - min_map)
-    values[1 - zero_cross] = 0.
-    # optional thresholding
-    if 0. <= kappa:
-        thresh = float(np.absolute(img).mean()) * kappa
-        values[values < thresh] = 0.
-    log_img = values.astype(np.uint8)
-    if pad:
-        log_img = np.pad(log_img, pad_width=1, mode='constant', constant_values=0)
-
-    return log_img
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def getLocalFileDates(filePath):
-    # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
-    extensions = ('.jpg', '.jpeg', '.png')
-
-    # INITIALIZE VARIABLES TO A KNOWN VALUE
-    nStartDate = 99999999
-    nEndDate = -1
-    strStartDate = ""
-    strEndDate = ""
-
-    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    for root, dirs, files in os.walk(filePath):
-        path = root.split(os.sep)
-        # print((len(path) - 1) * '---', os.path.basename(root))
-        for file in files:
-            ext = os.path.splitext(file)[-1].lower()
-
-            if ext in extensions:
-
-                fileDate, nYear, nMonth, nDay, nTime = GRIMe_Utils.extractDateFromFilename(file)
-
-                # use the date in the filenames to determine the start and end acquisition dates for the images
-                if int(str(fileDate)) < nStartDate:
-                    nStartDate = int(fileDate)
-                    strStartDate = fileDate
-                if int(fileDate) > nEndDate:
-                    nEndDate = int(fileDate)
-                    strEndDate = str(fileDate)
-
-    return strStartDate, strEndDate
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def updateProductTableDateRange(productTable, nRow, strStartDate, strEndDate):
     productTable.setItem(0, 1, QTableWidgetItem('Image Source: Hard Drive'))
 
     # CONFIGURE DATES FOR SPECIFIC PRODUCT
     for m in [2, 4]:
-        firstYear = int(strStartDate[0:4])
-        firstMonth = int(strStartDate[4:6])
-        firstDay = int(strStartDate[6:8])
-
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(firstYear, firstMonth, firstDay))
+        date_widget = QtWidgets.QDateEdit(QtCore.QDate(startDate.year, startDate.month, startDate.day))
         productTable.setCellWidget(nRow, m, date_widget)
 
         productTable.resizeColumnToContents(m)
@@ -1526,11 +2502,7 @@ def updateProductTableDateRange(productTable, nRow, strStartDate, strEndDate):
             date_widget.setDisabled(False)
 
     for m in [3, 5]:
-        lastYear = int(strEndDate[0:4])
-        lastMonth = int(strEndDate[4:6])
-        lastDay = int(strEndDate[6:8])
-
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(lastYear, lastMonth, lastDay))
+        date_widget = QtWidgets.QDateEdit(QtCore.QDate(endDate.year, endDate.month, endDate.day))
         if m == 3:
             date_widget.setDisabled(True)
         else:
@@ -1636,109 +2608,6 @@ def checkColorMatch(painter, clusterCenters, hist, roiList):
 
 
 # ======================================================================================================================
-# ======================================================================================================================
-# THIS FUNCTION WILL RETRIEVE A SPECIFIC VISIBLE IMAGE AND IT CORRESPONDING INFRARED (IR) IMAGE FROM
-# THE PHENOCAM WEBSITE WHENEVER THE INDEX IN THE DAILY IMAGE SPIN BOX CHANGES.
-# ======================================================================================================================
-def processSpinBoxImage(self, item):
-    global dailyImagesList
-    global currentImage
-
-    return
-
-    if len(dailyImagesList.getVisibleList()):
-        # ----------------------------------------------------------------------------------------------------
-        visibleList = dailyImagesList.getVisibleList()
-        filename = visibleList[item - 1].fullPathAndFilename
-        # imageFile = 'https://phenocam.sr.unh.edu' + filename
-        imageFile = filename
-
-        # ----------------------------------------------------------------------------------------------------
-        # DOWNLOAD IMAGE FORM NEON SITE
-        # ----------------------------------------------------------------------------------------------------
-        print("---\n---")
-        data = urlopen(imageFile).read()
-        currentImage = QPixmap()
-        currentImage.loadFromData(data)
-
-        # READ AS NUMPY INTO OPENCV
-        # currentImageBGR = url_to_image(imageFile)
-        # cv2.imshow("Image", currentImageBGR)
-
-        # ----------------------------------------------------------------------------------------------------
-        # DISPLAY IMAGE FROM NEON SITE
-        # ----------------------------------------------------------------------------------------------------
-        if currentImage:
-            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
-                                                     QtCore.Qt.SmoothTransformation)
-            width = scaledCurrentImage.width()
-            height = scaledCurrentImage.height()
-
-            # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-            img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-            rgb = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
-
-            if self.checkBoxDisplayROIs.isChecked():
-                painter = QPainter(currentImage)
-                pen = QPen(QtCore.Qt.red, 2, QtCore.Qt.SolidLine)
-                painter.setPen(pen)
-
-                nRow = 0
-                for obj in self.roiList:
-                    if self.checkBoxCalcColors.isChecked():
-                        img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-                        rect = obj.getImageROI()
-                        rgb1 = img1[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()]
-
-                        qImg, clusterCenters, hist = myKMeans(self, rgb1)
-
-                        checkColorMatch(painter, clusterCenters, hist, self.roiList)
-
-                        # INSERT COLOR(S) INTO ROI TABLE
-                        self.label = QtWidgets.QLabel()
-                        pix = QPixmap(qImg)
-                        self.label.setPixmap(pix)
-                        self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
-
-                    # OVERLAY ROI BOUNDARY ON IMAGE
-                    if self.checkBoxDisplayROIs.isChecked():
-                        if obj.getROIShape() == ROIShape.RECTANGLE:
-                            painter.drawRect(obj.getImageROI())
-                        elif obj.getROIShape() == ROIShape.ELLIPSE:
-                            painter.drawEllipse(obj.getImageROI())
-
-                    # LABEL ROIs
-                    if self.checkBoxDisplayROIs.isChecked():
-                        font = painter.font()
-                        font.setPointSize(font.pointSize() * 2)
-                        painter.setFont(font)
-                        painter.drawText(obj.getImageROI(), QtCore.Qt.AlignLeft, obj.getROIName())
-
-                    nRow = nRow + 1
-
-            if self.checkBoxDisplayROIs.isChecked():
-                painter.end()
-
-            if 0:
-                # convert from RGB color-space to YCrCb
-                ycrcb_img = cv2.cvtColor(currentImage, cv2.COLOR_RGB2YCrCb)
-                # equalize the histogram of the Y channel
-                ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
-                # convert back to RGB color-space from YCrCb
-                equalized_img = cv2.cvtColor(ycrcb_img, cv2.COLOR_YCrCb2RGB)
-                self.labelOriginalImage.setPixmap(
-                    equalized_img.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
-                                         QtCore.Qt.SmoothTransformation))
-
-            self.labelOriginalImage.setPixmap(
-                currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
-                                    QtCore.Qt.SmoothTransformation))
-
-            pix = processImage(self, currentImage)
-            self.labelEdgeImage.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-
-
-# ======================================================================================================================
 #
 # ======================================================================================================================
 def featureMatch():
@@ -1797,115 +2666,100 @@ def featureMatch():
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def processLocalImage(self):
-    global currentImage
+def extractROI(rect, image):
+    return(image[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()])
 
-    frameFolder = self.lineEditHardDriveFolder.text() + '/' + self.MSTlineEditFrameFolder.text()
 
-    if os.path.exists(frameFolder):
-        # videoFilePath = Path(frameFolder)
-        ## JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
-        # videoFileList = [str(pp) for pp in videoFilePath.glob("*.jpg")]
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def separateChannels(image):
+    # greennessIndex = green / (red + green + blue)
+    red = image[:, :, 0]
+    red = red.flatten()
+    red = red.astype(float)
 
-        global dailyImagesList
-        videoFileList = dailyImagesList.getVisibleList()
+    green = image[:, :, 1]
+    green = green.flatten()
+    green - green.astype(float)
 
-        if len(videoFileList) > 0:
-            nImageIndex = self.spinBoxDailyImage.value()
-            if nImageIndex > gFrameCount:
-                nImageIndex = gFrameCount
+    blue = image[:, :, 2]
+    blue = blue.flatten()
+    blue = blue.astype(float)
 
-            inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
+    return red, green, blue
 
-            if os.path.isfile(inputFrame):
-                imageOnWebsite = False
-                numpyImage = GRIMe_Color.loadColorImage(imageOnWebsite, inputFrame)
 
-                tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
-                currentImage = QPixmap(tempCurrentImage)
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def sumChannels(red, green, blue):
 
-    # ----------------------------------------------------------------------------------------------------
-    # DISPLAY IMAGE FROM NEON SITE
-    # ----------------------------------------------------------------------------------------------------
-    if currentImage:
-        scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+    redSum   = np.sum(red)
+    greenSum = np.sum(green)
+    blueSum  = np.sum(blue)
 
-        width = scaledCurrentImage.width()
-        height = scaledCurrentImage.height()
+    return redSum, greenSum, blueSum
 
-        currentImageRescaled = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def computeGreennessIndex(redSum, greenSum, blueSum):
 
-        if self.checkBoxDisplayROIs.isChecked():
-            painter = QPainter(currentImageRescaled)
+    try:
+        greennessIndex = greenSum / (redSum + greenSum + blueSum)
+    except:
+        greennessIndex = -999
 
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, len(self.roiList) + 1)
-        progressBar.show()
+    return(greennessIndex)
 
-        nRow = 0
-        for obj in self.roiList:
-            progressBar.setValue(nRow+1)
-            progressBar.repaint()
 
-            try:
-                if self.checkBoxCalcColors.isChecked():
-                    # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
-                    img1 = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-                    rect = obj.getImageROI()
-                    rgb1 = img1[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()]
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def computeExcessGreenIndex(redSum, greenSum, blueSum):
 
-                    # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-                    rgb1 = cv2.cvtColor(rgb1, cv2.COLOR_BGR2RGB)
+    try:
+        greennessIndex = (2.0 * greenSum) - redSum - blueSum
+    except:
+        greennessIndex = -999
 
-                    # PERFORM COLOR CLUSTERING
-                    qImg, clusterCenters, hist = myKMeans(self, rgb1)
+    return(greennessIndex)
 
-                    checkColorMatch(painter, clusterCenters, hist, self.roiList)
 
-                    # INSERT COLOR(S) INTO ROI TABLE
-                    self.label = QtWidgets.QLabel()
-                    pix = QPixmap(qImg)
-                    self.label.setPixmap(pix)
-                    self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def computeGreenLeafIndex(redSum, greenSum, blueSum):
 
-                    # OVERLAY ROI BOUNDARY ON IMAGE
-                    if self.checkBoxDisplayROIs.isChecked():
-                        pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
-                        painter.setPen(pen)
+    try:
+        greennessIndex = ((2.0 * greenSum) - redSum - blueSum)/ ((2.0 * greenSum) + redSum + blueSum)
+    except:
+        greennessIndex = -999
 
-                        if obj.getROIShape() == ROIShape.RECTANGLE:
-                            painter.drawRect(obj.getDisplayROI())
-                        elif obj.getROIShape() == ROIShape.ELLIPSE:
-                            painter.drawEllipse(obj.getDisplayROI())
+    return(greennessIndex)
 
-                        font = painter.font()
-                        font.setPointSize(8)
-                        painter.setPen(QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine))
-                        painter.setFont(font)
-                        painter.drawText(obj.getDisplayROI().x(), obj.getDisplayROI().y()-16, 50, 16, QtCore.Qt.AlignLeft, obj.getROIName())
 
-                    nRow = nRow + 1
-            except:
-                nErrorCode = -1
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def computeNormalizedDifferenceVegetationIndex(redSum, greenSum):
 
-        if self.checkBoxDisplayROIs.isChecked():
-            painter.end()
+    try:
+        greennessIndex = (greenSum - redSum) / (redSum + greenSum)
+    except:
+        greennessIndex = -999
 
-        # close and delete the progress bar
-        progressBar.close()
-        del progressBar
+    return(greennessIndex)
 
-        self.labelOriginalImage.setPixmap(currentImageRescaled)
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def computeRedGreenIndex(redSum, greenSum):
 
-        pix = processImage(self, currentImage)
-        self.labelEdgeImage.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+    redGreenIndex = redSum / greenSum
 
-        del currentImageRescaled
-        del scaledCurrentImage
-
-    # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
-    QCoreApplication.processEvents()
-
+    return(redGreenIndex)
 
 # ======================================================================================================================
 #
@@ -1926,339 +2780,6 @@ def url_to_image(url):
 # ======================================================================================================================
 def isColor(r, g, b):
     return (r != g != b)
-
-
-# ======================================================================================================================
-# THIS FUNCTION WILL CALL THE FUNCTION THAT PROCESSES THE IMAGE BASED UPON THE SETTINGS SELECTED BY THE
-# END-USER AND THEN UPDATE THE GUI TO DISPLAY THE PROCESSED IMAGE.
-# ======================================================================================================================
-def refreshImage(self):
-    global currentImage
-
-    '''// PROCESS THE ORIGINAL IMAGE //'''
-    pix = processImage(self, currentImage)
-
-    '''// DISPLAY PROCESSED ORIGINAL IMAGE //'''
-    if not pix == []:
-        self.labelEdgeImage.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-        img = GRIMe_Utils.convertQImageToMat(currentImage.toImage())
-
-    # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
-    QCoreApplication.processEvents()
-
-
-# ======================================================================================================================
-# THIS FUNCTION WILL PROCESS THE CURRENT IMAGE BASED UPON THE SETTINGS SELECTED BY THE END-USER.
-# THE IMAGE STORAGE TYPE IS QImage
-# ======================================================================================================================
-def processImage(self, myImage):
-    pix = []
-
-    if not myImage == []:
-        # CONVERT IMAGE FROM QImage FORMAT TO Mat FORMAT
-        # BYTE ORDER IS R, G, B
-        img1 = GRIMe_Utils.convertQImageToMat(myImage.toImage())
-
-        if self.checkboxKMeans.isChecked():
-            qImg, clusterCenters, hist = myKMeans(self, img1)
-
-        # CONVERT COLOR IMAGE TO GRAY SCALE
-        gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-
-        # REMOVE NOISE FROM THE IMAGE
-        if len(gray) != 0:
-            grayEQ = cv2.equalizeHist(gray)
-            grayBlur = cv2.GaussianBlur(grayEQ, (15, 15), 0)
-            cv2.erode(grayBlur, (7,7), gray)
-
-        # EDGE DETECTION METHODS
-        if len(gray) != 0:
-            if self.radioButtonCanny.isChecked():
-                highThreshold = self.spinBoxCannyHighThreshold.value()
-                lowThreshold = self.spinBoxCannyLowThreshold.value()
-                kernelSize = self.spinBoxCannyKernel.value()
-
-                temp = gray
-                #temp = gray[0:myImage.size().height(), 0:myImage.size().width()]
-
-                # Find Canny edges
-                edges = cv2.Canny(temp, highThreshold, lowThreshold, kernelSize)
-
-                # Find Contours
-                # Use a copy of the image e.g. edged.copy() since findContours alters the image
-                contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-                # Draw all contours
-                # -1 = draw all contours
-                cv2.drawContours(img1, contours, -1, (0, 255, 0), 3)
-                #cv2.drawContours(temp, contours, -1, 255, 6)
-                # JES ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^S
-
-
-                # lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
-                # for line in lines:
-                # x1, y1, x2, y2 = line[0]
-                # cv2.line(img1, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                # cv2.imwrite('C:/Users/Astrid Haugen/Documents/houghlines5.jpg', img1)
-                #q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
-                #q_img = QImage(temp.data, temp.shape[1], temp.shape[0], QImage.Format_Grayscale8)
-                q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_RGB888)
-
-                '''
-                del temp
-                del img1
-                del gray
-                del grayEQ
-                del grayBlur
-                del contours
-                del hierarchy
-                '''
-            elif self.radioButtonSIFT.isChecked():
-                edges = calcSIFT(img1, gray)
-                q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
-            elif self.radioButtonORB.isChecked():
-                value = self.spinBoxOrbMaxFeatures.value()
-
-                # convert from RGB color-space to YCrCb
-                ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
-
-                # equalize the histogram of the Y channel
-                ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
-
-                gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
-
-                lapImg = laplace_of_gaussian(gray)
-                gray = cv2.equalizeHist(lapImg)
-                cv2.dilate(gray, (5, 5), gray)
-                cv2.erode(gray, (5, 5), gray)
-
-                #gray = Image.fromarray(gray)
-
-                gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
-                edges = calcOrb(gray, value)
-                q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
-
-                del gray
-                del grayEQ
-                del grayBlur
-                #del lapImg
-                del edges
-            elif self.radioButtonLaplacian.isChecked():
-                # convert from RGB color-space to YCrCb
-                ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
-
-                # equalize the histogram of the Y channel
-                ycrcb_img[:, :, 0] = cv2.equalizeHist(ycrcb_img[:, :, 0])
-
-                gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
-
-                #gray = cv2.equalizeHist(gray)
-                #gray = cv2.GaussianBlur(gray, (7, 7), 0)
-
-                # convert back to RGB color-space from YCrCb
-                #equalized_img = cv2.cvtColor(ycrcb_img, cv2.COLOR_YCrCb2RGB)
-                lapImg = laplace_of_gaussian(gray)
-                gray = cv2.equalizeHist(lapImg)
-                cv2.dilate(gray, (5, 5), gray)
-                cv2.erode(gray, (5, 5), gray)
-
-                gray = Image.fromarray(gray)
-                q_img = ImageQt.toqimage(gray)
-            elif self.radioButtonSobelX.isChecked() or self.radioButtonSobelY.isChecked() or self.radioButtonSobelXY.isChecked():
-                mySobel = sobelData.sobelData()
-                sobelKernelSize = self.spinBoxSobelKernel.value()
-                mySobel.setSobelX(cv2.Sobel(img1, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
-                mySobel.setSobelY(cv2.Sobel(img1, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
-                mySobel.setSobelXY(cv2.Sobel(img1, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
-                if self.radioButtonSobelX.isChecked():
-                    edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
-                    q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
-                elif self.radioButtonSobelY.isChecked():
-                    edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
-                    edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
-                    q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
-                elif self.radioButtonSobelXY.isChecked():
-                    edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
-                    q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
-
-            if self.radioButtonLaplacian.isChecked():
-                pix = QPixmap.fromImage(q_img)
-            else:
-                pix = QPixmap(q_img)
-
-    return pix
-
-
-# ======================================================================================================================
-# THIS FUNCTION WILL PROCESS THE CURRENT IMAGE BASED UPON THE SETTINGS SELECTED BY THE END-USER.
-# THE IMAGE STORAGE TYPE IS mat
-# ======================================================================================================================
-def processImageMat(self, myImage):
-    edges = []
-    img2 = []
-    imageFormat = 0
-
-    if not myImage == []:
-        img1 = myImage
-
-        if self.checkboxKMeans.isChecked():
-            qImg, clusterCenters, hist = myKMeans(self, img1)
-
-            checkColorMatch(clusterCenters, hist, self.roiList)
-
-        # CONVERT COLOR IMAGE TO GRAY SCALE
-        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
-
-        # REMOVE NOISE FROM THE IMAGE
-        if len(gray) != 0:
-            gray = cv2.GaussianBlur(gray, (3, 3), 0)
-
-        # EDGE DETECTION METHODS
-        if len(gray) != 0:
-            if self.radioButtonCanny.isChecked():
-                highThreshold = self.spinBoxCannyHighThreshold.value()
-                lowThreshold = self.spinBoxCannyLowThreshold.value()
-                kernelSize = self.spinBoxCannyKernel.value()
-                edges = cv2.Canny(img1, highThreshold, lowThreshold, kernelSize)
-                # lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
-                # for line in lines:
-                # x1, y1, x2, y2 = line[0]
-                # cv2.line(img1, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                # cv2.imwrite('C:/Users/Astrid Haugen/Documents/houghlines5.jpg', img1)
-
-            elif self.radioButtonSIFT.isChecked():
-                edges = calcSIFT(img1, gray)
-            elif self.radioButtonORB.isChecked():
-                value = self.spinBoxOrbMaxFeatures.value()
-                edges = calcOrb(img1, value)
-                # edges = cv2.cvtColor(edges, cv2.COLOR_RGBA2RGB)
-            elif self.radioButtonLaplacian.isChecked():
-                edges = cv2.Laplacian(img1, cv2.CV_64F)
-            elif self.radioButtonSobelX.isChecked() or self.radioButtonSobelY.isChecked() or self.radioButtonSobelXY.isChecked():
-                mySobel = sobelData()
-                sobelKernelSize = self.spinBoxSobelKernel.value()
-                mySobel.setSobelX(cv2.Sobel(img1, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
-                mySobel.setSobelY(cv2.Sobel(img1, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
-                mySobel.setSobelXY(cv2.Sobel(img1, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
-                if self.radioButtonSobelX.isChecked():
-                    edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
-                elif self.radioButtonSobelY.isChecked():
-                    edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
-                elif self.radioButtonSobelXY.isChecked():
-                    edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
-
-            if self.radioButtonSIFT.isChecked():
-                imageFormat = QImage.Format_RGB888
-            elif self.radioButtonORB.isChecked():
-                imageFormat = QImage.Format_RGB888
-            else:
-                imageFormat = QImage.Format_Grayscale8
-
-    return edges, imageFormat
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def myKMeans(self, img1):
-    # --------------------------------------------------------------------------------
-    # reshape the image to be a list of pixels
-    # --------------------------------------------------------------------------------
-    scale_percent = 100  # percent of original size
-    width = int(img1.shape[1] * scale_percent / 100)
-    height = int(img1.shape[0] * scale_percent / 100)
-    dim = (width, height)
-
-    # --------------------------------------------------------------------------------
-    # resize image
-    # --------------------------------------------------------------------------------
-    resized = cv2.resize(img1, dim, interpolation=cv2.INTER_AREA)
-
-    # --------------------------------------------------------------------------------
-    # CHOOSE BETWEEN RESIZED (DOWNSAMPLED) IMAGE OR THE FULL SCALE IMAGE
-    # --------------------------------------------------------------------------------
-    if 0:
-        image = resized.reshape((resized.shape[0] * resized.shape[1], 3))
-    else:
-        image = img1.reshape((img1.shape[0] * img1.shape[1], 3))
-
-    # --------------------------------------------------------------------------------
-    # COLOR CLUSTERING
-    # --------------------------------------------------------------------------------
-    nClusters = self.spinBoxColorClusters.value()
-    # kmeans = KMeans(n_clusters=nClusters, n_jobs=-1)
-    kmeans = KMeans(n_clusters=nClusters)
-    s = kmeans.fit(image)
-
-    # labels = kmeans.labels_
-    # print(labels)
-    # labels = list(labels)
-
-    # build a histogram of clusters and then create a figure representing the number of pixels labeled to each color
-    hist = centroid_histogram(kmeans)
-
-    for (percent, color) in zip(hist, kmeans.cluster_centers_):
-        mask = cv2.inRange(resized, color, color)
-        result = cv2.bitwise_and(resized, resized, mask=mask)
-
-    bar = plot_colors(hist, kmeans.cluster_centers_)
-
-    qImg = QImage(bar.data, bar.shape[1], bar.shape[0], QImage.Format_RGB888)
-    pix = QPixmap(qImg)
-
-    # pix = QPixmap.fromImage(QImage(edges.data, edges.cols, edges.rows, QImage.Format_BGR888))
-    self.labelDominantColors.setPixmap(pix.scaled(self.labelEdgeImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-
-    del s
-    del pix
-    del mask
-    del bar
-
-    return qImg, kmeans.cluster_centers_, hist
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def plot_colors(hist, centroids):
-    # initialize the bar chart representing the relative frequency of each of the colors
-    # bar = np.zeros((50, 300, 3), dtype="uint8")
-    bar = np.zeros((50, 100, 3), dtype="uint8")
-
-    startX = 0
-
-    if 0:
-        # loop over the percentage of each cluster and the color of each cluster
-        colorFile = 'R:/HSV.csv'
-        if not os.path.isfile(colorFile):
-            csvFile = open(colorFile, 'a', newline='')
-            csvFile.write('Precent, Red, Green, Blue, "", Hue, Saturation, Value\n')
-        else:
-            csvFile = open(colorFile, 'a', newline='')
-
-        csvFile.write('Image:\n')
-
-    for (percent, color) in zip(hist, centroids):
-        # plot the relative percentage of each cluster
-        endX = startX + (percent * 100)
-        cv2.rectangle(bar, (int(startX), 0), (int(endX), 50), color.astype("uint8").tolist(), -1)
-
-        if 0:
-            h, s, v = colorsys.rgb_to_hsv(color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
-
-            txt = '{:.3f}, {:.3f}, {:.3f}, {:.3f}, "" ,{:.3f}, {:.3f}, {:.3f}'.format(percent, color[0], color[1],
-                                                                                      color[2],
-                                                                                      h * 360, s * 100, v * 100) + '\n'
-
-            csvFile.write(txt)
-
-        startX = endX
-
-        if 0:
-            csvFile.close()
-
-    # return the bar chart
-    return bar
 
 
 # ======================================================================================================================
@@ -2319,62 +2840,6 @@ def rgb2lab(inputColor):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def centroid_histogram(clt):
-    # grab the number of different clusters and create a histogram based on the number of pixels assigned to each cluster
-    numLabels = np.arange(0, len(np.unique(clt.labels_)) + 1)
-    (hist, _) = np.histogram(clt.labels_, bins=numLabels)
-
-    # normalize the histogram, such that it sums to one
-    hist = hist.astype("float")
-    hist /= hist.sum()
-
-    # return the histogram
-    return hist
-
-
-# ======================================================================================================================
-# THIS FUNCTION WILL USE THE SIFT FEATURE DETECTION ALGORITHM TO FIND FEATURES IN THE IMAGE THAT IS PASSED TO THIS FUNCTION.
-# ======================================================================================================================
-def calcSIFT(image, gray):
-    # REMOVE NOISE FROM THE IMAGE
-    img1 = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    sift = cv2.SIFT_create()
-    kp, des = sift.detectAndCompute(img1, None)
-    edges = cv2.drawKeypoints(gray, kp, img1)
-
-    return edges
-
-
-# ======================================================================================================================
-# ThIS FUNCTION WILL USE THE ORB FEATURE DETECTION ALGORITHM TO FIND FEATURES IN THE IMAGE THAT IS
-# PASSED TO THIS FUNCTION.
-# ======================================================================================================================
-def calcOrb(image, nMaxFeatures):
-
-    if len(image.shape) == 3:
-       imageBW = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        imageBW = image
-
-    orb = cv2.ORB_create()
-
-    orb.setEdgeThreshold(50)
-    orb.setNLevels(10)
-    orb.setPatchSize(30)
-    orb.setMaxFeatures(nMaxFeatures)
-
-    kp = orb.detect(imageBW, None)
-    kp, des = orb.compute(imageBW, kp)
-
-    edges = cv2.drawKeypoints(image, kp, None, color=(0, 255, 0), flags=0)
-
-    return edges
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
 '''
 def closest_colour(requested_colour):
     min_colours = {}
@@ -2416,14 +2881,14 @@ def top_colors(image, n):
 def readFieldSiteTable():
     siteList = []
 
-    nErrorCode = check_url_validity(url)
+    nErrorCode = GRIMe_Utils.check_url_validity(url)
 
     # IF AT LEAST ONE FIELD SITE TABLE IS FOUND ON THE NEON SITE...
     if nErrorCode == 0:
-        csv_links = fetchFieldSiteTableURL(url)
+        csv_links = NEON_FetchFieldSiteTableURL(url)
 
         # download all CSV files
-        filename_with_path = downloadFieldSiteTableFiles(csv_links)
+        filename_with_path = NEON_DownloadFieldSiteTableFiles(csv_links)
 
         siteList = GRIMe_Utils.parseCSV(filename_with_path)
     # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST
@@ -2431,132 +2896,6 @@ def readFieldSiteTable():
         siteList = []
 
     return siteList
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def check_url_validity(my_url):
-    nErrorCode = -1
-    nRetryCount = 3
-
-    responses = {
-        100: ('Continue', 'Request received, please continue'),
-        101: ('Switching Protocols',
-              'Switching to new protocol; obey Upgrade header'),
-
-        200: ('OK', 'Request fulfilled, document follows'),
-        201: ('Created', 'Document created, URL follows'),
-        202: ('Accepted',
-              'Request accepted, processing continues off-line'),
-        203: ('Non-Authoritative Information', 'Request fulfilled from cache'),
-        204: ('No Content', 'Request fulfilled, nothing follows'),
-        205: ('Reset Content', 'Clear input form for further input.'),
-        206: ('Partial Content', 'Partial content follows.'),
-
-        300: ('Multiple Choices',
-              'Object has several resources -- see URI list'),
-        301: ('Moved Permanently', 'Object moved permanently -- see URI list'),
-        302: ('Found', 'Object moved temporarily -- see URI list'),
-        303: ('See Other', 'Object moved -- see Method and URL list'),
-        304: ('Not Modified',
-              'Document has not changed since given time'),
-        305: ('Use Proxy',
-              'You must use proxy specified in Location to access this '
-              'resource.'),
-        307: ('Temporary Redirect',
-              'Object moved temporarily -- see URI list'),
-
-        400: ('Bad Request',
-              'Bad request syntax or unsupported method'),
-        401: ('Unauthorized',
-              'No permission -- see authorization schemes'),
-        402: ('Payment Required',
-              'No payment -- see charging schemes'),
-        403: ('Forbidden',
-              'Request forbidden -- authorization will not help'),
-        404: ('Not Found', 'Nothing matches the given URI'),
-        405: ('Method Not Allowed',
-              'Specified method is invalid for this server.'),
-        406: ('Not Acceptable', 'URI not available in preferred format.'),
-        407: ('Proxy Authentication Required', 'You must authenticate with '
-                                               'this proxy before proceeding.'),
-        408: ('Request Timeout', 'Request timed out; try again later.'),
-        409: ('Conflict', 'Request conflict.'),
-        410: ('Gone',
-              'URI no longer exists and has been permanently removed.'),
-        411: ('Length Required', 'Client must specify Content-Length.'),
-        412: ('Precondition Failed', 'Precondition in headers is false.'),
-        413: ('Request Entity Too Large', 'Entity is too large.'),
-        414: ('Request-URI Too Long', 'URI is too long.'),
-        415: ('Unsupported Media Type', 'Entity body in unsupported format.'),
-        416: ('Requested Range Not Satisfiable',
-              'Cannot satisfy request range.'),
-        417: ('Expectation Failed',
-              'Expect condition could not be satisfied.'),
-
-        500: ('Internal Server Error', 'Server got itself in trouble'),
-        501: ('Not Implemented',
-              'Server does not support this operation'),
-        502: ('Bad Gateway', 'Invalid responses from another server/proxy.'),
-        503: ('Service Unavailable',
-              'The server cannot process the request due to a high load'),
-        504: ('Gateway Timeout',
-              'The gateway server did not receive a timely response'),
-        505: ('HTTP Version Not Supported', 'Cannot fulfill request.'),
-    }
-
-    while nErrorCode == -1 and nRetryCount > 0:
-        req = urllib.request.Request(my_url)
-
-        try:
-            response = urlopen(req)
-            nErrorCode = 0
-        except urllib.error.HTTPError as e:
-            strError = 'The server couldn\'t fulfill the request.\n' + 'Error code: ' + e.code
-            nErrorCode = -1
-            nRetryCount = nRetryCount - 1
-        except urllib.error.URLError as e:
-            if nRetryCount == 1:
-                strError = 'We failed to reach a server.\n' + 'Reason: [' + str(e.reason.args[0]) + '] ' + \
-                           e.reason.args[1]
-                msgBox = GRIMe_QMessageBox('NEON SITE Info URL Error', strError)
-                response = msgBox.displayMsgBox()
-            nErrorCode = -1
-            nRetryCount = nRetryCount - 1
-
-    return nErrorCode
-
-
-# ======================================================================================================================
-# THIS FUNCTION FETCHES THE FIELD SITE TABLE FROM THE NEON SITE AND PARSES ITS INFORMATION.
-# ======================================================================================================================
-def fetchFieldSiteTableURL(my_url):
-    csv_links = []
-
-    # r = requests.get(my_url)
-    #ssl._create_default_https_context = ssl._create_unverified_context
-    r = urlopen(my_url)
-    # context = ssl._create_unverified_context()
-    # r = urlopen(my_url, context=context)
-
-    if 1:
-        # if r.status_code == 200:
-        # create beautiful-soup object
-        # soup = BeautifulSoup(r.content, 'html5lib')
-        soup = BeautifulSoup(r, 'html5lib')
-
-        # FIND ALL CSV LINKS ON THE WEB-PAGE. CURRENTLY THERE IS ONLY ONE. HOWEVER, THERE COULD BE MULTIPLES IN THE FUTURE
-        links = soup.findAll("a", href=lambda href: href and "csv" in href)
-
-        # CREATE COMPLETE URL FOR LINK TO CSV FILE. ASSUME THERE IS ONLY ONE FOR NOW BUT LOOP FOR FUTURE USE-CASES
-        for link in links:
-            #csvLink = root_url + link['href']
-            csvLink = link['href']
-
-        csv_links = csvLink
-
-    return csv_links
 
 
 # ======================================================================================================================
@@ -2573,14 +2912,14 @@ def updateNEONSiteInfo(self, item):
 
     self.labelNEONSiteDetails.setText(SITECODE)
 
-    siteInfo = fetchSiteInfoFromNEON()
+    siteInfo = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     global DOMAINCODE
     DOMAINCODE = siteInfo['data']['domainCode']
 
     global SITENAME
     SITENAME = siteInfo['data']['siteName']
-    if full == 1:
+    if full == 1 or full == 4:
         self.labelNEONSite.setText(SITENAME)
 
     keys = siteInfo['data'].keys()
@@ -2599,49 +2938,50 @@ def updateNEONSiteInfo(self, item):
 def displayLatestImage(self):
     global latestImage
 
-    self.labelLatestImage.setPixmap(
-        latestImage.scaled(self.labelLatestImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+    self.labelLatestImage.setPixmap(latestImage.scaled(self.labelLatestImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
 
 
 # ======================================================================================================================
 # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
 # ======================================================================================================================
-def formatProductTableCells(self):
+def formatNEONProductTable(tableProducts):
     maxRows = 1
 
     # JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
-    for i in range(maxRows):
-        self.tableProducts.removeRow(0)
+    for i in range(tableProducts.rowCount()):
+        tableProducts.removeRow(0)
+
+    tableProducts.insertRow(0)
 
     for i in range(maxRows):
         m = 0
         myCheckBox = QCheckBox()
         myCheckBox.setChecked(True)
-        self.tableProducts.setCellWidget(i, m, myCheckBox)
+        tableProducts.setCellWidget(i, m, myCheckBox)
 
         m += 1
-        self.tableProducts.setItem(i, m, QTableWidgetItem(''))
+        tableProducts.setItem(i, m, QTableWidgetItem(''))
 
         # CONFIGURE DATES FOR SPECIFIC PRODUCT
         m += 1
         date_widget = QtWidgets.QDateEdit()
         date_widget.setDisabled(True)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit()
         date_widget.setDisabled(True)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(2021, 12, 1))
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(2022, 1, 1))
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        tableProducts.setCellWidget(i, m, date_widget)
 
         # --------------------
         # --------------------
@@ -2649,19 +2989,18 @@ def formatProductTableCells(self):
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
-        self.tableProducts.setCellWidget(i, m, dateTime)
+        tableProducts.setCellWidget(i, m, dateTime)
 
         m += 1
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
-        self.tableProducts.setCellWidget(i, m, dateTime)
-
+        tableProducts.setCellWidget(i, m, dateTime)
 
 # ======================================================================================================================
 # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
 # ======================================================================================================================
-def updateSelectedProductsTable(self, item):
+def updateNEONProductTable(self, item):
     products = self.listboxSiteProducts.selectedItems()
 
     # JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
@@ -2696,39 +3035,36 @@ def updateSelectedProductsTable(self, item):
         self.tableProducts.setItem(i, m, QTableWidgetItem(strText))
 
         # CONFIGURE DATES FOR SPECIFIC PRODUCT
-        m += 1
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(firstYear, firstMonth, 1))
+        m += 2
+        nYear, nMonth, nDay = GRIMe_PhenoCam.getStartDate()
+        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
         self.tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(lastYear, lastMonth, 1))
+        nYear, nMonth, nDay = GRIMe_PhenoCam.getEndDate()
+        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
         self.tableProducts.setCellWidget(i, m, date_widget)
 
-        # CONFIGURE USER SELECTABLE DATE RANGES FOR A SPECIFIC PRODUCT
-        minDate = QtCore.QDate(firstYear, firstMonth, 1)
-        maxDate = QtCore.QDate(lastYear, lastMonth, 1)
-
-        # --------------------
-        # --------------------
-        # JES - OVERRIDE MAX DATE BECAUSE THE NEON CSV FILE IS NOT KEPT UP TO DATE
-        today = datetime.datetime.today()
-        maxDate = QtCore.QDate(today.year, today.month, 1)
-
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        # JES - FOR EASE OF USE FOR NOW, LET'S SET THE MIN SELECTION DATE TO THE MAX VALUE SO WE DON'T HAVE TO SCROLL
-        # THROUGH YEARS OF DATA TO GET TO THE DATE THAT WE WANT
-        date_widget.setDate(QtCore.QDate(lastYear, lastMonth, 1))
-        # date_widget.setDate(QtCore.QDate(firstYear, firstMonth, 1))
-        date_widget.setDateRange(minDate, maxDate)
+        nYear, nMonth, nDay = GRIMe_PhenoCam.getStartDate()
+        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
+        # trigger event when the user changes the date
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.setKeyboardTracking(False)
         self.tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(lastYear, lastMonth, 1))
-        date_widget.setDateRange(minDate, maxDate)
+        nYear, nMonth, nDay = GRIMe_PhenoCam.getEndDate()
+        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
+        # trigger event when the user changes the date
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.setKeyboardTracking(False)
         self.tableProducts.setCellWidget(i, m, date_widget)
 
         # --------------------
@@ -2737,169 +3073,146 @@ def updateSelectedProductsTable(self, item):
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
+        # trigger event when the user changes the time
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.setKeyboardTracking(False)
         self.tableProducts.setCellWidget(i, m, dateTime)
 
         m += 1
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
+        # trigger event when the user changes the time
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.setKeyboardTracking(False)
         self.tableProducts.setCellWidget(i, m, dateTime)
 
         self.tableProducts.resizeColumnsToContents()
 
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def NEON_dateChangeMethod(date_widget, tableWidget):
+    global SITECODE
+    global DOMAINCODE
+    global DOMAINCODE
+
+    nRow = tableWidget.currentIndex().row()
+
+    strProductIDCell = tableWidget.item(nRow, 1).text().upper()
+
+    if strProductIDCell.find('LAND-WATER') >= 0:
+        # FETCH DATES
+        start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(tableWidget, nRow)
+
+        imageCount = GRIMe_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
+
+        tableWidget.setItem(nRow, 2, QTableWidgetItem(str(imageCount)))
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def fetchLocalImageList(self, filePath, bCreateEXIFFile, start_date=datetime.date(1970, 1, 1), end_date=datetime.date(2099, 12, 31), start_time='000000', end_time='000000'):
-    global gWebImageCount
-    global dailyImagesList
+def populateUSGS_SiteTable(siteTable):
+    num_cameras = len(USGS_HIVIS.fetchCameraList())
 
-    # CLEAR THE PREVIOUSLY DOWNLOADED IMAGE LIST, IF ANY
-    dailyImagesList.clear()
+    # JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
+    for i in range(siteTable.rowCount()):
+        siteTable.removeRow(0)
 
-    # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
-    extensions = ('.jpg', '.jpeg', '.png')
+    for index, camera in enumerate(USGS_HIVIS.fetchCameraList()):
+        siteTable.insertRow(index)
 
-    # INITIALIZE VARIABLES TO A KNOWN VALUE
-    nStartDate = 99999999
-    nEndDate = -1
-    strStartDate = ""
-    strEndDate = ""
-    List = []
-    bSaveImages = False
+        m = 0
+        myCheckBox = QCheckBox()
+        myCheckBox.setChecked(False)
+        siteTable.setCellWidget(index, m, myCheckBox)
 
-    if self.checkBoxSaveImages.isChecked():
-        bSaveImages = True
-        imageOutputFolder = self.EditSaveImagesOutputFolder.text()
+        m += 1
+        siteTable.setItem(index, m, QTableWidgetItem(camera))
 
-    # create the csv writer
-    if bCreateEXIFFile:
-        # open the file in the write mode
-        EXIFFolder = self.EditEXIFOutputFolder.text()
-        csvFile = open(EXIFFolder + '/' + 'EXIFData.csv', 'w', newline='')
+        imageList = USGS_HIVIS.getImageList(camera, USGS_HIVIS.getEndpoint())
+        try:
+            nImageCount = len(imageList)
 
-        writer = csv.writer(csvFile)
+            m += 1
+            strCount = str(nImageCount) + " / " + str(len(imageList))
+            siteTable.setItem(index, m, QTableWidgetItem(strCount))
 
-        bWriteHeader = True
+            # CONFIGURE DATES FOR SPECIFIC PRODUCT
+            fileStartDate, fileStartTime = USGS_HIVIS.extractDateFromFilename(imageList[0])
+            fileEndDate, fileEndTime = USGS_HIVIS.extractDateFromFilename(imageList[len(imageList)-1])
 
-    # count the number of images that will potentially be processed and possibly saved with the specified extension
-    # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
-    # of images will help determine whether or not there is enough disk space to accomodate storing the images.
-    imageCount = GRIMe_Utils.getImageCount(filePath, extensions)
+            m += 1
+            date_widget = QtWidgets.QDateEdit(QtCore.QDate(fileStartDate.year, fileStartDate.month, fileStartDate.day))
+            date_widget.setDisabled(True)
+            siteTable.setCellWidget(index, m, date_widget)
+            m += 1
+            date_widget = QtWidgets.QDateEdit(QtCore.QDate(fileEndDate.year, fileEndDate.month, fileEndDate.day))
+            date_widget.setDisabled(True)
+            siteTable.setCellWidget(index, m, date_widget)
 
-    progressBar = QProgressWheel()
-    progressBar.setRange(0, imageCount + 1)
-    progressBar.show()
+            m += 1
+            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            # JES - FOR EASE OF USE FOR NOW, LET'S SET THE MIN SELECTION DATE TO THE MAX VALUE SO WE DON'T HAVE TO SCROLL
+            # THROUGH YEARS OF DATA TO GET TO THE DATE THAT WE WANT
+            date_widget.setDate(QtCore.QDate(fileStartDate.year, fileStartDate.month, fileStartDate.day))
+            date_widget.dateTimeChanged.connect(lambda: HIVIS_dateChangeMethod(date_widget, siteTable))
+            siteTable.setCellWidget(index, m, date_widget)
 
-    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    imageIndex = 0
-    for root, dirs, files in os.walk(filePath):
+            m += 1
+            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            date_widget.setDate(QtCore.QDate(fileEndDate.year, fileEndDate.month, fileEndDate.day))
+            date_widget.dateTimeChanged.connect(lambda: HIVIS_dateChangeMethod(date_widget, siteTable))
+            siteTable.setCellWidget(index, m, date_widget)
 
-        # folder path
-        path = root.split(os.sep)
+            # --------------------
+            # --------------------
+            m += 1
+            dateTime = QDateTimeEdit()
+            dateTime.setDisplayFormat("hh:mm")
+            dateTime.setFrame(False)
+            dateTime.dateTimeChanged.connect(lambda: HIVIS_dateChangeMethod(date_widget, siteTable))
+            siteTable.setCellWidget(index, m, dateTime)
 
-        # traverse all files in folder that meet the criteria for retrieval
-        # 1. does the file have the specified file extension
-        # 2. extract the date from the filename
-        # 3. does the file meet the date criteria? if "yes," then continue; if "no" check next file in the list
-        # 4. if the files meets the date criteria, extract the EXIF data from the file to ascertain the time at
-        #    which the image was acquired
-        # 5. if the file meets the time range criteria, add the file to a list of images to be used for the session
-        #    and also add the file's EXIF data to a CSV EXIF log file if the option is selected by the user. Last but
-        #    not least, if the user selects the option to copy the image to a separate folder, then copy the file to
-        #    the folder specified by the user
-        for file in files:
-            progressBar.setWindowTitle(file)
-            progressBar.setValue(imageIndex)
-            progressBar.repaint()
-            imageIndex += 1
+            m += 1
+            dateTime = QDateTimeEdit()
+            dateTime.setDisplayFormat("hh:mm")
+            dateTime.setFrame(False)
+            dateTime.dateTimeChanged.connect(lambda: HIVIS_dateChangeMethod(date_widget, siteTable))
+            siteTable.setCellWidget(index, m, dateTime)
 
-            ext = os.path.splitext(file)[-1].lower()
+            siteTable.resizeColumnsToContents()
 
-            if ext in extensions:
-                fileDate, nYear, nMonth, nDay, strTime = GRIMe_Utils.extractDateFromFilename(file)
+            #time.sleep(0.100)
+        except:
+            nImageCount = 0
 
-                fileDateTime = datetime.date(nYear, nMonth, nDay)
-                if fileDateTime >= start_date and fileDateTime <= end_date:
-                    fullPathAndFilename = root + '\\' + file
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def HIVIS_dateChangeMethod(date_widget, tableWidget):
+    # setting text to the label
+    nRow = tableWidget.currentIndex().row()
 
-                    try:
-                        # extract EXIF info to determine what time the image was acquired. If EXIF info is not found,
-                        # throw an exception and see if the information is embedded in the filename. Currently, we are
-                        # working with images from NEON and PBT. The PBT images have EXIF data and the NEON/PhenoCam
-                        # do not appear to have EXIF data.
-                        myEXIFData = EXIFData()
-                        myEXIFData.extractEXIFData(fullPathAndFilename)
+    # FETCH DATES and TIMES
+    start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(tableWidget, nRow)
 
-                        strTemp = str(myEXIFData.getEXIF()[8])
-                        timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
+    camera = USGS_HIVIS.fetchCameraList()[nRow]
 
-                        nHours = int(str(timeOriginal[1:3]))
-                        nMins = int(str(timeOriginal[4:6]))
-                        nSecs = int(str(timeOriginal[7:9]))
+    # FILTER FOR IMAGES WITHIN DATE RANGE
+    imageList = USGS_HIVIS.getImageList(camera, USGS_HIVIS.getEndpoint())
 
-                        bEXIFDataFound = True
-                    except:
-                        # assume the filename contains the timestamp for the image (assumes the image file is a PBT image)
-                        bEXIFDataFound = False
+    newImageList = []
+    midnight = datetime.time(0, 0, 0)
+    for index, image in enumerate(imageList):
+        fileDate, fileTime = USGS_HIVIS.extractDateFromFilename(image)
+        if ((fileDate >= start_date) and (fileDate <= end_date)):
+            if ((fileTime >= start_time) and (fileTime <= end_time)) or ((start_time == midnight) and (end_time == midnight)):
+                newImageList.append(image)
 
-                        try:
-                            nHours = int(str(strTime[0:2]))
-                            nMins = int(str(strTime[2:4]))
-                            nSecs = int(str(strTime[4:6]))
-                        except:
-                            nHours = 0
-                            nMins = 0
-                            nSecs = 0
+    strCount = str(len(newImageList)) + " / " + str(len(imageList))
 
-                    image_time = datetime.time(nHours, nMins, nSecs)
-
-                    #if ((start_time == datetime.time(0, 0, 0)) and (end_time == datetime.time(0, 0, 0))) or \
-                    #        ((image_time >= start_time) and (image_time <= end_time)):
-
-                    # WRITE THE HEADER ONLY ONCE WHEN THE FIRST FILE IS PROCESSED
-                    if bCreateEXIFFile and bEXIFDataFound:
-                        if bWriteHeader:
-                            writer.writerow(myEXIFData.getHeader())
-                            bWriteHeader = False
-                        else:
-                            writer.writerow(myEXIFData.getEXIF())
-
-                    List.append(imageData(fullPathAndFilename, 0, 0, 0))
-
-                    if bSaveImages:
-                        shutil.copy(fullPathAndFilename, imageOutputFolder)
-
-                    # delete EXIFData object
-                    del myEXIFData
-
-    dailyImagesList.setVisibleList(List)
-
-    global gFrameCount
-    gFrameCount = len(dailyImagesList.getVisibleList())
-    gWebImageCount = len(dailyImagesList.getVisibleList())
-
-    # INIT SPINBOX CONTROLS BASED UPON NUMBER OF IMAGES AVAILABLE
-    if full == 1:
-        self.labelImageCountNumber.setText(str(gWebImageCount))
-        self.spinBoxDailyImage.setMinimum(1)
-        self.spinBoxDailyImage.setMaximum(gWebImageCount)
-        self.spinBoxDailyImage.setValue(1)
-        self.labelImageCountNumber.setText(str(gWebImageCount))
-    else:
-        dailyURLvisible = []
-
-    # clean-up before exiting function
-    # 1. close and delete the progress bar
-    # 2. close the EXIF log file, if opened
-    progressBar.close()
-    del progressBar
-
-    if bCreateEXIFFile:
-        csvFile.close()
-
-    processLocalImage(self)
+    tableWidget.setItem(nRow, 2, QTableWidgetItem(strCount))
 
 
 # ======================================================================================================================
@@ -2933,13 +3246,10 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
             QCoreApplication.processEvents()
 
-            strYear = str(start_date.year)
-            strMonth = str(start_date.month).zfill(2)
-            strDay = str(start_date.day).zfill(2)
-
             # ----------
-            dailyURLvisible = 'https://phenocam.sr.unh.edu/webcam/browse/NEON.D10.ARIK.DP1.20002' + '/' + strYear + '/' + strMonth.zfill(
-                2) + '/' + strDay.zfill(2)
+            #'https://phenocam.nau.edu/webcam/browse/NEON.D03.BARC.DP1.20002/2022/10/08'
+            #dailyURLvisible = 'https://phenocam.nau.edu/data/latest/NEON.D10.ARIK.DP1.20002' + '/' + str(start_date.year) + '/' + str(start_date.month).zfill(2) + '/' + str(start_date.day).zfill(2)
+            dailyURLvisible = 'https://phenocam.nau.edu/webcam/browse/NEON.D10.ARIK.DP1.20002' + '/' + str(start_date.year) + '/' + str(start_date.month).zfill(2) + '/' + str(start_date.day).zfill(2)
 
             # ----------
             dailyURLvisible = dailyURLvisible.replace('ARIK', SITECODE)
@@ -2955,7 +3265,7 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
         gWebImageCount = len(dailyImagesList.getVisibleList())
 
         # INIT SPINBOX CONTROLS BASED UPON NUMBER OF IMAGES AVAILABLE
-        if full == 1:
+        if full == 1 or full == 4:
             self.labelImageCountNumber.setText(str(gWebImageCount))
             self.spinBoxDailyImage.setMinimum(1)
             self.spinBoxDailyImage.setMaximum(gWebImageCount)
@@ -2968,10 +3278,12 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
     # -------------------
     # -------------------
-    if full == 1:
-        isChecked = self.checkBoxSaveImages.isChecked()
-    else:
-        isChecked = True
+    # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
+    isChecked = True
+    #if full == 1:
+    #    isChecked = self.checkBoxSaveImages.isChecked()
+    #else:
+    #    isChecked = True
 
     if gWebImageCount > 0 and isChecked:
         # CREATE PROGRESS BAR
@@ -2987,23 +3299,16 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
             filename = image.fullPathAndFilename.split('/')[-1]
 
-            if full == 1:
-                isChecked = self.checkBoxSaveImages.isChecked()
-            else:
-                isChecked = True
+            downloadsFilePath = os.path.join(self.EditSaveImagesOutputFolder.text(), 'Images')
+            if not os.path.exists(downloadsFilePath):
+                os.mkdir(downloadsFilePath)
+            completeFilename = os.path.join(downloadsFilePath, filename)
+            urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
 
-            if isChecked == True:
-                if full == 1:
-                    downloadsFilePath = self.EditSaveImagesOutputFolder.text()
-                else:
-                    downloadsFilePath = os.path.join(fetchDownloadsFolderPath(), 'Images')
-                completeFilename = os.path.join(downloadsFilePath, filename)
-                urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
-
-        # DISABLE THE CHECK BOX SO THAT ONCE THE IMAGES ARE DOWNLOADED, IMAGES ARE NOT CONTINUED TO BE SAVED UNBEKNOWNST
-        # TO THE USER
-        if full == 1:
-            self.checkBoxSaveImages.setChecked(False)
+        # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
+        # DISABLE THE CHECK BOX SO THAT ONCE THE IMAGES ARE DOWNLOADED, IMAGES ARE NOT CONTINUED TO BE SAVED UNBEKNOWNST TO THE USER
+        #if full == 1:
+        #    self.checkBoxSaveImages.setChecked(False)
 
         # clean-up before exiting function
         # 1. close and delete the progress bar
@@ -3011,10 +3316,13 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
         progressBar.close()
         del progressBar
 
-        if full == 1:
-            strMessage = 'Data download is complete!' + '\n\n' + 'If you selected "Save Images", it will be deselected to avoid unnecessary re-downloading of the same data.' + '\n\n' + 'If you want to re-download the same data or additional data, you will have to reselect "Save Images."'
-            msgBox = GRIMe_QMessageBox('Data Download', strMessage)
-            response = msgBox.displayMsgBox()
+        #if full == 1:
+        #    strMessage = 'Data download is complete!' + '\n\n' + 'If you selected "Save Images", it will be deselected to avoid unnecessary re-downloading of the same data.' + '\n\n' + 'If you want to re-download the same data or additional data, you will have to reselect "Save Images."'
+        #    msgBox = GRIMe_QMessageBox('Data Download', strMessage)
+        #    response = msgBox.displayMsgBox()
+        strMessage = 'Data download is complete!'
+        msgBox = GRIMe_QMessageBox('Data Download', strMessage)
+        response = msgBox.displayMsgBox()
 
 
 # ======================================================================================================================
@@ -3051,19 +3359,28 @@ def downloadProductDataFiles(self, item):
     # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
-    downloadsFilePath = os.path.expanduser('~')
-    downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
-    downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
-    if not os.path.exists(downloadsFilePath):
-        os.mkdir(downloadsFilePath)
-    downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')
-    if not os.path.exists(downloadsFilePath):
-        os.mkdir(downloadsFilePath)
+    downloadsFilePath = self.EditSaveImagesOutputFolder.text()
+
+    if len(downloadsFilePath) == 0:
+        strMessage = 'A download folder has not been specified. Would you like to use the default GRIME-AI download folder?'
+        msgBox = GRIMe_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+        response = msgBox.displayMsgBox()
+
+        if response == QMessageBox.Yes:
+            downloadsFilePath = os.path.expanduser('~')
+            downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
+            downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
+            if not os.path.exists(downloadsFilePath):
+                os.mkdir(downloadsFilePath)
+            downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')
+            if not os.path.exists(downloadsFilePath):
+                os.mkdir(downloadsFilePath)
+
+            self.EditSaveImagesOutputFolder.setText(downloadsFilePath)
 
     # --------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
     # --------------------------------------------------------------------------------
-    #if self.checkBoxNEONSites.isChecked() and self.radioButtonWebSiteImages.isChecked():
     if self.checkBoxNEONSites.isChecked():
             rowRange = range(self.tableProducts.rowCount())
     else:
@@ -3074,69 +3391,40 @@ def downloadProductDataFiles(self, item):
         # FETCH THE DATE RANGE THE USER SELECTED FOR THE PARTICULAR DATA
         # --------------------------------------------------------------------------------
         GRIMe_ProductTableObj = GRIMe_ProductTable()
-        GRIMe_ProductTableObj.fetchTableDates(self.tableProducts, nRow)
-
-        start_date = GRIMe_ProductTableObj.getStartDate()
-        strStartDate = GRIMe_ProductTableObj.getStartDate()
-
-        end_date = GRIMe_ProductTableObj.getEndDate()
-        strEndDate = GRIMe_ProductTableObj.getEndDate()
-
-        start_time = GRIMe_ProductTableObj.getStartTime()
-        end_time = GRIMe_ProductTableObj.getEndTime()
-
-        delta = GRIMe_ProductTableObj.getDelta()
+        start_date, start_time, end_date, end_time = GRIMe_ProductTableObj.fetchTableDates(self.tableProducts, nRow)
 
         #if self.checkBoxNEONSites.isChecked() and self.radioButtonWebSiteImages.isChecked():
-        if self.checkBoxNEONSites.isChecked():
-            # EXTRACT THE PRODUCT ID
-            ProductIDCell = self.tableProducts.item(nRow, 1).text()
-            nProductID = int(ProductIDCell.split('.')[1])
+        #if self.checkBoxNEONSites.isChecked():
+        # EXTRACT THE PRODUCT ID
+        strProductIDCell = self.tableProducts.item(nRow, 1).text()
+        nProductID = int(strProductIDCell.split('.')[1])
         #else:
         #    nProductID = -999
 
         if nProductID < 0 and nRow == 0:
             if self.radioButtonHardDriveImages.isChecked():
-                fetchLocalImageList(self, self.lineEditHardDriveFolder.text(), self.checkBoxCreateEXIFFile.isChecked(),
-                                    start_date, end_date, start_time, end_time)
+                global imageFileFolder
+                #JES fetchLocalImageList(self, imageFileFolder, self.checkBox_FetchRecursive.isChecked(), self.checkBoxCreateEXIFFile.isChecked(), start_date, end_date, start_time, end_time)
+                fetchLocalImageList(self, imageFileFolder, True, self.checkBoxCreateEXIFFile.isChecked(), start_date, end_date, start_time, end_time)
         elif nProductID > 0:
             # ----------------------------------------------------------------------------------------------------
             # FETCH THE DATA FOR THE PARTICULAR PRODUCT FOR THE SPECIFIED DATE RANGE AND PROCESS THE DATA ACCORDINGLY
             # ----------------------------------------------------------------------------------------------------
             if nProductID == 20002:
-
-                # IF THE USER HAS NOW SELECTED THE 'Save Images' CHECKBOX, VERIFY WHETHER OR NOT THE USER
-                # WANTS TO SAVE THE IMAGES LOCALLY
-                if full == 1:
-                    if self.checkBoxSaveImages.isChecked() == False:
-                        strMessage = 'Do you also want to save the images locally to your computer?'
-                        msgBox = GRIMe_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
-                        response = msgBox.displayMsgBox()
-
-                        if response == QMessageBox.Yes:
-                            self.checkBoxSaveImages.setChecked(True)
-
-                #if self.radioButtonWebSiteImages.isChecked():
                 DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time)
-                #else:
-                    #fetchLocalImageList(self, self.lineEditHardDriveFolder.text(), nRow, start_date, end_date, start_time, end_time)
 
-                if full == 1:
-                    #if self.radioButtonWebSiteImages.isChecked():
-                        #processSpinBoxImage(self, currentImageIndex)
-                    #else:
+                if full == 1 or full == 4:
                     processLocalImage(self)
-                    refreshImage(self)
+                    #refreshImage(self)
             elif nProductID == 20033:
                 # CREATE PROGRESS BAR
                 nitrateDataObj = NEON_20033_NitrateData()
 
-                strStartYearMonth = str(strStartDate.year) + '-' + str(strStartDate.month).zfill(2)
-                strEndYearMonth = str(strEndDate.year) + '-' + str(strEndDate.month).zfill(2)
-                nitrateList = nitrateDataObj.DP1_20033_FetchNitrateData(SITECODE, nProductID, strStartYearMonth,
-                                                                        strEndYearMonth, downloadsFilePath)
+                strStartYearMonth = str(start_date.year) + '-' + str(start_date.month).zfill(2)
+                strEndYearMonth = str(end_date.year) + '-' + str(end_date.month).zfill(2)
+                nitrateList = nitrateDataObj.DP1_20033_FetchNitrateData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
 
-                if full == 1:
+                if full == 1 or full == 4:
                     if len(nitrateList) > 0:
                         # JES - USE NITRATE DATA FOR DEVELOPING GENERIC CSV READING AND DATA GRAPHING CAPABILITIES
                         scene = QGraphicsScene()
@@ -3164,24 +3452,9 @@ def downloadProductDataFiles(self, item):
             else:
                 fetchData = NEON_FetchData()
 
-                strStartYearMonth = str(strStartDate.year) + '-' + str(strStartDate.month).zfill(2)
-                strEndYearMonth = str(strEndDate.year) + '-' + str(strEndDate.month).zfill(2)
-                fetchData.NEON_FetchData(SITECODE, nProductID, strStartYearMonth, strEndYearMonth, downloadsFilePath)
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def fetchSiteInfoFromNEON():
-    # Make request, using the sites/ endpoint
-    global SITECODE
-    site_request = requests.get(SERVER + 'sites/' + SITECODE)
-
-    # Convert to Python JSON object
-    site_json = site_request.json()
-
-    return (site_json)
-
+                strStartYearMonth = str(start_date.year) + '-' + str(start_date.month).zfill(2)
+                strEndYearMonth = str(end_date.year) + '-' + str(end_date.month).zfill(2)
+                fetchData.NEON_FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
 
 # ======================================================================================================================
 #
@@ -3316,7 +3589,7 @@ def labelMouseDoubleClickEvent(self):
 #
 # ======================================================================================================================
 def updateSiteProducts(self, item):
-    site_json = fetchSiteInfoFromNEON()
+    site_json = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     self.listboxSiteProducts.clear()
 
@@ -3336,7 +3609,7 @@ def updateSiteProducts(self, item):
             nIndex = self.listboxSiteProducts.row(item)
             self.listboxSiteProducts.setCurrentRow(nIndex)
 
-        updateSelectedProductsTable(self, nIndex)
+        updateNEONProductTable(self, nIndex)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     # JES
 
@@ -3349,7 +3622,7 @@ def updateSiteProducts(self, item):
             nIndex = self.listboxSiteProducts.row(item)
             self.listboxSiteProducts.setCurrentRow(nIndex)
 
-        updateSelectedProductsTable(self, nIndex)
+        updateNEONProductTable(self, nIndex)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     # JES
 
@@ -3361,76 +3634,17 @@ def retranslateUi(self, MainWindow):
     _translate = QtCore.QCoreApplication.translate
     MainWindow.setWindowTitle(_translate("GRIMe-AI: John E. Stranzl Jr.", "GRIMe-AI: John E. Stranzl Jr."))
 
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def downloadFieldSiteTableFiles(csv_links):
-    link = csv_links
-
-    # obtain filename by splitting url and getting last string
-    file_name = link.split('/')[-1]
-
-    # create response object
-    r = requests.get(link, stream=True)
-
-    configFilePath = os.path.expanduser('~')
-    configFilePath = os.path.join(configFilePath, 'Documents')
-    configFilePath = os.path.join(configFilePath, 'GRIMe-AI')
-    if not os.path.exists(configFilePath):
-        os.mkdir(configFilePath)
-    filename_with_path = os.path.join(configFilePath, file_name)
-
-    # download started
-    with open(filename_with_path, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                f.write(chunk)
-
-    return filename_with_path
-
-
-# ======================================================================================================================
-# THIS FUNCTION DOWNLOADS THE LATEST IMAGE FOR THE SITE SELECTED BY THE END-USER AND DISPLAYS IT IN THE GUI SO THE
-# END-USER CAN CAN SEE WHAT THE PARTICULAR SITE LOOKS LIKE.
-# ======================================================================================================================
-def downloadLatestImage(siteCode, domainCode):
-    global latestImage
-    global gWebImageCount
-
-    nErrorCode = -1
-    nRetryCount = 3
-
-    latestImageURL = 'https://phenocam.sr.unh.edu/data/latest/NEON.D10.ARIK.DP1.20002.jpg'
-    tmp = latestImageURL.replace('ARIK', siteCode)
-    latestImageURL = tmp.replace('D10', domainCode)
-
-    while nErrorCode == -1 and nRetryCount > 0:
-        r = requests.get(latestImageURL, stream=True)
-
-        if r.status_code != 404:
-            gWebImageCount = 1
-            data = urlopen(latestImageURL).read()
-            latestImage = QPixmap()
-            latestImage.loadFromData(data)
-            nErrorCode = 0
-        else:
-            gWebImageCount = 0
-            print("404: Download Latest Image")
-            nErrorCode = -1
-            nRetryCount = nRetryCount - 1
-
-    return r.status_code
-
-
 # ======================================================================================================================
 # FIND THE MONTHS THAT DATA IS AVAILABLE FOR A PARTICULAR PRODUCT FOR A PARTICULAR SITE
 # ======================================================================================================================
 def findAvailableMonths(item):
+    global SERVER
+    global SITECODE
+
     PRODUCTCODE = item
 
     # RETRIEVE INFORMATION FROM THE NEON WEBSITE FOR THE PARTICULAR SITE
-    site_json = fetchSiteInfoFromNEON()
+    site_json = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     # EXTRACT THE AVAILABLE MONTH AND THE URL FOR THE DATA FOR EACH AVAILABLE MONTH
     monthList = {}
@@ -3441,17 +3655,6 @@ def findAvailableMonths(item):
             break
 
     return (monthList)
-
-
-# ======================================================================================================================
-# The purpose of this function is to query information above a specific product. The information
-# contains the product description, sites for which the product is available among other information.
-# ======================================================================================================================
-def queryProductInfo(productCode):
-    product_request = requests.get(SERVER + 'products/' + productCode)
-    product_json = product_request.json()
-
-    return product_json
 
 
 # ======================================================================================================================
@@ -3526,7 +3729,7 @@ def test(img):
     # In fact, the main error is because of cv2.The parameter in resize is required to be an integer
     img = cv2.resize(img, (img_shape[1] // 2, img_shape[0] // 2), interpolation=cv2.INTER_CUBIC)
 
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
     glcm_0 = getGlcm(img_gray, 1, 0)
     # glcm_1=getGlcm(src_gray,0,1)
@@ -3614,197 +3817,117 @@ class MSTExtractFrames():
         # save and close the file
         f.close()
 
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def createGRIMeFolders(self):
-    rootFolder = os.path.expanduser('~')
-    rootFolder = os.path.join(rootFolder, 'Documents')
-    rootFolder = os.path.join(rootFolder, 'GRIMe-AI')
-    if not os.path.exists(rootFolder):
-        os.mkdir(rootFolder)
+def fetchUSGSImages(table_USGS_Sites, output_folder_base):
 
-    # ----------------------------------------------------------------------------------------------------
-    # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
-    # IN THE USER'S DOCUMENT FOLDER
-    # ----------------------------------------------------------------------------------------------------
-    if full == 1:
-        videoFolder = os.path.join(rootFolder, 'Videos')
-        if not os.path.exists(videoFolder):
-            os.mkdir(videoFolder)
-
-        self.EditVideoOutputFolder.setText(videoFolder)
-
-    # --------------------------------------------------
-    # CREATE SETTINGS FOLDERS IN USER'S DOCUMENTS FOLDER
-    configFilePath = os.path.join(rootFolder, 'Settings')
-    if not os.path.exists(configFilePath):
-        os.mkdir(configFilePath)
-
-    # --------------------------------------------------
-    # CREATE DOWNLOAD FOLDER IN USER'S DOCUMENTS FOLDER
-    downloadsFolder = os.path.join(rootFolder, 'Downloads')
-    if not os.path.exists(downloadsFolder):
-        os.mkdir(downloadsFolder)
-
-    # --------------------------------------------------
-    # CREATE FOLDER IN USER'S DOCUMENTS FOLDER FOR DOWNLOADED IMAGES
-    downloadsFolder = os.path.join(downloadsFolder, 'Images')
-    if not os.path.exists(downloadsFolder):
-        os.mkdir(downloadsFolder)
-
-    if full == 1:
-        self.EditSaveImagesOutputFolder.setText(downloadsFolder)
-
-    # --------------------------------------------------
-    # CREATE DOWNLOAD FOLDER IN USER'S DOCUMENTS FOLDER
-    EXIFFolder = os.path.join(rootFolder, 'EXIF')
-    if not os.path.exists(EXIFFolder):
-        os.mkdir(EXIFFolder)
-
-    if full == 1:
-        self.EditEXIFOutputFolder.setText(EXIFFolder)
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def populateUSGS_SiteTable(self):
     num_cameras = len(USGS_HIVIS.fetchCameraList())
 
-    for index, camera in enumerate(USGS_HIVIS.fetchCameraList()):
-        self.table_USGS_Sites.setItem(index, 0, QTableWidgetItem(camera))
-        nImageCount = USGS_HIVIS.getHIVIS_ImageCount(camera, USGS_HIVIS.getEndpoint())
+    for nIndex in range(table_USGS_Sites.rowCount()):
 
-        self.table_USGS_Sites.setItem(index, 1, QTableWidgetItem(str(nImageCount)))
+        if table_USGS_Sites.cellWidget(nIndex, 0).isChecked():
+            start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(table_USGS_Sites, nIndex)
 
-        time.sleep(0.100)
+            # FETCH CAMERA FOR SELECTED LOCATION
+            camera = USGS_HIVIS.fetchCameraList()[nIndex]
+
+            # FETCH IMAGE LIST FOR SELECTED LOCATION
+            imageList = USGS_HIVIS.getImageList(camera, USGS_HIVIS.getEndpoint())
+
+            # NUMBER OF IMAGES FOR SELECTED LOCATION
+            nImageCount = len(imageList)
+
+            # INITIALIZE PROGRESS "BAR" FOR DISPLAYING PROGRESS OF CULLING IMAGES BY DATE/TIME
+            progressBar = QProgressWheel(0, nImageCount + 1)
+            progressBar.setWindowTitle('Culling Images (Date/Time)...')
+            progressBar.show()
+
+            # CULL IMAGES BASED UPON SELECTED DATE/TIME STAMPLES
+            newImageList = []
+            midnight = datetime.time(0, 0, 0)
+            for index, image in enumerate(imageList):
+                progressBar.setValue(index)
+                fileDate, fileTime = USGS_HIVIS.extractDateFromFilename(image)
+                if ((fileDate >= start_date) and (fileDate <= end_date)):
+                    if ((fileTime >= start_time) and (fileTime <= end_time)) or ((start_time == midnight) and (end_time == midnight)):
+                        newImageList.append(image)
+
+            progressBar.close()
+            del progressBar
+
+            # NOTE FROM FRANK ENGEL:
+            # The NATWEB server sits in the USGS AWS govCloud. AWS imposes http request limits. You can probably pull
+            # up to 100 requests in 10 mins or so before NATWEB closes the connection.
+            output_folder = output_folder_base + os.sep + 'USGS'+ os.sep + camera
+
+            download_USGS_HIVIS_Images(newImageList, camera_name=camera, save_directory=output_folder, endpoint=USGS_HIVIS.getEndpoint())
+
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def fetchUSGSImages():
-    num_cameras = len(USGS_HIVIS.fetchCameraList())
+def loadChromeDriver():
 
-    for camera in USGS_HIVIS.fetchCameraList():
-        # Get a list of ALL images available on NATWEB for the current camera
-        images = get_image_list_from_HIVIS(camera, USGS_HIVIS.getEndpoint())
+    # ----------------------------------------------------------------------------------------------------
+    # GET THE VERSION OF CHROME INSTALLED ON THE COMPUTER AND THE VERSION OF THE CHROME DRIVER INSTALLED WITH GRIME-AI
+    # ----------------------------------------------------------------------------------------------------
+    strChromeVersion = get_chrome_version()
+    print(strChromeVersion)
 
-        # Save queried images to output_folder, which is named by camera
-        # Makes the directory if needed
-        #
-        # NOTE: I am slicing images to just return the LAST/Most recent image
-        # The NATWEB server sits in the USGS AWS govCloud. They impose http request
-        # limits. You can probably pull up to 100 requests in 10 mins or so before
-        # NATWEB closes your connection.
-        output_folder_base = 'C:\\Users\\Astrid Haugen\\Pictures\\USGS'  # change for your purposes
-        output_folder = output_folder_base + os.sep + camera
-        download_images(images[-1:], camera_name=camera, save_directory=output_folder, endpoint=USGS_HIVIS.getEndpoint())
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--disable-gpu')  # Last I checked this was necessary.
 
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def get_image_list_from_HIVIS(camera_name, endpoint, command='/php/listFiles.php?path='):
-    """Query HIVIS api to retrieve all images for a specific camera name
+    # strChromeExe = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver/', strChromeVersion, 'chromedriver.exe')
+    # Old driver = webdriver.Chrome(strChromeExe, options=options)  # Optional argument, if not specified will search path.
 
-    Parameters
-    ----------
-    camera_name
-    endpoint
-    command
+    options = webdriver.ChromeOptions()
 
-    Returns
-    -------
-    list_of_images
+    #webdriver.Chrome.close()
+
+    try:
+        try:
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        except:
+            strChromeExe = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe')
+            print(strChromeExe)
+            # driver = webdriver.Chrome(strChromeExe, options=options)  # Optional argument, if not specified will search path.
+            driver = webdriver.Chrome(strChromeExe)  # Optional argument, if not specified will search path.
+
+        strChromeDriverVersion = driver.capabilities['browserVersion']
+    except:
+        pass
 
     """
-    uri = endpoint + command + camera_name
-    response = urllib.request.urlopen(uri)
-    data = response.read()  # a `bytes` object
-    raw_text = data.decode('utf-8')
-
-    # HIVIS returns simple ls of file server. Split text and pop the 1st 2 entries
-    t = raw_text.split(sep=',')[2:]
-
-    # Remove the quotes
-    t = [elem.replace('"', '') for elem in t]
-
-    # Replace any spaces with URL safe %20
-    t = [elem.replace(' ', '%20') for elem in t]
-
-    # Finally, just keep strings that correspond to images.
-    # These will all have '___' in them
-    subs = '___'
-    list_of_images = list(filter(lambda x: subs in x, t))
-
-    return list_of_images
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def download_images(list_of_images, camera_name, save_directory, endpoint, subpage='/media/cameras/'):
-    """Make urlrequest and download result into specified file.
-
-    Parameters
-    ----------
-    list_of_images
-    camera_name
-    save_directory
-    endpoint
-    subpage
-
-    Returns
-    -------
-
+    if strChromeVersion != strChromeDriverVersion:
+        msgBox = GRIMe_QMessageBox('Chrome Driver Error!', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion + '\n\nYou can use the software for analyzing data but you cannot download images from the Internet until the Chrome Driver and Chrome Browser versions match.')
+        response = msgBox.displayMsgBox()
+    else:
+        msgBox = GRIMe_QMessageBox('Chrome Version', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion)
+        response = msgBox.displayMsgBox()
     """
-    number_images = len(list_of_images)
-    printEnd = ''  # needed to get progress bar to show in PyCharm IDE, '\r' otherwise
-    # printProgressBar(0, number_images, prefix='Progress:', suffix='Complete', length=50, printEnd=printEnd)
-    i = 0
-    for image in list_of_images:
-        uri = endpoint + subpage + camera_name + '/' + image
-
-        # Create a folder named by the camera if it doesn't exist,
-        # then create the file name full path within that folder
-        save_directory = pathlib.Path(save_directory)
-        save_directory.mkdir(parents=True, exist_ok=True)
-        out_file = str(save_directory) + os.sep + image  # file name is the same as original
-
-        # Download the image
-        with urllib.request.urlopen(uri) as response, open(out_file, 'wb') as out_file:
-            shutil.copyfileobj(response, out_file)
-        i += 1
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def fetchDownloadsFolderPath():
-    downloadsFilePath = os.path.expanduser('~')
-    downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
-    downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
-    if not os.path.exists(downloadsFilePath):
-        os.mkdir(downloadsFilePath)
-    downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')
-    if not os.path.exists(downloadsFilePath):
-        os.mkdir(downloadsFilePath)
-
-    return downloadsFilePath
-
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 if __name__ == '__main__':
+
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
     frame = MainWindow()
 
     frame.move(app.desktop().screen().rect().center() - frame.rect().center())
 
+    loadChromeDriver()
+
+    # ----------------------------------------------------------------------------------------------------
     # DISPLAY SPLASH SCREEN
+    # ----------------------------------------------------------------------------------------------------
     if full == 1:
         pixmap = QPixmap('Splash_007.jpg')
+    elif full == 4:
+        pixmap = QPixmap('Splash_007FE.jpg')
     else:
         pixmap = QPixmap('Splash_007DM.jpg')
     splash = QSplashScreen(pixmap)
@@ -3812,11 +3935,17 @@ if __name__ == '__main__':
     time.sleep(5)
     splash.finish(frame)
 
+    # IF THE FILE IS NOT IN THE EXECUTABLE DIRECTORY, MAKE SURE THE SOFTWARE STILL STARTS UP.
+    #try:
+    #    playsound('shall-we-play-a-game.mp3')
+    #except:
+    #    pass
+
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
     app.processEvents()
 
     # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
-    createGRIMeFolders(frame)
+    GRIMe_Utils.createGRIMeFolders(frame, full)
 
     #if torch.cuda.is_available():
         #print("Torch CUDA!")
@@ -3854,15 +3983,12 @@ if __name__ == '__main__':
     if frame.checkBoxNEONSites.isChecked():
         siteList = readFieldSiteTable()
     else:
-        formatProductTableCells(frame)
+        formatNEONProductTable(frame.tableProducts)
 
     if len(siteList) == 0:
-        frame.radioButtonHardDriveImages.setChecked(True)
-        frame.radioButtonHardDriveImages.setDisabled(False)
-
-        # DISABLE AND UNCHECK THE RADIO BUTTON FOR WEB SITE IMAGES IF INFORMATION CANNOT BE ACCESSED FROM THE NEON SITE
-        frame.radioButtonWebSiteImages.setChecked(False)
-        frame.radioButtonWebSiteImages.setDisabled(True)
+        pass
+        #frame.radioButtonHardDriveImages.setChecked(True)
+        #frame.radioButtonHardDriveImages.setDisabled(False)
     # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
     else:
         myList = []
@@ -3872,57 +3998,46 @@ if __name__ == '__main__':
             myList.append(strSiteName)
 
         frame.listboxNEONSites.addItems(myList)
-        if full == 1:
-            frame.spinBoxDailyImage.setValue(1)
 
         # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
         frame.listboxNEONSites.setCurrentRow(2)
         frame.listboxNEONSites.show()
 
-        # SET DEFAULT TO IMAGES STORED ON A HARD DRIVE OR ON A MAPPED DRIVE SO THAT THERE ARE NO UNNECESSARY ATTEMPTS TO ACCESS THE INTERNET/WEB
-        if full == 1:
-            frame.radioButtonHardDriveImages.setChecked(False)
-            frame.radioButtonHardDriveImages.setDisabled(False)
-
-            frame.radioButtonWebSiteImages.setChecked(True)
-            frame.radioButtonWebSiteImages.setDisabled(False)
-
-    '''
-    if full == 1:
-        if frame.radioButtonWebSiteImages.isChecked():
-            frame.checkBoxCreateEXIFFile.setEnabled(False)
-            processSpinBoxImage(frame, 1)
-            refreshImage(frame)
-        elif frame.radioButtonHardDriveImages.isChecked():
-            processLocalImage(frame)
-            frame.checkBoxCreateEXIFFile.setEnabled(True)
-    '''
-
-    if full == 1:
-        frame.radioButton_ROIShapeRectangle.setChecked(True)
+    #JES if full == 1:
+    #JES    frame.radioButton_ROIShapeRectangle.setChecked(True)
 
         # ----------------------------------------------------------------------
         # CHANGE THE COLOR OF OPTIONS THAT HAVE SPECIAL CONDITIONS AND USAGES
-        frame.checkBoxSaveImages.setStyleSheet('QCheckBox {color: red;}')
+        #frame.checkBoxSaveImages.setStyleSheet('QCheckBox {color: red;}')
 
-        frame.pushButtonRetrieveData.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonFetchImageList.setStyleSheet('QPushButton {background-color: steelblue;}')
+        #JES frame.pushButtonAddROI.setStyleSheet('QPushButton {background-color: steelblue;}')
 
-        frame.pushButtonBrowseImageFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonBrowseVideoOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonBrowseSaveImagesOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonBrowseEXIFOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+    '''
+    if full == 1 or full == 4:
+        frame.spinBoxCannyHighThreshold.setValue(255)
+        frame.spinBoxCannyLowThreshold.setValue(254)
+    '''
 
-        frame.pushButtonPlay.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonStop.setStyleSheet('QPushButton {background-color: steelblue;}')
-        frame.pushButtonAddROI.setStyleSheet('QPushButton {background-color: steelblue;}')
+    if full == 1:
+        frame.graphicsView.setVisible(False)
 
-    frame.spinBoxCannyHighThreshold.setValue(255)
-    frame.spinBoxCannyLowThreshold.setValue(254)
+        print("--- Fetching NEON Sites Info ---")
+        start_time = time.time()
+        formatNEONProductTable(frame.table_USGS_Sites)
+        print("--- NEON Sites Info = %s seconds ---" % (time.time() - start_time))
 
-    frame.graphicsView.setVisible(False)
+        print("--- DISABLED! USGS Site is SLOW!   Fetching USGS Sites Info ---")
+        start_time = time.time()
+        #JES populateUSGS_SiteTable(frame.table_USGS_Sites)
+        print("--- DISABLED!  USGS Sites Info = %s seconds ---" % (time.time() - start_time))
 
-    populateUSGS_SiteTable(frame)
+    #JES frame.pushButton_RetrieveNEONData.setStyleSheet('QPushButton {background-color: steelblue;}')
+    #JES frame.pushButton_FetchImageList.setStyleSheet('QPushButton {background-color: steelblue;}')
+
+    #frame.pushButtonBrowseImageFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+    #frame.pushButtonBrowseVideoOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+    #frame.pushButtonBrowseSaveImagesOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+    #frame.pushButtonBrowseEXIFOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
 
     '''
     # Enter your api key here
@@ -3957,18 +4072,30 @@ if __name__ == '__main__':
     f.close()
     '''
 
-    # product_json = queryProductInfo('DP1.00004.001')
+    # product_json = NEON_QueryProductInfo('DP1.00004.001')
 
     # data_request = requests.get('http://data.neonscience.org/api/v0/' + 'data/' + 'DP1.00004.001' + '/' + 'ARIK' + '/' + '2018-06')
     # data_json = data_request.json()
 
     # NEON_API_Example('DP1.00004.001')
 
+    bStartupComplete = True
+
     # SHOW MAIN WINDOW
     frame.show()
 
     # Run the program
     sys.exit(app.exec())
+
+def initUSGS():
+    # check connection to HIVIS
+    # load list of sites
+    # get image count (per site)
+    #
+    x = 1
+
+
+
 
 # NOTES
 # field_domain_id
@@ -4017,7 +4144,6 @@ if __name__ == '__main__':
 # field_phenocams
 # field_number_tower_levels
 
-'''
 # EXTRACT AND PARSE XMP DATA FROM IMAGE
 if 0:
     with open(videoFileList[i], "rb") as fin:
@@ -4061,4 +4187,5 @@ if 0:
     if i == 0:
         writer.writerow(strHeader)
     writer.writerow(strEXIF)
-'''
+
+
