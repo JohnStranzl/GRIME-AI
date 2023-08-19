@@ -48,7 +48,7 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>3</number>
+     <number>0</number>
     </property>
     <property name="tabsClosable">
      <bool>true</bool>
@@ -64,10 +64,13 @@
          <enum>QLayout::SetMinimumSize</enum>
         </property>
         <item>
-         <widget class="QCheckBox" name="checkBoxNEONSites">
+         <widget class="QLabel" name="labelNEONSites">
           <property name="font">
            <font>
             <pointsize>12</pointsize>
+            <weight>50</weight>
+            <bold>false</bold>
+            <kerning>true</kerning>
            </font>
           </property>
           <property name="text">
@@ -137,7 +140,7 @@
          </widget>
         </item>
         <item>
-         <widget class="GRIMe_QLabel" name="labelLatestImage">
+         <widget class="GRIME_QLabel" name="labelLatestImage">
           <property name="sizePolicy">
            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
             <horstretch>0</horstretch>
@@ -188,7 +191,7 @@
            </font>
           </property>
           <property name="text">
-           <string>Site Products</string>
+           <string>NEON Site Products</string>
           </property>
          </widget>
         </item>
@@ -213,13 +216,13 @@
      <attribute name="title">
       <string>NEON Download Manager</string>
      </attribute>
-     <widget class="GRIMe_QTableWidget" name="tableProducts">
+     <widget class="GRIME_QTableWidget" name="tableProducts">
       <property name="geometry">
        <rect>
         <x>20</x>
-        <y>20</y>
-        <width>1011</width>
-        <height>521</height>
+        <y>50</y>
+        <width>1300</width>
+        <height>525</height>
        </rect>
       </property>
       <property name="sizePolicy">
@@ -235,7 +238,7 @@
        <number>20</number>
       </property>
       <property name="columnCount">
-       <number>9</number>
+       <number>8</number>
       </property>
       <attribute name="horizontalHeaderCascadingSectionResizes">
        <bool>false</bool>
@@ -295,15 +298,14 @@
       <column/>
       <column/>
       <column/>
-      <column/>
      </widget>
      <widget class="QGroupBox" name="groupBox">
       <property name="geometry">
        <rect>
         <x>20</x>
-        <y>580</y>
-        <width>891</width>
-        <height>71</height>
+        <y>600</y>
+        <width>1160</width>
+        <height>70</height>
        </rect>
       </property>
       <property name="font">
@@ -321,7 +323,7 @@
         <rect>
          <x>10</x>
          <y>31</y>
-         <width>771</width>
+         <width>1040</width>
          <height>22</height>
         </rect>
        </property>
@@ -340,8 +342,8 @@
       <widget class="QPushButton" name="pushButtonBrowseSaveImagesOutputFolder">
        <property name="geometry">
         <rect>
-         <x>785</x>
-         <y>31</y>
+         <x>1060</x>
+         <y>30</y>
          <width>93</width>
          <height>22</height>
         </rect>
@@ -354,8 +356,8 @@
      <widget class="QLabel" name="labelImageDownloadTip">
       <property name="geometry">
        <rect>
-        <x>686</x>
-        <y>1</y>
+        <x>970</x>
+        <y>30</y>
         <width>351</width>
         <height>16</height>
        </rect>
@@ -367,8 +369,8 @@
      <widget class="QPushButton" name="pushButton_RetrieveNEONData">
       <property name="geometry">
        <rect>
-        <x>920</x>
-        <y>598</y>
+        <x>1210</x>
+        <y>620</y>
         <width>110</width>
         <height>41</height>
        </rect>
@@ -394,17 +396,106 @@
       </property>
      </widget>
     </widget>
+    <widget class="QWidget" name="tab_2">
+     <attribute name="title">
+      <string>USGS Sites</string>
+     </attribute>
+     <widget class="QListWidget" name="listboxUSGSSites">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>60</y>
+        <width>531</width>
+        <height>711</height>
+       </rect>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>675</height>
+       </size>
+      </property>
+     </widget>
+     <widget class="QListWidget" name="listboxUSGSSiteInfo">
+      <property name="geometry">
+       <rect>
+        <x>560</x>
+        <y>60</y>
+        <width>831</width>
+        <height>400</height>
+       </rect>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>400</height>
+       </size>
+      </property>
+     </widget>
+     <widget class="GRIME_QLabel" name="labelLatestUSGSSiteImage">
+      <property name="geometry">
+       <rect>
+        <x>560</x>
+        <y>468</y>
+        <width>831</width>
+        <height>301</height>
+       </rect>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>240</height>
+       </size>
+      </property>
+      <property name="mouseTracking">
+       <bool>true</bool>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::WinPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Sunken</enum>
+      </property>
+      <property name="lineWidth">
+       <number>5</number>
+      </property>
+      <property name="text">
+       <string>Latest Image</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </widget>
     <widget class="QWidget" name="tab">
      <attribute name="title">
       <string>USGS Download Manager</string>
      </attribute>
-     <widget class="GRIMe_QTableWidget" name="table_USGS_Sites">
+     <widget class="GRIME_QTableWidget" name="table_USGS_Sites">
       <property name="geometry">
        <rect>
-        <x>10</x>
-        <y>20</y>
-        <width>1011</width>
-        <height>471</height>
+        <x>20</x>
+        <y>50</y>
+        <width>1300</width>
+        <height>525</height>
        </rect>
       </property>
       <property name="sizePolicy">
@@ -420,7 +511,7 @@
        <number>20</number>
       </property>
       <property name="columnCount">
-       <number>9</number>
+       <number>8</number>
       </property>
       <attribute name="horizontalHeaderCascadingSectionResizes">
        <bool>false</bool>
@@ -480,13 +571,12 @@
       <column/>
       <column/>
       <column/>
-      <column/>
      </widget>
      <widget class="QPushButton" name="pushButton_USGSDownload">
       <property name="geometry">
        <rect>
-        <x>910</x>
-        <y>550</y>
+        <x>1210</x>
+        <y>620</y>
         <width>110</width>
         <height>41</height>
        </rect>
@@ -514,10 +604,10 @@
      <widget class="QGroupBox" name="groupBox_8">
       <property name="geometry">
        <rect>
-        <x>10</x>
-        <y>530</y>
-        <width>891</width>
-        <height>71</height>
+        <x>20</x>
+        <y>600</y>
+        <width>1160</width>
+        <height>70</height>
        </rect>
       </property>
       <property name="font">
@@ -535,7 +625,7 @@
         <rect>
          <x>10</x>
          <y>30</y>
-         <width>761</width>
+         <width>1040</width>
          <height>22</height>
         </rect>
        </property>
@@ -554,8 +644,8 @@
       <widget class="QPushButton" name="pushButtonBrowseSaveImages_USGS_DownloadFolder">
        <property name="geometry">
         <rect>
-         <x>785</x>
-         <y>31</y>
+         <x>1060</x>
+         <y>30</y>
          <width>93</width>
          <height>22</height>
         </rect>
@@ -850,7 +940,7 @@
        <string>Build Feature File</string>
       </property>
      </widget>
-     <widget class="QWidget" name="">
+     <widget class="QWidget" name="layoutWidget">
       <property name="geometry">
        <rect>
         <x>14</x>
@@ -861,7 +951,7 @@
       </property>
       <layout class="QGridLayout" name="gridLayout">
        <item row="0" column="0">
-        <widget class="GRIMe_QLabel" name="labelOriginalImage">
+        <widget class="GRIME_QLabel" name="labelOriginalImage">
          <property name="enabled">
           <bool>true</bool>
          </property>
@@ -901,7 +991,7 @@
         </widget>
        </item>
        <item row="0" column="1">
-        <widget class="GRIMe_QLabel" name="labelEdgeImage">
+        <widget class="GRIME_QLabel" name="labelEdgeImage">
          <property name="enabled">
           <bool>true</bool>
          </property>
@@ -932,7 +1022,7 @@
         </widget>
        </item>
        <item row="1" column="0">
-        <widget class="GRIMe_QLabel" name="labelColorSegmentation">
+        <widget class="GRIME_QLabel" name="labelColorSegmentation">
          <property name="enabled">
           <bool>true</bool>
          </property>
@@ -1155,14 +1245,14 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>GRIMe_QLabel</class>
+   <class>GRIME_QLabel</class>
    <extends>QLabel</extends>
-   <header location="global">GRIMe_QLabel</header>
+   <header location="global">GRIME_QLabel</header>
   </customwidget>
   <customwidget>
-   <class>GRIMe_QTableWidget</class>
+   <class>GRIME_QTableWidget</class>
    <extends>QTableWidget</extends>
-   <header>GRIMe_QTableWidget</header>
+   <header location="global">GRIME_QTableWidget</header>
   </customwidget>
  </customwidgets>
  <resources/>

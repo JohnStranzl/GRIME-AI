@@ -81,7 +81,7 @@
     <property name="title">
      <string>Region Select</string>
     </property>
-    <widget class="QCheckBox" name="checkBoxScalarRegion_WholeImage_4">
+    <widget class="QCheckBox" name="checkBoxScalarRegion_WholeImage">
      <property name="geometry">
       <rect>
        <x>21</x>
@@ -105,7 +105,7 @@
       <bool>false</bool>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBoxScalarRegion_ROI_4">
+    <widget class="QCheckBox" name="checkBoxScalarRegion_ROI">
      <property name="geometry">
       <rect>
        <x>22</x>
@@ -173,7 +173,7 @@
      <property name="title">
       <string>Greenness</string>
      </property>
-     <widget class="QCheckBox" name="checkBox_GCC_4">
+     <widget class="QCheckBox" name="checkBox_GCC">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -200,7 +200,7 @@
        <bool>true</bool>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox_ExG_4">
+     <widget class="QCheckBox" name="checkBox_ExG">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -221,7 +221,7 @@
        <string>ExG (Excess Green Index)</string>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox_RGI_4">
+     <widget class="QCheckBox" name="checkBox_RGI">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -242,7 +242,7 @@
        <string>RGI (Red-Green Index)</string>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox_NDVI_4">
+     <widget class="QCheckBox" name="checkBox_NDVI">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -263,7 +263,7 @@
        <string>NDVI (Norm. Dif. Veg. Index)</string>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox_GLI_4">
+     <widget class="QCheckBox" name="checkBox_GLI">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -285,7 +285,7 @@
       </property>
      </widget>
     </widget>
-    <widget class="QCheckBox" name="checkBox_Texture_4">
+    <widget class="QCheckBox" name="checkBox_Texture">
      <property name="geometry">
       <rect>
        <x>30</x>
@@ -306,7 +306,7 @@
       <string>Texture</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBox_ShannonEntropy_4">
+    <widget class="QCheckBox" name="checkBox_ShannonEntropy">
      <property name="geometry">
       <rect>
        <x>30</x>
@@ -330,7 +330,7 @@
       <bool>true</bool>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBox_Intensity_4">
+    <widget class="QCheckBox" name="checkBox_Intensity">
      <property name="geometry">
       <rect>
        <x>30</x>
@@ -354,7 +354,7 @@
       <bool>true</bool>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBoxColor_HSV_4">
+    <widget class="QCheckBox" name="checkBoxColor_HSV">
      <property name="geometry">
       <rect>
        <x>30</x>
@@ -446,7 +446,7 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QRadioButton" name="radioButton_ROIShapeRectangle_4">
+       <widget class="QRadioButton" name="radioButton_ROIShapeRectangle">
         <property name="font">
          <font>
           <family>MS Shell Dlg 2</family>
@@ -478,7 +478,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QRadioButton" name="radioButton_ROIShapeEllipse_4">
+       <widget class="QRadioButton" name="radioButton_ROIShapeEllipse">
         <property name="font">
          <font>
           <family>MS Shell Dlg 2</family>
@@ -512,7 +512,7 @@
      <string>Name</string>
     </property>
    </widget>
-   <widget class="QSpinBox" name="spinBoxColorClusters_4">
+   <widget class="QSpinBox" name="spinBoxColorClusters">
     <property name="geometry">
      <rect>
       <x>190</x>
@@ -616,7 +616,7 @@
     </property>
     <layout class="QGridLayout" name="gridLayout_4">
      <item row="0" column="0">
-      <widget class="QCheckBox" name="checkBoxDisplayROIs_4">
+      <widget class="QCheckBox" name="checkBoxDisplayROIs">
        <property name="font">
         <font>
          <family>MS Shell Dlg 2</family>
@@ -651,7 +651,7 @@
       </spacer>
      </item>
      <item row="0" column="2">
-      <widget class="QCheckBox" name="checkBoxCalcColors_4">
+      <widget class="QCheckBox" name="checkBoxCalcColors">
        <property name="font">
         <font>
          <family>MS Shell Dlg 2</family>
