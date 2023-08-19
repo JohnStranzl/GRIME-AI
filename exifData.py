@@ -2,6 +2,8 @@ import os
 
 import exifreader
 
+from PIL import Image, ImageQt
+from PIL.ExifTags import TAGS
 
 # ======================================================================================================================
 #
@@ -39,6 +41,8 @@ class EXIFData:
         with open(fullPathAndFilename, 'rb') as f:
             exif = []
 
+            self.PIL_get_exif(f)
+
             exif = exifreader.process_file(f)
 
             for k in sorted(exif.keys()):
@@ -53,4 +57,16 @@ class EXIFData:
         f.close()
 
         return self.header, self.EXIF
+
+    # ----------------------------------------------------------------------------------------------------
+    #
+    # ----------------------------------------------------------------------------------------------------
+    def PIL_get_exif(self, fn):
+        ret = {}
+        i = Image.open(fn)
+        info = i._getexif()
+        for tag, value in info.items():
+            decoded = TAGS.get(tag, tag)
+            ret[decoded] = value
+        return ret
 

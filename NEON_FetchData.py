@@ -10,7 +10,7 @@ import shutil
 import rpy2.robjects.packages as rpackages
 
 # GRIMe-AI MODULES
-from GRIMe_QProgressWheel import QProgressWheel
+from GRIME_QProgressWheel import QProgressWheel
 
 
 # ======================================================================================================================

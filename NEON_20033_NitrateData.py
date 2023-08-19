@@ -11,7 +11,7 @@ import shutil
 # THIRD PARTY MODULES
 import rpy2.robjects.packages as rpackages
 
-from GRIMe_QProgressWheel import QProgressWheel
+from GRIME_QProgressWheel import QProgressWheel
 # GRIMe-AI MODULES
 from nitrateData import nitrateData
 

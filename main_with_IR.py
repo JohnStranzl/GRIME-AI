@@ -49,15 +49,15 @@ from matplotlib.figure import Figure
 from sklearn.cluster import KMeans
 
 import requests
-from GRIMe_ImageData import imageData
+from GRIME_ImageData import imageData
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
-from GRIMe_PhenoCam import GRIMe_PhenoCam, dailyList
-from GRIMe_ProductTable import GRIMe_ProductTable
-from GRIMe_QMessageBox import GRIMe_QMessageBox
-from GRIMe_QProgressWheel import QProgressWheel
-from GRIMe_roiData import GRIMe_roiData, ROIShape
+from GRIME_PhenoCam import GRIMe_PhenoCam, dailyList
+from GRIME_ProductTable import GRIMe_ProductTable
+from GRIME_QMessageBox import GRIMe_QMessageBox
+from GRIME_QProgressWheel import QProgressWheel
+from GRIME_roiData import GRIMe_roiData, ROIShape
 from NEON_20033_NitrateData import NEON_20033_NitrateData
 from NEON_FetchData import NEON_FetchData
 from exifData import EXIFData

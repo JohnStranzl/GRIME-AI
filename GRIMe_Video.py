@@ -2,9 +2,9 @@ import os
 import cv2
 import imageio
 
-from GRIMe_Utils import GRIMe_Utils
-from GRIMe_Color import GRIMe_Color
-from GRIMe_QProgressWheel import QProgressWheel
+from GRIME_AI_Utils import GRIMe_Utils
+from GRIME_AI_Color import GRIMe_Color
+from GRIME_QProgressWheel import QProgressWheel
 import datetime
 
 class GRIMe_Video:

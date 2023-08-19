@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QTableWidget, QCheckBox
 # ======================================================================================================================
 #
 # ======================================================================================================================
-class GRIMe_QTableWidget(QTableWidget):
+class GRIME_QTableWidget(QTableWidget):
 
     def __init__(self, parent=None):
         QTableWidget.__init__(self, parent)

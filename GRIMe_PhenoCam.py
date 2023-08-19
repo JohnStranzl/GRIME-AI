@@ -1,16 +1,18 @@
+import os
 import datetime
 import requests
 import urllib.request
 import re
 from urllib.request import urlopen
 
-from GRIMe_QProgressWheel import QProgressWheel
+from GRIME_QProgressWheel import QProgressWheel
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
-from GRIMe_ImageData import imageData
+from GRIME_ImageData import imageData
 
 global bChromeDriverLoaded
 bChromeDriverLoaded = False
@@ -53,50 +55,20 @@ class GRIMe_PhenoCam():
 
             # ----------
             # GET THE FILENAMES OF EACH VISIBLE LIGHT IMAGE FOR THE SELECTED DATE
-            if 1:
-                if bChromeDriverLoaded == False:
-                    options = Options()
-                    options.add_argument('--headless')
-                    options.add_argument('--disable-gpu')  # Last I checked this was necessary.
+            # ----------
+            response = requests.get(dailyURLvisible)
+            soup = BeautifulSoup(response.text, 'html5lib')
 
-                    driver = webdriver.Chrome('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe', chrome_options=options)  # Optional argument, if not specified will search path.
-
-                    driver.minimize_window()
-                    driver.minimize_window()
-                    driver.get(dailyURLvisible)
-                    driver.minimize_window()
-
-                    username = driver.find_element_by_name('username')
-                    username.send_keys('JohnStranzl')
-                    password = driver.find_element_by_name('password')
-                    password.send_keys('V3ntur3s63*')
-                    password.submit()
-                    #time.sleep(5)  # Let the user actually see something!
-
-                    bChromeDriverLoaded = True
-                else:
-                    driver.minimize_window()
-                    driver.get(dailyURLvisible)
-                    driver.minimize_window()
-
-                webContent = driver.page_source
-
-                #driver.quit()
-
-                # PARSE THE HTML TO EXTRACT OUT THE JPG LINKS
-                soup = BeautifulSoup(webContent, 'html5lib')
-                links = soup.findAll("a", href=lambda href: href and "jpg" in href)
-            else:
-                # ----------
-                # GET THE FILENAMES OF EACH VISIBLE LIGHT IMAGE FOR THE SELECTED DATE
-                response = requests.get(dailyURLvisible)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                links = soup.find_all('jpg')
+            links=[]
+            for img in soup.find_all("img"):
+                if img['src'].endswith("jpg"):
+                    links.append(img['src'])
 
             listlength = len(links)
 
             for link in links:
-                fullPathAndFilename = link['href']
+                fullPathAndFilename = link
+                fullPathAndFilename = fullPathAndFilename.replace('thumbnails', 'archive')
                 filename = fullPathAndFilename.split('/')[-1]
                 timestamp = filename.split('_')[-1]
                 hour = int(timestamp[0:2])

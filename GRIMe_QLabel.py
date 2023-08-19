@@ -3,7 +3,7 @@ from PyQt5.QtCore import QRect, QPoint, Qt
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPainterPath, QPolygon, QPolygonF
 from PyQt5.QtWidgets import QLabel, QVBoxLayout
 
-from GRIMe_roiData import ROIShape
+from GRIME_roiData import ROIShape
 
 from enum import Enum
 
@@ -15,7 +15,7 @@ class DrawingMode(Enum):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-class GRIMe_QLabel(QLabel):
+class GRIME_QLabel(QLabel):
     x0 = -1
     y0 = -1
     x1 = -1
@@ -159,14 +159,14 @@ class GRIMe_QLabel(QLabel):
                     qp.drawLine(lp, cp)
                 lp = cp
 
-            if self.enableFill:
-                # Fill polygon
-                polyPath = QPainterPath()
-                polyPath.addPolygon(myPoints)
+                if self.enableFill:
+                    # Fill polygon
+                    polyPath = QPainterPath()
+                    polyPath.addPolygon(QPolygonF(myPoints))
 
-                # Draw polygon
-                qp.drawPolygon(myPoints)
-                qp.fillPath(polyPath, brush)
+                    # Draw polygon
+                    qp.drawPolygon(QPolygonF(myPoints))
+                    qp.fillPath(polyPath, brush)
 
     # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------

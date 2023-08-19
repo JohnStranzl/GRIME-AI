@@ -4,7 +4,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 import promptlib
-import GRIMe_Utils
+import GRIME_AI_Utils
 
 class Datapaths():
 
