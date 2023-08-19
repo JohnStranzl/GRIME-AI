@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.3.1"
+#define MyAppVersion "0.0.3.2"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIMe-AI.exe"
@@ -24,7 +24,7 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\Astrid Haugen\Desktop\TestInstall
-OutputBaseFilename=GRIMe-AI 0.0.3.1 Setup
+OutputBaseFilename=GRIMe-AI 0.0.3.2 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
@@ -42,10 +42,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
 Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\R-4.2.2-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
 Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\icons\*.*"; DestDir: "{app}\icons"
 Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\QDialog*.ui"; DestDir: "{app}"
+;Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
 ;Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
