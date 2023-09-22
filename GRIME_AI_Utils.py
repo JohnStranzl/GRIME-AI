@@ -1,10 +1,12 @@
 import os
-import datetime
+import datetime as datetime
 import re
 
 import csv
 import cv2
 import numpy as np
+
+import pandas as pd
 
 import urllib.request
 from urllib.request import urlopen
@@ -273,7 +275,7 @@ class GRIME_AI_Utils:
         if not os.path.exists(downloadsFolder):
             os.mkdir(downloadsFolder)
 
-        self.EditSaveImagesOutputFolder.setText(downloadsFolder)
+        #self.EditSaveImagesOutputFolder.setText(downloadsFolder)
 
         # --------------------------------------------------
         # CREATE FOLDER IN USER'S DOCUMENTS FOLDER FOR DOWNLOADED IMAGES
@@ -407,4 +409,18 @@ class GRIME_AI_Utils:
 
         return downloadsFilePath
 
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def getRangeOfDates(self, strStartYearMonth, strEndYearMonth):
+        # GET A LIST OF THE MONTHS FOR THE YEARS BETWEEN THE START DATA AND END DATE
+        start_date = datetime.datetime.strptime(strStartYearMonth, "%Y-%m")
+        end_date = datetime.datetime.strptime(strEndYearMonth, "%Y-%m")
 
+        # Difference between each date. M means one month
+        date_list = pd.date_range(start_date, end_date, freq='MS')
+
+        # if you want dates in string format then convert it into string
+        date_list = date_list.strftime("%Y-%m")
+
+        return date_list.tolist()

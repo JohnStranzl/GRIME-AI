@@ -59,7 +59,6 @@ from GRIME_QMessageBox import GRIMe_QMessageBox
 from GRIME_QProgressWheel import QProgressWheel
 from GRIME_roiData import GRIMe_roiData, ROIShape
 from NEON_20033_NitrateData import NEON_20033_NitrateData
-from NEON_FetchData import NEON_FetchData
 from exifData import EXIFData
 from siteData import siteData
 
@@ -618,34 +617,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if bCreateVideos:
             out.release()
             out2.release()
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def saveSettings(self):
-        configFilePath = os.path.expanduser('~')
-        configFilePath = os.path.join(configFilePath, 'Documents')
-        configFilePath = os.path.join(configFilePath, 'GRIMe-AI')
-        if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
-        configFilePath = os.path.join(configFilePath, 'Settings')
-        if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
-
-        config = ConfigParser()
-
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
-        f = open(configFile, 'w+')
-
-        config.read(configFile)
-        config.add_section('ROI')
-        config.set('ROI', 'Sky', 'TBD')
-        config.set('ROI', 'Grass1', 'TBD')
-        config.set('ROI', 'Grass2', 'TBD')
-        config.set('ROI', 'Trees1', 'TBD')
-        config.set('ROI', 'Trees2', 'TBD')
-
-        config.write(f)
-        f.close()
 
     # --------------------------------------------------
     # --------------------------------------------------
@@ -1906,7 +1877,7 @@ def readFieldSiteTable():
 
     # IF AT LEAST ONE FIELD SITE TABLE IS FOUND ON THE NEON SITE...
     if nErrorCode == 0:
-        csv_links = fetchFieldSiteTableURL(url)
+        csv_links = NEON_API.fetchFieldSiteTableURL(url)
 
         # download all CSV files
         filename_with_path = downloadFieldSiteTableFiles(csv_links)

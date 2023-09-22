@@ -1,16 +1,11 @@
-import os
 import datetime
 import requests
 import urllib.request
 import re
-from urllib.request import urlopen
 
 from GRIME_QProgressWheel import QProgressWheel
 
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
 
 from GRIME_ImageData import imageData
 
@@ -20,7 +15,7 @@ bChromeDriverLoaded = False
 global driver
 driver = None
 
-class GRIMe_PhenoCam():
+class GRIME_PhenoCam():
 
     def __init__(self):
         self.phenoCamURL = 'https://phenocam.nau.edu'
@@ -126,7 +121,7 @@ class GRIMe_PhenoCam():
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getStartDate():
+    def getStartDate(self):
 
         # providing url
         url = "https://phenocam.nau.edu/webcam/sites/NEON.D03.BARC.DP1.20002/"
@@ -157,7 +152,7 @@ class GRIMe_PhenoCam():
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getEndDate():
+    def getEndDate(self):
         nYear = 1970
         nMonth = 1
         nDay = 1
@@ -189,7 +184,7 @@ class GRIMe_PhenoCam():
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getPhenocamImageCount(siteCode, domainCode, start_date, end_date, start_time, end_time):
+    def getPhenocamImageCount(self, siteCode, domainCode, start_date, end_date, start_time, end_time):
 
         imageList = dailyList([], [])
 
@@ -208,7 +203,7 @@ class GRIMe_PhenoCam():
 
             PhenocamURL = PhenocamURL.replace('ARIK', siteCode); PhenocamURL = PhenocamURL.replace('D10', domainCode)
 
-            tmpList = GRIMe_PhenoCam().getVisibleImages(PhenocamURL, start_time, end_time)
+            tmpList = GRIME_PhenoCam().getVisibleImages(PhenocamURL, start_time, end_time)
 
             imageList.setVisibleList(tmpList.getVisibleList())
 
@@ -220,7 +215,7 @@ class GRIMe_PhenoCam():
         del progressBar
 
         try:
-            GRIMe_PhenoCam.closeChromeDriver()
+            GRIME_PhenoCam.closeChromeDriver()
         except:
             pass
 

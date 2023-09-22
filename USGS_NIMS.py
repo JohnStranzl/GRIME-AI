@@ -117,7 +117,7 @@ class USGS_NIMS:
 
         return(myList)
 
-    # ------------      ------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
     def get_nwisID(self):
@@ -187,6 +187,9 @@ class USGS_NIMS:
 
             listOfImages_text = self.fetchListOfImages(siteName, after, before)
 
+            if listOfImages_text == '[]':
+                listOfImages_text = ''
+
             if len(listOfImages) == 0:
                 listOfImages = listOfImages_text
             else:
@@ -236,74 +239,84 @@ class USGS_NIMS:
         # SPLIT LIST INTO AN ARRAY OF INDIVIDUAL IMAGE NAMES
         listOfImages = listOfImages.split(',')
 
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, len(listOfImages) + 1)
-        progressBar.show()
+        if any(listOfImages):
+            progressBar = QProgressWheel()
+            progressBar.setRange(0, len(listOfImages) + 1)
+            progressBar.show()
 
-        # DOWNLOAD AND SAVE IMAGES
-        for imageIndex, image in enumerate(listOfImages):
-            progressBar.setWindowTitle(image)
-            progressBar.setValue(imageIndex)
-            #progressBar.repaint()
+            # DOWNLOAD AND SAVE IMAGES
+            missingImageCount = 0
+            for imageIndex, image in enumerate(listOfImages):
+                progressBar.setWindowTitle(image)
+                progressBar.setValue(imageIndex)
+                #progressBar.repaint()
 
-            fullURL = imageEnpoint + '/' + siteName + '/' + image
-            fullFilename = os.path.join(saveFolder, image)
-            print(fullURL)
-            urllib.request.urlretrieve(fullURL, fullFilename)
+                if image != '[]':
+                    try:
+                        fullURL = imageEnpoint + '/' + siteName + '/' + image
+                        fullFilename = os.path.join(saveFolder, image)
+                        if os.path.isfile(fullFilename) == False:
+                            urllib.request.urlretrieve(fullURL, fullFilename)
+                    except:
+                        if missingImageCount == 0:
+                            strMessage = 'One or more images reported as available by NIMS are not available.'
+                            msgBox = GRIMe_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
+                            response = msgBox.displayMsgBox()
+                        missingImageCount += 1
 
-        # CLOSE AND DELETE THE PROGRESSBAR
-        progressBar.close()
-        del progressBar
+            # CLOSE AND DELETE THE PROGRESSBAR
+            progressBar.close()
+            del progressBar
 
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # FETCH STAGE AND DISCHARGE
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        for i in range(numberOfDays):
-            startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # FETCH STAGE AND DISCHARGE
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            for i in range(numberOfDays):
+                startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
 
-            water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites="
-            fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
+                water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites="
+                fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
 
-            startDay = startDate + timedelta(days=i)
-            timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
-            fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
+                startDay = startDate + timedelta(days=i)
+                timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
+                fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
 
-            with urllib.request.urlopen(fullURL) as response:
-                html = response.read()
+                with urllib.request.urlopen(fullURL) as response:
+                    html = response.read()
 
-            urllib.request.urlretrieve(fullURL, fullFilename)
+                urllib.request.urlretrieve(fullURL, fullFilename)
 
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # FETCH STAGE AND DISCHARGE
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # for i in range(numberOfDays):
-        #     startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
-        #
-        #     water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=json&sites="
-        #     fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
-        #
-        #     startDay = startDate + timedelta(days=i)
-        #     timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
-        #     fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".json")
-        #
-        #     response = urlopen(fullURL)
-        #     data_json = json.loads(response.read())
-        #
-        #     #urllib.request.urlretrieve(fullURL, fullFilename)
-        #
-        #     data_file = open(fullFilename, 'w', newline='')
-        #     csv_writer = csv.writer(data_file)
-        #
-        #     count = 0
-        #     for data in data_json:
-        #         if type(data) != str:
-        #             if count == 0:
-        #                 header = data.keys()
-        #                 csv_writer.writerow(header)
-        #                 count += 1
-        #             csv_writer.writerow(data.values())
-        #
-        #     data_file.close()
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # FETCH STAGE AND DISCHARGE
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # for i in range(numberOfDays):
+            #     startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
+            #
+            #     water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=json&sites="
+            #     fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
+            #
+            #     startDay = startDate + timedelta(days=i)
+            #     timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
+            #     fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".json")
+            #
+            #     response = urlopen(fullURL)
+            #     data_json = json.loads(response.read())
+            #
+            #     #urllib.request.urlretrieve(fullURL, fullFilename)
+            #
+            #     data_file = open(fullFilename, 'w', newline='')
+            #     csv_writer = csv.writer(data_file)
+            #
+            #     count = 0
+            #     for data in data_json:
+            #         if type(data) != str:
+            #             if count == 0:
+            #                 header = data.keys()
+            #                 csv_writer.writerow(header)
+            #                 count += 1
+            #             csv_writer.writerow(data.values())
+            #
+            #     data_file.close()
 
     # ------------------------------------------------------------------------------------------------------------------
     #

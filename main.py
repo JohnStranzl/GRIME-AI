@@ -16,7 +16,6 @@
 #
 
 # cv2.mahalanobis
-from datetime import date
 # matplotlib.use('Qt5Agg')
 
 # import pycurl
@@ -29,9 +28,10 @@ from datetime import date
 import time
 from time import sleep
 
+import pandas as pd
+
 import math
 import csv
-
 import shutil
 
 import requests
@@ -71,11 +71,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 import sobelData
 from GRIME_AI_ColorSegmentationDlg import GRIME_ColorSegmentationDlg
-from GRIME_EdgeDetectionDlg import GRIME_EdgeDetectionDlg
+from GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
 from GRIME_FileUtilitiesDlg import GRIME_FileUtilitiesDlg
 from GRIME_ImageNavigationDlg import GRIME_ImageNavigationDlg
-from GRIME_MaskEditorDlg import GRIME_MaskEditorDlg
-from GRIME_ProcessImage import GRIMe_ProcessImage
+from GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+from GRIME_ProcessImage import GRIME_ProcessImage
 from GRIME_AI_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
 from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
 from GRIME_AI_Color import GRIME_AI_Color
@@ -96,23 +96,20 @@ from GRIMe_ImageStats import GRIMe_ImageStats
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
-from GRIME_PhenoCam import GRIMe_PhenoCam, dailyList
+from GRIME_PhenoCam import GRIME_PhenoCam, dailyList
 from GRIME_ProductTable import GRIMe_ProductTable
 from GRIME_QLabel import DrawingMode
 from GRIME_QMessageBox import GRIMe_QMessageBox
 from GRIME_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_roiData import GRIMe_roiData, ROIShape
+from GRIME_roiData import GRIME_roiData, ROIShape
+
+from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
-from NEON_20033_NitrateData import NEON_20033_NitrateData
-from NEON_DownloadFieldSiteTableFiles import NEON_DownloadFieldSiteTableFiles
-from NEON_DownloadLatestImage import NEON_DownloadLatestImage
-from NEON_FetchData import NEON_FetchData
-from NEON_FetchFieldSiteTableURL import NEON_FetchFieldSiteTableURL
-from NEON_FetchSiteInfoFromNEON import NEON_FetchSiteInfoFromNEON
+from NEON_API import NEON_API
 
 # ------------------------------------------------------------
 #
@@ -303,7 +300,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.USGS_InitProductTable()
 
-        self.NEON_InitProductTable()
+        self.NEON_FormatProductTableHeader()
 
         self.initROITable()
 
@@ -318,8 +315,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_RetrieveNEONData.clicked.connect(self.RetrieveNEONDataClicked)
 
         self.pushButtonBrowseSaveImages_USGS_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_USGS_DownloadFolderClicked)
+        self.pushButtonBrowseSaveImages_NEON_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_NEON_DownloadFolderClicked)
 
-        #JES self.pushButtonBrowseSaveImagesOutputFolder.clicked.connect(self.pushButtonBrowseSaveImagesOutputFolderClicked)
         #JES self.pushButton_BuildFeatureFile.clicked.connect(self.GRIMe_NSF_Build)
         #JES self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
         #JES self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
@@ -334,7 +331,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.tableWidget_ROIList.removeRow(0)
 
         # SAVE AND RECALL SETTINGS
-        self.actionSave_Settings.triggered.connect(self.saveSettings)
+        self.actionSave_Settings.triggered.connect(GRIME_AI_Save_Utils().saveSettings)
 
         self.tabWidget.currentChanged.connect(self.tabWidgetChanged)
 
@@ -346,16 +343,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.ui.labelEdgeImage.setScaledContents(True)
 
         #--- NEON
-        self.listboxNEONSites.itemDoubleClicked.connect(self.NEON_SiteClicked)
-        self.listboxNEONSites.itemClicked.connect(self.NEON_SiteClicked)
-        self.listboxNEONSites.currentItemChanged.connect(self.NEON_SiteClicked)
-        self.listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
+        self.NEON_listboxSites.itemDoubleClicked.connect(self.NEON_SiteClicked)
+        self.NEON_listboxSites.itemClicked.connect(self.NEON_SiteClicked)
+        self.NEON_listboxSites.currentItemChanged.connect(self.NEON_SiteClicked)
+        self.NEON_listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
+
+        folderPath = GRIME_AI_Save_Utils().NEON_getSaveFolderPath()
+        self.edit_NEONSaveFilePath.setText(folderPath)
 
         #--- USGS
         self.listboxUSGSSites.itemDoubleClicked.connect(self.USGS_SiteClicked)
         self.listboxUSGSSites.itemClicked.connect(self.USGS_SiteClicked)
         self.listboxUSGSSites.currentItemChanged.connect(self.USGS_SiteClicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
+
+        folderPath = GRIME_AI_Save_Utils().USGS_getSaveFolderPath()
+        self.edit_USGSSaveFilePath.setText(folderPath)
 
         # ------------------------------------------------------------------------------------------------------------------
         # NIMS
@@ -376,7 +379,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         cameraInfo = self.myNIMS.getCameraInfo(strCamID)
         self.listboxUSGSSiteInfo.addItems(cameraInfo)
 
-        #self.EditSaveImages_USGS_DownloadFolder.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIMe-AI\\Downloads\\USGS_Test")
+        #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIMe-AI\\Downloads\\USGS_Test")
 
         # ------------------------------------------------------------------------------------------------------------------
         # NEON
@@ -456,7 +459,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         toolbar.addAction(button_action)
 
     # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # PROCESS NEON SITE CHANGE
+    # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def NEON_SiteClicked(self, item):
         global SITECODE
@@ -468,11 +473,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if gProcessClick == 0:
             gProcessClick = 1
 
-            SITECODE = updateNEONSiteInfo(self, item)
+            SITECODE = NEON_updateSiteInfo(self, item)
 
-            updateSiteProducts(self, item)
+            self.NEON_updateSiteProducts(item)
 
-            nErrorCode, latestImage, gWebImageCount = NEON_DownloadLatestImage(SITECODE, DOMAINCODE)
+            nErrorCode, latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
             if nErrorCode == 404:
                 gWebImagesAvailable = 0
                 self.labelLatestImage.setText("No Images Available")
@@ -487,13 +492,171 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # UPDATE NEON SITE PRODUCT INFORMATION
     # ------------------------------------------------------------------------------------------------------------------
     def NEON_ProductClicked(self, item):
-        updateNEONProductTable(self, item)
+        NEON_updateProductTable(self, item)
 
     # ------------------------------------------------------------------------------------------------------------------
     # DOWNLOAD NEON PRODUCT FILES
     # ------------------------------------------------------------------------------------------------------------------
     def RetrieveNEONDataClicked(self, item):
         downloadProductDataFiles(self, item)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    # PROCESS USGS DOWNLOAD MANAGER ACTIONS
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def USGS_InitProductTable(self):
+        # HEADER TITLES
+        headerList = ['Site', 'Image Count', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
+
+        # DEFINE HEADER STYLE
+        stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
+        header = self.table_USGS_Sites.horizontalHeader()
+
+        # POINTER TO HEADER
+        i = 0
+        for item in headerList:
+            headerItem = QTableWidgetItem(item)
+            headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
+            self.table_USGS_Sites.setHorizontalHeaderItem(i, headerItem)
+            self.table_USGS_Sites.setStyleSheet(stylesheet)
+            header.setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
+            i = i + 1
+
+        # SET THE HEADER FONT
+        font = QFont()
+        font.setBold(True)
+        self.table_USGS_Sites.horizontalHeader().setFont(font)
+        self.table_USGS_Sites.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.table_USGS_Sites.resizeColumnsToContents()
+
+        date_widget = QtWidgets.QDateEdit(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+        self.table_USGS_Sites.setCellWidget(0, 4, date_widget)
+        self.table_USGS_Sites.setCellWidget(0, 5, date_widget)
+
+        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+        date_widget.setKeyboardTracking(False)
+        self.table_USGS_Sites.setCellWidget(0, 6, date_widget)
+
+        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+        date_widget.setKeyboardTracking(False)
+        self.table_USGS_Sites.setCellWidget(0, 7, date_widget)
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def USGS_dateChangeMethod(self, date_widget, tableWidget):
+        imageCount = self.USGS_getImageCount()
+
+        tableWidget.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
+
+    # ======================================================================================================================
+    # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
+    # ======================================================================================================================
+    def USGS_FormatProductTable(self, tableProducts):
+        maxRows = 1
+
+        # JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
+        for i in range(tableProducts.rowCount()):
+            tableProducts.removeRow(0)
+
+        tableProducts.insertRow(0)
+
+        for i in range(maxRows):
+            m = 0
+            tableProducts.setItem(i, m, QTableWidgetItem(''))
+
+            m += 1
+            tableProducts.setItem(i, m, QTableWidgetItem(''))
+
+            # CONFIGURE DATES FOR SPECIFIC PRODUCT
+            m += 1
+            date_widget = QtWidgets.QDateEdit()
+            date_widget.setDisabled(True)
+            tableProducts.setCellWidget(i, m, date_widget)
+
+            m += 1
+            date_widget = QtWidgets.QDateEdit()
+            date_widget.setDisabled(True)
+            tableProducts.setCellWidget(i, m, date_widget)
+
+            # date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            # date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+            # tableProducts.setCellWidget(i, m, date_widget)
+
+            # date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            # date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+            # tableProducts.setCellWidget(i, m, date_widget)
+
+            m += 1
+            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+            date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            date_widget.setKeyboardTracking(False)
+            self.table_USGS_Sites.setCellWidget(i, m, date_widget)
+
+            m += 1
+            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
+            date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+            date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            date_widget.setKeyboardTracking(False)
+            self.table_USGS_Sites.setCellWidget(i, m, date_widget)
+
+            m += 1
+            dateTime = QDateTimeEdit()
+            dateTime.setDisplayFormat("hh:mm")
+            #dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            dateTime.setKeyboardTracking(False)
+            dateTime.setFrame(False)
+            tableProducts.setCellWidget(i, m, dateTime)
+
+            m += 1
+            dateTime = QDateTimeEdit()
+            dateTime.setDisplayFormat("hh:mm")
+            #dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            dateTime.setKeyboardTracking(False)
+            dateTime.setFrame(False)
+            tableProducts.setCellWidget(i, m, dateTime)
+
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def USGS_updateSiteInfo(self, item):
+
+        cameraIndex = self.listboxUSGSSites.currentRow()
+        if (cameraIndex >= 0):
+            strCamID    = self.listboxUSGSSites.currentItem().text()
+
+            self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
+
+            try:
+                #cameraDictionary = self.myNIMS.getCameraDictionary()
+                cameraList = self.myNIMS.getCameraList()
+                #JES self.listboxUSGSSites.clear()
+                self.listboxUSGSSites.addItems(cameraList)
+                self.listboxUSGSSiteInfo.clear()
+                self.listboxUSGSSiteInfo.addItems(self.myNIMS.getCameraInfo(strCamID))
+
+                siteName = self.myNIMS.get_camId()
+
+                nErrorCode, latestImage = self.myNIMS.getLatestImage(siteName)
+
+                if nErrorCode == 404:
+                    self.labelLatestUSGSSiteImage.setText("No Images Available")
+                else:
+                    self.labelLatestUSGSSiteImage.setPixmap(latestImage.scaled(self.labelLatestUSGSSiteImage.size(),
+                                                                               QtCore.Qt.KeepAspectRatio,
+                                                                               QtCore.Qt.SmoothTransformation))
+            except:
+                pass
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -509,14 +672,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
+    def pushButtonBrowseSaveImages_NEON_DownloadFolderClicked(self, item):
+        # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
+        folder =  promptlib.Files().dir()
+
+        if os.path.exists(folder):
+            self.edit_NEONSaveFilePath.setText(folder)
+        else:
+            os.makedirs(folder)
+
+        GRIME_AI_Save_Utils().NEON_SaveFolderPath(folder)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def pushButtonBrowseSaveImages_USGS_DownloadFolderClicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
 
         if os.path.exists(folder):
-            self.EditSaveImages_USGS_DownloadFolder.setText(folder)
+            self.edit_USGSSaveFilePath.setText(folder)
         else:
             os.makedirs(folder)
+
+        GRIME_AI_Save_Utils().USGS_SaveFolderPath(folder)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -639,159 +818,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global nStop
         nStop = 1
 
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def USGS_InitProductTable(self):
-        # HEADER TITLES
-        headerList = ['Site', 'Image Count', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
-
-        # DEFINE HEADER STYLE
-        stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
-        header = self.table_USGS_Sites.horizontalHeader()
-
-        # POINTER TO HEADER
-        i = 0
-        for item in headerList:
-            headerItem = QTableWidgetItem(item)
-            headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.table_USGS_Sites.setHorizontalHeaderItem(i, headerItem)
-            self.table_USGS_Sites.setStyleSheet(stylesheet)
-            header.setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
-            i = i + 1
-
-        # SET THE HEADER FONT
-        font = QFont()
-        font.setBold(True)
-        self.table_USGS_Sites.horizontalHeader().setFont(font)
-        self.table_USGS_Sites.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.table_USGS_Sites.resizeColumnsToContents()
-
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        self.table_USGS_Sites.setCellWidget(0, 4, date_widget)
-        self.table_USGS_Sites.setCellWidget(0, 5, date_widget)
-
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-        date_widget.setKeyboardTracking(False)
-        self.table_USGS_Sites.setCellWidget(0, 6, date_widget)
-
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-        date_widget.setKeyboardTracking(False)
-        self.table_USGS_Sites.setCellWidget(0, 7, date_widget)
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def USGS_dateChangeMethod(self, date_widget, tableWidget):
-        imageCount = self.USGS_getImageCount()
-
-        tableWidget.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
-
-    # ======================================================================================================================
-    # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
-    # ======================================================================================================================
-    def USGS_FormatProductTable(self, tableProducts):
-        maxRows = 1
-
-        # JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
-        for i in range(tableProducts.rowCount()):
-            tableProducts.removeRow(0)
-
-        tableProducts.insertRow(0)
-
-        for i in range(maxRows):
-            m = 0
-            tableProducts.setItem(i, m, QTableWidgetItem(''))
-
-            m += 1
-            tableProducts.setItem(i, m, QTableWidgetItem(''))
-
-            # CONFIGURE DATES FOR SPECIFIC PRODUCT
-            m += 1
-            date_widget = QtWidgets.QDateEdit()
-            date_widget.setDisabled(True)
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            m += 1
-            date_widget = QtWidgets.QDateEdit()
-            date_widget.setDisabled(True)
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            m += 1
-            # date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            # date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-            # tableProducts.setCellWidget(i, m, date_widget)
-
-            # date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            # date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-            # tableProducts.setCellWidget(i, m, date_widget)
-
-            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-            date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-            date_widget.setKeyboardTracking(False)
-            self.table_USGS_Sites.setCellWidget(i, m, date_widget)
-
-            m += 1
-            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-            date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-            date_widget.setKeyboardTracking(False)
-            self.table_USGS_Sites.setCellWidget(i, m, date_widget)
-
-            m += 1
-            dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
-            dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-            dateTime.setKeyboardTracking(False)
-            dateTime.setFrame(False)
-            tableProducts.setCellWidget(i, m, dateTime)
-
-            m += 1
-            dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
-            dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-            dateTime.setKeyboardTracking(False)
-            dateTime.setFrame(False)
-            tableProducts.setCellWidget(i, m, dateTime)
-
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def USGS_updateSiteInfo(self, item):
-
-        cameraIndex = self.listboxUSGSSites.currentRow()
-        if (cameraIndex >= 0):
-            strCamID    = self.listboxUSGSSites.currentItem().text()
-
-            self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
-
-            try:
-                #cameraDictionary = self.myNIMS.getCameraDictionary()
-                cameraList = self.myNIMS.getCameraList()
-                #JES self.listboxUSGSSites.clear()
-                self.listboxUSGSSites.addItems(cameraList)
-                self.listboxUSGSSiteInfo.clear()
-                self.listboxUSGSSiteInfo.addItems(self.myNIMS.getCameraInfo(strCamID))
-
-                siteName = self.myNIMS.get_camId()
-
-                nErrorCode, latestImage = self.myNIMS.getLatestImage(siteName)
-
-                if nErrorCode == 404:
-                    self.labelLatestUSGSSiteImage.setText("No Images Available")
-                else:
-                    self.labelLatestUSGSSiteImage.setPixmap(latestImage.scaled(self.labelLatestUSGSSiteImage.size(),
-                                                                               QtCore.Qt.KeepAspectRatio,
-                                                                               QtCore.Qt.SmoothTransformation))
-            except:
-                pass
-
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
@@ -860,35 +886,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for roiObj in self.roiList:
             template = ', ' + (roiObj.getROIName() + ': ') + '#'
 
-            if self.checkBox_GCC.isChecked():
+            if self.colorSegmentationDlg.checkBox_GCC.isChecked():
                 newHeader = (newHeader + template).replace('#', 'GCC')
 
-            if self.checkBox_GLI.isChecked():
+            if self.colorSegmentationDlg.checkBox_GLI.isChecked():
                 newHeader = (newHeader + template).replace('#', 'GLI')
 
-            if self.checkBox_NDVI.isChecked():
+            if self.colorSegmentationDlg.checkBox_NDVI.isChecked():
                 newHeader = (newHeader + template).replace('#', 'NDVI')
 
-            if self.checkBox_ExG.isChecked():
+            if self.colorSegmentationDlg.checkBox_ExG.isChecked():
                 newHeader = (newHeader + template).replace('#', 'ExG')
 
-            if self.checkBox_RGI.isChecked():
+            if self.colorSegmentationDlg.checkBox_RGI.isChecked():
                 newHeader = (newHeader + template).replace('#', 'RGI')
 
-            if self.checkBox_Intensity.isChecked():
+            if self.colorSegmentationDlg.checkBox_Intensity.isChecked():
                 newHeader = (newHeader + template).replace('#', 'Intensity')
 
-            if self.checkBox_ShannonEntropy.isChecked():
+            if self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked():
                 newHeader = (newHeader + template).replace('#', 'Entropy')
 
-            if self.checkBox_Texture.isChecked():
+            if self.colorSegmentationDlg.checkBox_Texture.isChecked():
                 newHeader = (newHeader + template).replace('#', 'Texture')
 
                     # IF THERE IS MORE THAN ONE (1) ROI, APPEND AN INDEX ONTO THE HEADER LABEL
 
             nClusters = roiObj.getNumColorClusters()
 
-            if self.checkBoxColor_HSV.isChecked():
+            if self.colorSegmentationDlg.checkBoxColor_HSV.isChecked():
                 template = ', ' + (roiObj.getROIName() + ': ') + '#'
 
                 if nClusters == 1:
@@ -913,10 +939,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
         header = 'Image, Date (ISO), Time (ISO)'
 
-        if self.checkBoxScalarRegion_WholeImage.isChecked():
+        if self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked():
             header = self.buildImageScalarHeader(header)
 
-        if self.checkBoxScalarRegion_ROI.isChecked():
+        if self.colorSegmentationDlg.checkBoxScalarRegion_ROI.isChecked():
             header = self.buildROI_ScalarHeader(header)
 
         return header
@@ -933,7 +959,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         bCreateEXIFFile = False
         bCreateVideos = False
 
-        myGRIMe_Color = GRIMe_Color()
+        myGRIMe_Color = GRIME_AI_Color()
 
         global imageFileFolder
         hardDriveImageFolder = imageFileFolder + '/'
@@ -1053,7 +1079,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # --------------------------------------------------------------------------------------------------
                     # CALCULATE THE FEATURE SCALARS FOR THE ENTIRE IMAGE AND SAVE THEM TO THE CSV FILE
                     # --------------------------------------------------------------------------------------------------
-                    if self.checkBoxScalarRegion_WholeImage.isChecked():
+                    if self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked():
                         # BLUR THE IMAGE
                         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -1073,14 +1099,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
                         strOutputString = strOutputString + ',' + self.computeGreennessValue(redSum, greenSum, blueSum)
 
-                        if self.checkBox_Intensity.isChecked():
+                        if self.colorSegmentationDlg.checkBox_Intensity.isChecked():
                             strOutputString = strOutputString + ', %3.4f' % intensity
-                        if self.checkBox_ShannonEntropy.isChecked():
+                        if self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked():
                             strOutputString = strOutputString + ', %3.4f' % entropyValue
-                        if self.checkBox_Texture.isChecked():
+                        if self.colorSegmentationDlg.checkBox_Texture.isChecked():
                             strOutputString = strOutputString + ', %3.2f' % texture
 
-                        if self.checkBoxColor_HSV.isChecked():
+                        if self.colorSegmentationDlg.checkBoxColor_HSV.isChecked():
                             for idx in range(nClusters):
                                 # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
                                 h = float(clusterCenters[idx][0])
@@ -1094,7 +1120,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     progressBar.setValue(progressBarIndex)
                     progressBarIndex = progressBarIndex + 4
 
-                    if self.checkBoxScalarRegion_ROI.isChecked():
+                    if self.colorSegmentationDlg.checkBoxScalarRegion_ROI.isChecked():
 
                         strROI = self.calculateROIScalars(img)
 
@@ -1119,10 +1145,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global currentImage
 
         if currentImage:
-            myGRIMe_Color = GRIMe_Color()
+            myGRIME_Color = GRIME_AI_Color()
 
             # CREATE AN ROI OBJECT
-            roiObj = GRIMe_roiData()
+            roiObj = GRIME_roiData()
 
             # POPULATE ROI OBJECT WITH ROI INFORMATION
             if len(roiParameters.strROIName) > 0:
@@ -1174,11 +1200,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             roiObj.setNumColorClusters(roiParameters.numColorClusters)
 
             # EXTRACT DOMINANT RGB COLORS AND ADD THEM TO THE ROI OBJECT
-            qImg, clusterCenters, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
+            qImg, clusterCenters, hist = myGRIME_Color.KMeans(rgb, roiObj.getNumColorClusters())
             roiObj.setClusterCenters(clusterCenters, hist)
 
             # EXTRACT DOMINANT HSV COLORS AND ADD THEM TO THE ROI OBJECT
-            hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+            hist, colorClusters = myGRIME_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
             roiObj.setHSVClusterCenters(colorClusters, hist)
 
             roiObj.setTrainingImageName(currentImageFilename)
@@ -1227,7 +1253,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # CANNOT CHANGE THE VALUE FOR SUBSEQUENT TRAINED ROIs.
             # ----------------------------------------------------------------------------------------------------------
             #JES self.spinBoxColorClusters.setDisabled(True)
-
 
     # ==================================================================================================================
     #
@@ -1282,13 +1307,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             strOutputString = strOutputString + ',' + self.computeGreennessValue(redSum, greenSum, blueSum)
 
-            if self.checkBox_Intensity.isChecked():
+            if self.colorSegmentationDlg.checkBox_Intensity.isChecked():
                 strOutputString = strOutputString + ', %3.4f' % intensity
-            if self.checkBox_ShannonEntropy.isChecked():
+            if self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked():
                 strOutputString = strOutputString + ', %3.4f' % entropyValue
-            if self.checkBox_Texture.isChecked():
+            if self.colorSegmentationDlg.checkBox_Texture.isChecked():
                 strOutputString = strOutputString + ', %3.2f' % texture
-            if self.checkBoxColor_HSV.isChecked():
+            if self.colorSegmentationDlg.checkBoxColor_HSV.isChecked():
                 for idx in range(nClusters):
                     # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
                     h = float(hsvClusterCenters[idx][0])
@@ -1375,35 +1400,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def saveSettings(self):
-        configFilePath = os.path.expanduser('~')
-        configFilePath = os.path.join(configFilePath, 'Documents')
-        configFilePath = os.path.join(configFilePath, 'GRIMe-AI')
-        if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
-        configFilePath = os.path.join(configFilePath, 'Settings')
-        if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
-
-        config = ConfigParser()
-
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
-        f = open(configFile, 'w+')
-
-        config.read(configFile)
-        config.add_section('ROI')
-        config.set('ROI', 'Sky', 'TBD')
-        config.set('ROI', 'Grass1', 'TBD')
-        config.set('ROI', 'Grass2', 'TBD')
-        config.set('ROI', 'Trees1', 'TBD')
-        config.set('ROI', 'Trees2', 'TBD')
-
-        config.write(f)
-        f.close()
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
     def createColorBar(self, hist, centroids):
         # initialize the bar chart representing the relative frequency of each of the colors
         # bar = np.zeros((50, 300, 3), dtype="uint8")
@@ -1440,7 +1436,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def NEON_InitProductTable(self):
+    def NEON_FormatProductTableHeader(self):
 
         # HEADER TITLES
         headerList = ['Site', "Image Count", ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
@@ -1449,30 +1445,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
 
         # POINTER TO HEADER
-        header = self.tableProducts.horizontalHeader()
+        header = self.NEON_tableProducts.horizontalHeader()
 
         # INSERT TITLES INTO HEADER AND FORMAT HEADER
         i = 0
         for item in headerList:
             headerItem = QTableWidgetItem(item)
             headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.tableProducts.setHorizontalHeaderItem(i, headerItem)
-            self.tableProducts.setStyleSheet(stylesheet)
+            self.NEON_tableProducts.setHorizontalHeaderItem(i, headerItem)
+            self.NEON_tableProducts.setStyleSheet(stylesheet)
             header.setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
             i = i + 1
 
         # SET THE HEADER FONT
         font = QFont()
         font.setBold(True)
-        self.tableProducts.horizontalHeader().setFont(font)
-        self.tableProducts.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.tableProducts.resizeColumnsToContents()
+        self.NEON_tableProducts.horizontalHeader().setFont(font)
+        self.NEON_tableProducts.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.NEON_tableProducts.resizeColumnsToContents()
 
         date_widget = QtWidgets.QDateEdit(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        self.tableProducts.setCellWidget(1, 4, date_widget)
-        self.tableProducts.setCellWidget(1, 5, date_widget)
-        self.tableProducts.setCellWidget(1, 6, date_widget)
-        self.tableProducts.setCellWidget(1, 7, date_widget)
+        self.NEON_tableProducts.setCellWidget(1, 4, date_widget)
+        self.NEON_tableProducts.setCellWidget(1, 5, date_widget)
+        self.NEON_tableProducts.setCellWidget(1, 6, date_widget)
+        self.NEON_tableProducts.setCellWidget(1, 7, date_widget)
 
         try:
             self.tableWidget_ROIList.horizontalHeader().setVisible(True)
@@ -1643,27 +1639,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         try:
             startDateCol = 4
-            nYear     = self.table_USGS_Sites.cellWidget(0, startDateCol).date().year()
-            nMonth    = self.table_USGS_Sites.cellWidget(0, startDateCol).date().month()
-            nDay      = self.table_USGS_Sites.cellWidget(0, startDateCol).date().day()
+            nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, startDateCol).date())
             startDate = datetime.date(nYear, nMonth, nDay)
 
             endDateCol = 5
-            nYear   = self.table_USGS_Sites.cellWidget(0, endDateCol).date().year()
-            nMonth  = self.table_USGS_Sites.cellWidget(0, endDateCol).date().month()
-            nDay    = self.table_USGS_Sites.cellWidget(0, endDateCol).date().day()
+            nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, endDateCol).date())
             endDate = datetime.date(nYear, nMonth, nDay)
 
             startTimeCol = 6
-            nHour   = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().hour()
-            nMinute = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().minute()
-            nSecond = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().second()
+            nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time())
             startTime = datetime.time(nHour, nMinute, nSecond)
 
             endTimeCol = 7
-            nHour   = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().hour()
-            nMinute = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().minute()
-            nSecond = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().second()
+            nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
             endTime = datetime.time(nHour, nMinute, nSecond)
 
             nwisID = self.myNIMS.get_nwisID()
@@ -1682,38 +1670,47 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         site = self.listboxUSGSSites.currentItem().text()
 
         startDateCol = 4
-        nYear     = self.table_USGS_Sites.cellWidget(0, startDateCol).date().year()
-        nMonth    = self.table_USGS_Sites.cellWidget(0, startDateCol).date().month()
-        nDay      = self.table_USGS_Sites.cellWidget(0, startDateCol).date().day()
+        nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, startDateCol).date())
         startDate = datetime.date(nYear, nMonth, nDay)
 
         endDateCol = 5
-        nYear   = self.table_USGS_Sites.cellWidget(0, endDateCol).date().year()
-        nMonth  = self.table_USGS_Sites.cellWidget(0, endDateCol).date().month()
-        nDay    = self.table_USGS_Sites.cellWidget(0, endDateCol).date().day()
+        nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, endDateCol).date())
         endDate = datetime.date(nYear, nMonth, nDay)
 
         startTimeCol = 6
-        nHour   = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().hour()
-        nMinute = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().minute()
-        nSecond = self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time().second()
+        nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time())
         startTime = datetime.time(nHour, nMinute, nSecond)
 
         endTimeCol = 7
-        nHour   = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().hour()
-        nMinute = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().minute()
-        nSecond = self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time().second()
+        nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
         endTime = datetime.time(nHour, nMinute, nSecond)
 
         nwisID = self.myNIMS.get_nwisID()
 
-        downloadsFilePath = os.path.join(self.EditSaveImages_USGS_DownloadFolder.text(), 'Images')
+        downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
         if not os.path.exists(downloadsFilePath):
             os.makedirs(downloadsFilePath)
 
         self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=downloadsFilePath, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
 
-        #fetchUSGSImages(self.table_USGS_Sites, self.EditSaveImages_USGS_DownloadFolder)
+        #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def separateDate(self, date):
+        nYear     = date.year()
+        nMonth    = date.month()
+        nDay      = date.day()
+
+        return nYear, nMonth, nDay
+
+    def separateTime(self, time):
+        nHour   = time.hour()
+        nMinute = time.minute()
+        nSecond = time.second()
+
+        return nHour, nMinute, nSecond
 
     # ==================================================================================================================
     #
@@ -1759,7 +1756,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonEdgeDetection(self):
-        self.edgeDetectionDlg = GRIME_EdgeDetectionDlg(frame)
+        self.edgeDetectionDlg = GRIME_AI_EdgeDetectionDlg(frame)
 
         self.edgeDetectionDlg.edgeDetectionSignal.connect(self.edgeDetectionMethod)
         self.edgeDetectionDlg.featureDetectionSignal.connect(self.featureDetectionMethod)
@@ -1930,13 +1927,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # ==================================================================================================================
     # ==================================================================================================================
+    # IMAGE MASK FUNCTIONALITY
+    # ==================================================================================================================
     # ==================================================================================================================
     def onMyToolBarCreateMask(self):
 
         if self.colorSegmentationDlg == None:
             self.labelOriginalImage.setDrawingMode(DrawingMode.MASK)
 
-            self.maskEditorDlg = GRIME_MaskEditorDlg()
+            self.maskEditorDlg = GRIME_AI_MaskEditorDlg()
 
             self.maskEditorDlg.addMask_Signal.connect(self.addMask)
             self.maskEditorDlg.generateMask_Signal.connect(self.generateMask)
@@ -1947,9 +1946,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.maskEditorDlg.show()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def fillPolygonChanged(self, bFill):
         self.labelOriginalImage.enablePolygonFill(bFill)
 
+    # ------------------------------------------------------------------------------------------------------------------
     def maskDialogClose(self):
         if self.maskEditorDlg == None:
             self.maskEditorDlg.close()
@@ -1958,15 +1959,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
 
+    # ------------------------------------------------------------------------------------------------------------------
     def resetMask(self):
         self.labelOriginalImage.resetMask()
         self.labelOriginalImage.update()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def addMask(self):
         self.labelOriginalImage.incrementPolygon()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def generateMask(self):
-
         #global imageFileFolder
         global currentImageFilename
 
@@ -1992,7 +1995,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             for i in range(polygon.count()):
                 myPoints.append([polygon.point(i).x() * widthMultiplier, polygon.point(i).y() * heightMultiplier])
 
-            cv2.fillPoly(mask, np.int32([myPoints]), color=(255, 255, 255))
+            if len(myPoints) > 0:
+                cv2.fillPoly(mask, np.int32([myPoints]), color=(255, 255, 255))
 
         masked = cv2.bitwise_and(img1, img1, mask=mask)
 
@@ -2009,7 +2013,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Check for the existence of the filename path and create if it doesn't exist
             if not os.path.exists(maskFolderPath):
-                os.mkdir(maskFolderPath)
+                os.makedirs(maskFolderPath)
 
             # Extract image filename to be used for creating the mask and polygon filenames
             filename = os.path.basename(currentImageFilename)
@@ -2064,9 +2068,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
                 qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
 
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
     def changePolygonColor(self, polygonColor):
         self.labelOriginalImage.setBrushColor(polygonColor)
         self.labelOriginalImage.drawPolygon()
@@ -2185,6 +2187,47 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
         QCoreApplication.processEvents()
 
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def NEON_updateSiteProducts(self, item):
+        site_json = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
+
+        self.NEON_listboxSiteProducts.clear()
+
+        for product in site_json['data']['dataProducts']:
+            strText = product['dataProductCode'] + ": " + product['dataProductTitle']
+            assert isinstance(strText, object)
+            self.NEON_listboxSiteProducts.addItem(strText)
+
+        self.NEON_listboxSiteProducts.show()
+
+        # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
+        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        itemNitrate = self.NEON_listboxSiteProducts.findItems('Nitrate', QtCore.Qt.MatchContains)
+        nIndex = 0
+        if len(itemNitrate) > 0:
+            for item in itemNitrate:
+                nIndex = self.NEON_listboxSiteProducts.row(item)
+                self.NEON_listboxSiteProducts.setCurrentRow(nIndex)
+
+            NEON_updateProductTable(self, nIndex)
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        # JES
+
+        # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
+        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        item20002 = self.NEON_listboxSiteProducts.findItems('20002', QtCore.Qt.MatchContains)
+        nIndex = 0
+        if len(item20002) > 0:
+            for item in item20002:
+                nIndex = self.NEON_listboxSiteProducts.row(item)
+                self.NEON_listboxSiteProducts.setCurrentRow(nIndex)
+
+            NEON_updateProductTable(self, nIndex)
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        # JES
+        self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -2559,7 +2602,7 @@ def processImage(self, myImage):
         # EDGE DETECTION METHODS
         if len(gray) != 0:
 
-            myProcessImage = GRIMe_ProcessImage()
+            myProcessImage = GRIME_ProcessImage()
 
             if g_edgeMethodSettings.method == edgeMethodsClass.CANNY:
                 pix = myProcessImage.processCanny(img1, gray)
@@ -2697,7 +2740,7 @@ def computeBlurAndBrightness(shiftSize):
 def cleanImages(folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport, bMoveImages):
     extensions = ('.jpg', '.jpeg', '.png')
 
-    myGRIMe_Color = GRIMe_Color()
+    myGRIMe_Color = GRIME_AI_Color()
 
     if bCreateReport:
         csvFilename = 'ImageTriage_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
@@ -2791,7 +2834,7 @@ def cleanImages(folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMi
                 filepath = os.path.dirname(file)
                 tempFolder = os.path.join(filepath, "MovedImages")
                 if not os.path.exists(tempFolder):
-                    os.mkdir(tempFolder)
+                    os.makedirs(tempFolder)
 
                 shutil.move(file, tempFolder)
 
@@ -3150,44 +3193,20 @@ def top_colors(image, n):
 
 
 # ======================================================================================================================
-# THIS FUNCTION WILL FETCH AND READ THE NEON FIELD SITE TABLE THAT CONTAINS INFORMATION ABOUT ALL THE
-# NEON SITES INCLUDING ALL THE IMAGES THAT ARE AVAILABLE FOR A SITE ON THE PHENOCAM WEBSITE.
-# ======================================================================================================================
-def readFieldSiteTable():
-    siteList = []
-
-    nErrorCode = GRIME_AI_Utils.check_url_validity(url)
-
-    # IF AT LEAST ONE FIELD SITE TABLE IS FOUND ON THE NEON SITE...
-    if nErrorCode == 0:
-        csv_links = NEON_FetchFieldSiteTableURL(url)
-
-        # download all CSV files
-        filename_with_path = NEON_DownloadFieldSiteTableFiles(csv_links)
-
-        siteList = GRIME_AI_Utils.parseCSV(filename_with_path)
-    # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST
-    elif nErrorCode == -1:
-        siteList = []
-
-    return siteList
-
-
-# ======================================================================================================================
 # THIS FUNCTION UPDATES THE GUI WITH THE INFO FOR A NEON SITE SELECTED BY THE END-USER.
 # ======================================================================================================================
-def updateNEONSiteInfo(self, item):
-    self.listboxNEONSiteInfo.clear()
+def NEON_updateSiteInfo(self, item):
+    self.NEON_listboxSiteInfo.clear()
 
     # EXTRACT THE SITE ID FOR THE SELECTED ITEM
-    siteID = self.listboxNEONSites.currentItem().text()
+    siteID = self.NEON_listboxSites.currentItem().text()
 
     global SITECODE
     SITECODE = siteID.split(' - ')[0]
 
     self.labelNEONSiteDetails.setText(SITECODE)
 
-    siteInfo = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
+    siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     global DOMAINCODE
     DOMAINCODE = siteInfo['data']['domainCode']
@@ -3202,7 +3221,7 @@ def updateNEONSiteInfo(self, item):
     for key in keys:
         tmp = key
         tmpSiteInfo = str(siteInfo['data'][key])
-        self.listboxNEONSiteInfo.addItem(tmp + ": " + tmpSiteInfo)
+        self.NEON_listboxSiteInfo.addItem(tmp + ": " + tmpSiteInfo)
 
     return (SITECODE)
 
@@ -3217,16 +3236,16 @@ def displayLatestImage(self):
 # ======================================================================================================================
 # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
 # ======================================================================================================================
-def updateNEONProductTable(self, item):
-    products = self.listboxSiteProducts.selectedItems()
+def NEON_updateProductTable(self, item):
+    products = self.NEON_listboxSiteProducts.selectedItems()
 
     # JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
-    for i in range(self.tableProducts.rowCount()):
-        self.tableProducts.removeRow(0)
+    for i in range(self.NEON_tableProducts.rowCount()):
+        self.NEON_tableProducts.removeRow(0)
 
     for i in range(len(products)):
-        strText = self.listboxSiteProducts.selectedItems()[i].text()
-        self.tableProducts.insertRow(i)
+        strText = self.NEON_listboxSiteProducts.selectedItems()[i].text()
+        self.NEON_tableProducts.insertRow(i)
 
         productID = strText.split(':')[0]
         availableMonthList = findAvailableMonths(productID)
@@ -3244,42 +3263,53 @@ def updateNEONProductTable(self, item):
         lastYear = int(monthFields[0])
 
         m = 0
-        self.tableProducts.setItem(i, m, QTableWidgetItem(strText))
+        self.NEON_tableProducts.setItem(i, m, QTableWidgetItem(strText))
 
         # CONFIGURE DATES FOR SPECIFIC PRODUCT
         m += 2
-        nYear, nMonth, nDay = GRIMe_PhenoCam.getStartDate()
+        nYear = 1970
+        nMonth = 1
+        nDay = 1
+        #nYear, nMonth, nDay = GRIME_PhenoCam().getStartDate()
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
-        nYear, nMonth, nDay = GRIMe_PhenoCam.getEndDate()
+        nYear = 1970
+        nMonth = 1
+        nDay = 1
+        #nYear, nMonth, nDay = GRIME_PhenoCam().getEndDate()
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
+
+        # --------------------
+        # SET THE CALENDAR START AND END DATE THE SAME USING THE DATE FOR THE LAST DAY FOR WHICH DATA IS AVAILABLE
+        # --------------------
+        nYear, nMonth, nDay = GRIME_PhenoCam().getEndDate()
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         #JES - SET FOR TODAY'S DATE. USER'S MAY NOT WANT TO GO BACK MANY YEARS.
-        #nYear, nMonth, nDay = GRIMe_PhenoCam.getStartDate()
+        #nYear, nMonth, nDay = GRIME_PhenoCam.getStartDate()
         #date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
-        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
+        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
+        #date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
         # trigger event when the user changes the date
-        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        nYear, nMonth, nDay = GRIMe_PhenoCam.getEndDate()
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         # trigger event when the user changes the date
-        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.tableProducts.setCellWidget(i, m, date_widget)
+        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
 
         # --------------------
         # --------------------
@@ -3288,25 +3318,25 @@ def updateNEONProductTable(self, item):
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
         # trigger event when the user changes the time
-        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.tableProducts.setCellWidget(i, m, dateTime)
+        self.NEON_tableProducts.setCellWidget(i, m, dateTime)
 
         m += 1
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
         # trigger event when the user changes the time
-        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.tableProducts))
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.tableProducts.setCellWidget(i, m, dateTime)
+        self.NEON_tableProducts.setCellWidget(i, m, dateTime)
 
-        self.tableProducts.resizeColumnsToContents()
+        self.NEON_tableProducts.resizeColumnsToContents()
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def NEON_dateChangeMethod(date_widget, tableWidget):
+def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
     global SITECODE
     global DOMAINCODE
 
@@ -3314,13 +3344,20 @@ def NEON_dateChangeMethod(date_widget, tableWidget):
 
     strProductIDCell = tableWidget.item(nRow, 0).text().upper()
 
-    if strProductIDCell.find('LAND-WATER') >= 0:
-        # FETCH DATES
-        start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(tableWidget, nRow)
+    # FETCH DATE THAT CHANGED FOR THE SPECIFIC ROW
+    start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(tableWidget, nRow)
 
-        #imageCount = GRIMe_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
+    if bUniqueDates == False:
+        for i in range(tableWidget.rowCount()):
+            tableWidget.cellWidget(i, 4).setDate(start_date)
+            tableWidget.cellWidget(i, 5).setDate(end_date)
+    else:
+        tableWidget.cellWidget(nRow, 4).setDate(start_date)
+        tableWidget.cellWidget(nRow, 5).setDate(end_date)
 
-        #tableWidget.setItem(nRow, 2, QTableWidgetItem(str(imageCount)))
+    #imageCount = GRIME_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
+
+    #tableWidget.setItem(nRow, 2, QTableWidgetItem(str(imageCount)))
 
 
 # ======================================================================================================================
@@ -3363,7 +3400,7 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
             dailyURLvisible = dailyURLvisible.replace('ARIK', SITECODE)
             dailyURLvisible = dailyURLvisible.replace('D10', DOMAINCODE)
 
-            phenoCam = GRIMe_PhenoCam()
+            phenoCam = GRIME_PhenoCam()
             tmpList = phenoCam.getVisibleImages(dailyURLvisible, start_time, end_time)
 
             dailyImagesList.setVisibleList(tmpList.getVisibleList())
@@ -3399,11 +3436,13 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
             filename = image.fullPathAndFilename.split('/')[-1]
 
-            downloadsFilePath = os.path.join(self.EditSaveImagesOutputFolder.text(), 'Images')
+            downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
             if not os.path.exists(downloadsFilePath):
-                os.mkdir(downloadsFilePath)
+                os.makedirs(downloadsFilePath)
             completeFilename = os.path.join(downloadsFilePath, filename)
-            urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
+
+            if os.path.isfile(completeFilename) == False:
+                urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
 
         # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
         # DISABLE THE CHECK BOX SO THAT ONCE THE IMAGES ARE DOWNLOADED, IMAGES ARE NOT CONTINUED TO BE SAVED UNBEKNOWNST TO THE USER
@@ -3430,7 +3469,7 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 # ======================================================================================================================
 def downloadPBTImageFiles(self):
     GRIMe_ProductTableObj = GRIMe_ProductTable()
-    GRIMe_ProductTableObj.fetchTableDates(self.tableProducts, nRow)
+    GRIMe_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
 
     start_date = GRIMe_ProductTableObj.getStartDate()
     strStartDate = GRIMe_ProductTableObj.getStartDate()
@@ -3454,12 +3493,16 @@ def downloadProductDataFiles(self, item):
     global currentImageIndex
 
     nitrateList = []
+    nError = 0;
+
+    myNEON_API = NEON_API()
 
     # ----------------------------------------------------------------------------------------------------
     # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
-    downloadsFilePath = self.EditSaveImagesOutputFolder.text()
+    downloadsFilePath = self.edit_NEONSaveFilePath.text()
+    GRIME_AI_Save_Utils().NEON_SaveFolderPath(downloadsFilePath)
 
     if len(downloadsFilePath) == 0:
         strMessage = 'A download folder has not been specified. Would you like to use the default GRIME-AI download folder?'
@@ -3471,92 +3514,110 @@ def downloadProductDataFiles(self, item):
             downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
             downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
             if not os.path.exists(downloadsFilePath):
-                os.mkdir(downloadsFilePath)
+                os.makedirs(downloadsFilePath)
             downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')
             if not os.path.exists(downloadsFilePath):
-                os.mkdir(downloadsFilePath)
+                os.makedirs(downloadsFilePath)
 
-            self.EditSaveImagesOutputFolder.setText(downloadsFilePath)
+            self.edit_NEONSaveFilePath.setText(downloadsFilePath)
     else:
         # MAKE SURE THE PATH EXISTS. IF IT DOES NOT, THEN CREATE IT.
         if not os.path.exists(downloadsFilePath):
-            os.mkdir(downloadsFilePath)
+            os.makedirs(downloadsFilePath)
 
     # --------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
     # --------------------------------------------------------------------------------
-    rowRange = range(self.tableProducts.rowCount())
+    rowRange = range(self.NEON_tableProducts.rowCount())
 
     for nRow in rowRange:
-        # --------------------------------------------------------------------------------
-        # FETCH THE DATE RANGE THE USER SELECTED FOR THE PARTICULAR DATA
-        # --------------------------------------------------------------------------------
         GRIMe_ProductTableObj = GRIMe_ProductTable()
-        start_date, start_time, end_date, end_time = GRIMe_ProductTableObj.fetchTableDates(self.tableProducts, nRow)
+        start_date, start_time, end_date, end_time = GRIMe_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
 
         # EXTRACT THE PRODUCT ID
         prodIDCol = 0
-        strProductIDCell = self.tableProducts.item(nRow, prodIDCol).text()
+        strProductIDCell = self.NEON_tableProducts.item(nRow, prodIDCol).text()
         nProductID = int(strProductIDCell.split('.')[1])
         #else:
         #    nProductID = -999
 
-        if nProductID < 0 and nRow == 0:
-            if self.radioButtonHardDriveImages.isChecked():
-                global imageFileFolder
-                #JES fetchLocalImageList(self, imageFileFolder, self.checkBox_FetchRecursive.isChecked(), self.checkBoxCreateEXIFFile.isChecked(), start_date, end_date, start_time, end_time)
-                fetchLocalImageList(self, imageFileFolder, True, self.checkBoxCreateEXIFFile.isChecked(), start_date, end_date, start_time, end_time)
-        elif nProductID > 0:
-            # ----------------------------------------------------------------------------------------------------
-            # FETCH THE DATA FOR THE PARTICULAR PRODUCT FOR THE SPECIFIED DATE RANGE AND PROCESS THE DATA ACCORDINGLY
-            # ----------------------------------------------------------------------------------------------------
+        if nProductID > 0:
+            PRODUCTCODE = strProductIDCell.split(':')[0]
+
+            # PHENOCAM IMAGES
+            # ----------------------------------------------------------------------------------------------------------
             if nProductID == 20002:
                 DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time)
 
-                if full == 1 or full == 4:
-                    processLocalImage(self)
-                    #refreshImage(self)
+                processLocalImage(self)
 
-            if nProductID == 20033:
-                # CREATE PROGRESS BAR
-                nitrateDataObj = NEON_20033_NitrateData()
-
+            # ALL OTHER NEON DATA
+            # ----------------------------------------------------------------------------------------------------------
+            if nProductID != 20002:
                 strStartYearMonth = str(start_date.year) + '-' + str(start_date.month).zfill(2)
                 strEndYearMonth = str(end_date.year) + '-' + str(end_date.month).zfill(2)
-                nitrateList = nitrateDataObj.DP1_20033_FetchNitrateData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
 
-                if full == 1 or full == 4:
-                    if len(nitrateList) > 0:
-                        # JES - USE NITRATE DATA FOR DEVELOPING GENERIC CSV READING AND DATA GRAPHING CAPABILITIES
-                        scene = QGraphicsScene()
-                        self.scene = scene
-                        nWidth = self.graphicsView.width()
-                        nHeight = self.graphicsView.height()
-                        nX = self.graphicsView.x()
-                        nY = self.graphicsView.y()
-                        self.scene.setSceneRect(0, 0, nWidth, nHeight)
-                        # self.graphicsView.setWindowTitle('Nitrate Data')
-                        self.graphicsView.setScene(self.scene)
-                        figure = Figure()
-                        axes = figure.gca()
-                        axes.set_title("Nitrate Data")
+                PRODUCTCODE = strProductIDCell.split(':')[0]
 
-                        i = 0
-                        for i, nitrateData in enumerate(nitrateList):
-                            y = float(nitrateData.getNitrateMean())
-                            axes.plot(i, y, '.', markersize=2)
+                # GET THE RANGE OF MONTHS FROM THE START DATE TO THE END DATE
+                dateRange = GRIME_AI_Utils().getRangeOfDates(strStartYearMonth, strEndYearMonth)
 
-                        canvas = FigureCanvas(figure)
-                        canvas.resize(nWidth, nHeight)
-                        self.scene.addWidget(canvas)
-                        self.graphicsView.show()
+                # GET THE AVAILABLE MONTHS FOR THE SELECTED DATA SET
+                availableMonths = NEON_API().getAvailableMonths(SITECODE, PRODUCTCODE)
 
-            if nProductID != 20033 and nProductID != 20002:
-                fetchData = NEON_FetchData()
+                monthCount = 0
+                missingMonths = []
+                for month in dateRange:
+                    if month in availableMonths:
+                        monthCount += 1
+                    else:
+                        missingMonths.append(month)
 
-                strStartYearMonth = str(start_date.year) + '-' + str(start_date.month).zfill(2)
-                strEndYearMonth = str(end_date.year) + '-' + str(end_date.month).zfill(2)
-                fetchData.NEON_FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
+                if monthCount == 0:
+                    msgBox = GRIMe_QMessageBox('NEON Error!', 'Data is not available for some or all of the dates selected!')
+                    response = msgBox.displayMsgBox()
+                elif (monthCount < len(dateRange)):
+                    strMsg = '%d of %d months unavailable: %s' % (len(missingMonths), len(dateRange), missingMonths)
+                    msgBox = GRIMe_QMessageBox('Partial Download!', strMsg)
+                    response = msgBox.displayMsgBox()
+
+                if monthCount > 0:
+                    nError = myNEON_API.FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
+        else:
+            msgBox = GRIMe_QMessageBox('NEON Error!', 'Product not available!')
+            response = msgBox.displayMsgBox()
+
+        # ----------------------------------------------------------------------------------------------------------
+        # NITRATE DATA
+        # ----------------------------------------------------------------------------------------------------------
+        # if nProductID == 20033:
+        #     nitrateList = myNEON_API.parseNitrateCSV()
+        #
+        #     if len(nitrateList) > 0:
+        #         # JES - USE NITRATE DATA FOR DEVELOPING GENERIC CSV READING AND DATA GRAPHING CAPABILITIES
+        #         scene = QGraphicsScene()
+        #         self.scene = scene
+        #         nWidth = self.graphicsView.width()
+        #         nHeight = self.graphicsView.height()
+        #         nX = self.graphicsView.x()
+        #         nY = self.graphicsView.y()
+        #         self.scene.setSceneRect(0, 0, nWidth, nHeight)
+        #         # self.graphicsView.setWindowTitle('Nitrate Data')
+        #         self.graphicsView.setScene(self.scene)
+        #         figure = Figure()
+        #         axes = figure.gca()
+        #         axes.set_title("Nitrate Data")
+        #
+        #         i = 0
+        #         for i, nitrateData in enumerate(nitrateList):
+        #             y = float(nitrateData.getNitrateMean())
+        #             axes.plot(i, y, '.', markersize=2)
+        #
+        #         canvas = FigureCanvas(figure)
+        #         canvas.resize(nWidth, nHeight)
+        #         self.scene.addWidget(canvas)
+        #         self.graphicsView.show()
+
 
 # ======================================================================================================================
 #
@@ -3690,48 +3751,6 @@ def labelMouseDoubleClickEvent(self):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def updateSiteProducts(self, item):
-    site_json = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
-
-    self.listboxSiteProducts.clear()
-
-    for product in site_json['data']['dataProducts']:
-        strText = product['dataProductCode'] + ": " + product['dataProductTitle']
-        assert isinstance(strText, object)
-        self.listboxSiteProducts.addItem(strText)
-
-    self.listboxSiteProducts.show()
-
-    # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    itemNitrate = self.listboxSiteProducts.findItems('Nitrate', QtCore.Qt.MatchContains)
-    nIndex = 0
-    if len(itemNitrate) > 0:
-        for item in itemNitrate:
-            nIndex = self.listboxSiteProducts.row(item)
-            self.listboxSiteProducts.setCurrentRow(nIndex)
-
-        updateNEONProductTable(self, nIndex)
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    # JES
-
-    # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    item20002 = self.listboxSiteProducts.findItems('20002', QtCore.Qt.MatchContains)
-    nIndex = 0
-    if len(item20002) > 0:
-        for item in item20002:
-            nIndex = self.listboxSiteProducts.row(item)
-            self.listboxSiteProducts.setCurrentRow(nIndex)
-
-        updateNEONProductTable(self, nIndex)
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    # JES
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
 def retranslateUi(self, MainWindow):
     _translate = QtCore.QCoreApplication.translate
     MainWindow.setWindowTitle(_translate("GRIMe-AI: John E. Stranzl Jr.", "GRIMe-AI: John E. Stranzl Jr."))
@@ -3746,7 +3765,7 @@ def findAvailableMonths(item):
     PRODUCTCODE = item
 
     # RETRIEVE INFORMATION FROM THE NEON WEBSITE FOR THE PARTICULAR SITE
-    site_json = NEON_FetchSiteInfoFromNEON(SERVER, SITECODE)
+    site_json = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     # EXTRACT THE AVAILABLE MONTH AND THE URL FOR THE DATA FOR EACH AVAILABLE MONTH
     monthList = {}
@@ -4075,13 +4094,13 @@ if __name__ == '__main__':
     GRIME_AI_Utils.createGRIMeFolders(frame, full)
 
     # INITIALIZE GUI CONTROLS
-    # frame.listboxNEONSites.setCurrentRow(1)
+    # frame.NEON_listboxSites.setCurrentRow(1)
 
     # GET LIST OF ALL SITES ON NEON
     #if frame.checkBoxNEONSites.isChecked():
-    siteList = readFieldSiteTable()
+    siteList = NEON_API().readFieldSiteTable()
     #else:
-    #    NEON_FormatProductTable(frame.tableProducts)
+    #NEON_FormatProductTable(frame.tableProducts)
 
     if len(siteList) == 0:
         pass
@@ -4095,11 +4114,11 @@ if __name__ == '__main__':
             strSiteName = site.siteID + ' - ' + site.siteName
             myList.append(strSiteName)
 
-        frame.listboxNEONSites.addItems(myList)
+        frame.NEON_listboxSites.addItems(myList)
 
         # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
-        frame.listboxNEONSites.setCurrentRow(2)
-        frame.listboxNEONSites.show()
+        frame.NEON_listboxSites.setCurrentRow(2)
+        frame.NEON_listboxSites.show()
 
     frame.graphicsView.setVisible(False)
 
@@ -4153,7 +4172,7 @@ if __name__ == '__main__':
 
     #frame.pushButtonBrowseImageFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
     #frame.pushButtonBrowseVideoOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
-    #frame.pushButtonBrowseSaveImagesOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+    #frame.pushButtonBrowseSaveImages_NEON_DownloadFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
     #frame.pushButtonBrowseEXIFOutputFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
 
     # product_json = NEON_QueryProductInfo('DP1.00004.001')

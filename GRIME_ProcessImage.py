@@ -6,10 +6,16 @@ from PIL import Image, ImageQt
 from PyQt5.QtGui import QPixmap, QImage
 from constants import edgeMethodsClass, featureMethodsClass
 
-class GRIMe_ProcessImage:
+class GRIME_ProcessImage:
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def __init__(self):
         self.className = "GRIMe_ProcessImage"
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def processCanny(self, img1, gray):
 
         # JEShighThreshold = self.spinBoxCannyHighThreshold.value()
@@ -19,15 +25,24 @@ class GRIMe_ProcessImage:
         lowThreshold = 50
         kernelSize = 3
 
-        temp = gray
-        # temp = gray[0:myImage.size().height(), 0:myImage.size().width()]
+        # BLUR IMAGE TO REMOVE NOISE
+        img_blur = cv2.GaussianBlur(gray, (3, 3), 0)
+
+        otsu_thresh, _     = cv2.threshold(img_blur, 0, 255, cv2.THRESH_OTSU)
+        triangle_thresh, _ = cv2.threshold(img_blur, 0, 255, cv2.THRESH_TRIANGLE)
+
+        otsu_thresh     = self.getThresholdRange(otsu_thresh)
+        triangle_thresh = self.getThresholdRange(triangle_thresh)
 
         # Find Canny edges
-        edges = cv2.Canny(temp, highThreshold, lowThreshold, kernelSize)
+        #edges = cv2.Canny(img_blur, highThreshold, lowThreshold, kernelSize)
+        #edges = cv2.Canny(img_blur, *otsu_thresh, kernelSize)
+        edges = cv2.Canny(img_blur, *triangle_thresh)
 
         # Find Contours
         # Use a copy of the image e.g. edged.copy() since findContours alters the image
-        contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        #contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        contours, hierarchy = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # Draw all contours (-1 = draw all contours)
         cv2.drawContours(img1, contours, -1, (0, 255, 0), 2)
@@ -41,11 +56,17 @@ class GRIMe_ProcessImage:
         # q_img = QImage(temp.data, temp.shape[1], temp.shape[0], QImage.Format_Grayscale8)
 
         # QImage BYTE ORDER IS B, G, R
+        #q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_BGR888)
         q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_BGR888)
 
         return(QPixmap(q_img))
 
+    def getThresholdRange(self, threshold, sigma=0.33):
+        return (1 - sigma) * threshold, (1 + sigma) * threshold
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def processSobel(self, img1, method):
         gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
 
@@ -78,6 +99,9 @@ class GRIMe_ProcessImage:
         return(pix)
 
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def processLaplacian(self, img1):
         # convert from RGB color-space to YCrCb
         ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
@@ -99,12 +123,18 @@ class GRIMe_ProcessImage:
         return(QPixmap.fromImage(q_img))
 
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def processSIFT(self, img1, gray):
         edges = calcSIFT(img1, gray)
         q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
         pix = QPixmap(q_img)
 
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def processORB(self, img1, gray):
         value = self.spinBoxOrbMaxFeatures.value()
 
