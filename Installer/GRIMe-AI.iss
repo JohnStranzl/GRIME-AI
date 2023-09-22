@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.3.2"
+#define MyAppVersion "0.0.3.5"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIMe-AI.exe"
@@ -24,7 +24,7 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\Astrid Haugen\Desktop\TestInstall
-OutputBaseFilename=GRIMe-AI 0.0.3.2 Setup
+OutputBaseFilename=GRIMe-AI 0.0.3.5 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
