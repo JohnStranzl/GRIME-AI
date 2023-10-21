@@ -213,9 +213,11 @@ class  NEON_API:
             else:
                 nWebImageCount = 0
                 latestImage = []
-                print("404: Download Latest Image")
                 nErrorCode = -1
                 nRetryCount = nRetryCount - 1
+                if nRetryCount == 0:
+                    print("404: PhenoCam - Download Latest Image Fail")
+
 
         return r.status_code, latestImage, nWebImageCount
 
@@ -266,7 +268,7 @@ class  NEON_API:
         siteList = []
         url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 
-        nErrorCode = GRIME_AI_Utils.check_url_validity(url)
+        nErrorCode = GRIME_AI_Utils().check_url_validity(url)
 
         # IF AT LEAST ONE FIELD SITE TABLE IS FOUND ON THE NEON SITE...
         if nErrorCode == 0:
@@ -275,7 +277,7 @@ class  NEON_API:
             # download all CSV files
             filename_with_path = NEON_API().DownloadFieldSiteTableFiles(csv_links)
 
-            siteList = GRIME_AI_Utils.parseCSV(filename_with_path)
+            siteList = GRIME_AI_Utils().parseCSV(filename_with_path)
         # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST
         elif nErrorCode == -1:
             siteList = []

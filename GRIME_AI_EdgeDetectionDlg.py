@@ -10,8 +10,8 @@ from constants import edgeMethodsClass, featureMethodsClass
 class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # SIGNALS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    edgeDetectionSignal = pyqtSignal(edgeMethodsClass)
-    featureDetectionSignal = pyqtSignal(edgeMethodsClass)
+    edgeDetectionSignal    = pyqtSignal(edgeMethodsClass)
+    featureDetectionSignal = pyqtSignal(featureMethodsClass)
 
     returnEdgeData    = edgeMethodsClass()
     returnFeatureData = featureMethodsClass()
@@ -31,22 +31,21 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
         self.edgeDetectionSignal.connect(parent.edgeDetectionMethod)
 
         # CONNECT THE WIDGETS TO THE FUNCTIONS IN THIS CLASS THAT WILL GET INVOKED
-        self.radioButtonCanny.clicked.connect(self.updateCanny)
+        self.radioButtonCanny.clicked.connect(self.clicked_Canny)
         self.spinBoxCannyKernel.valueChanged.connect(self.spinBoxCannyKernelChanged)
         self.spinBoxCannyHighThreshold.valueChanged.connect(self.spinBoxCannyHighThresholdChanged)
         self.spinBoxCannyLowThreshold.valueChanged.connect(self.spinBoxCannyLowThresholdChanged)
 
-        self.radioButtonSobelX.clicked.connect(self.updateSobelX)
-        self.radioButtonSobelY.clicked.connect(self.updateSobelY)
-        self.radioButtonSobelXY.clicked.connect(self.updateSobelXY)
+        self.radioButtonSobelX.clicked.connect(self.clicked_SobelX)
+        self.radioButtonSobelY.clicked.connect(self.clicked_SobelY)
+        self.radioButtonSobelXY.clicked.connect(self.clicked_SobelXY)
         self.spinBoxSobelKernel.valueChanged.connect(self.spinBoxSobelKernelChanged)
 
-        self.radioButtonLaplacian.clicked.connect(self.updateLaplacian)
+        self.radioButtonLaplacian.clicked.connect(self.clicked_Laplacian)
 
-        self.radioButtonSIFT.clicked.connect(self.updateSIFT)
-        self.radioButtonORB.clicked.connect(self.updateORB)
-
-        #self.spinBoxOrbMaxFeatures.valueChanged.connect(self.spinBoxOrbMaxFeaturesChanged)
+        self.radioButtonSIFT.clicked.connect(self.clicked_SIFT)
+        self.radioButtonORB.clicked.connect(self.clicked_ORB)
+        self.spinBoxOrbMaxFeatures.valueChanged.connect(self.spinBoxOrbMaxFeaturesChanged)
 
 
         #self.spinBoxCannyHighThreshold.setKeyboardTracking(False)
@@ -54,7 +53,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateCanny(self):
+    def clicked_Canny(self):
+        self.returnFeatureData.method = featureMethodsClass.NONE
+
         self.returnEdgeData.method = edgeMethodsClass.CANNY
         self.returnEdgeData.selected = self.radioButtonCanny.isChecked()
 
@@ -62,7 +63,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateSobelX(self):
+    def clicked_SobelX(self):
+        self.returnFeatureData.method = featureMethodsClass.NONE
+
         self.returnEdgeData.method = edgeMethodsClass.SOBEL_X
         self.returnEdgeData.selected = self.radioButtonSobelX.isChecked()
 
@@ -70,7 +73,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateSobelY(self):
+    def clicked_SobelY(self):
+        self.returnFeatureData.method = featureMethodsClass.NONE
+
         self.returnEdgeData.method = edgeMethodsClass.SOBEL_Y
         self.returnEdgeData.selected = self.radioButtonSobelY.isChecked()
 
@@ -78,7 +83,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateSobelXY(self):
+    def clicked_SobelXY(self):
+        self.returnFeatureData.method = featureMethodsClass.NONE
+
         self.returnEdgeData.method = edgeMethodsClass.SOBEL_XY
         self.returnEdgeData.selected = self.radioButtonSobelXY.isChecked()
 
@@ -87,36 +94,32 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
     def spinBoxCannyHighThresholdChanged(self):
-        self.edgeDetectionSignal.emit(1)
-        #imageNumber = self.spinBoxDailyImage.value()
-        #self.spinBoxChanged()
-        #refreshImage(self)
+        self.returnEdgeData.canny_threshold_high = self.spinBoxCannyHighThreshold.value()
+        self.edgeDetectionSignal.emit(self.returnEdgeData)
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
     def spinBoxCannyLowThresholdChanged(self):
-        self.edgeDetectionSignal.emit(1)
-        #imageNumber = self.spinBoxDailyImage.value()
-        #self.labelOriginalImage.clear()
-        #self.spinBoxChanged()
-        #refreshImage(self)
+        self.returnEdgeData.canny_threshold_high = self.spinBoxCannyLowThreshold.value()
+        self.edgeDetectionSignal.emit(self.returnEdgeData)
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
     def spinBoxCannyKernelChanged(self):
         #imageNumber = self.spinBoxDailyImage.value()
-        self.edgeDetectionSignal.emit(1)
+        self.edgeDetectionSignal.emit(self.returnEdgeData)
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
     def spinBoxSobelKernelChanged(self):
-        #refreshImage(self)
-        self.edgeDetectionSignal.emit(4)
-
+        self.returnEdgeData.sobelKernel = self.spinBoxSobelKernel.value()
+        self.edgeDetectionSignal.emit(self.returnEdgeData)
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateLaplacian(self):
+    def clicked_Laplacian(self):
+        self.returnFeatureData.method = featureMethodsClass.NONE
+
         self.returnEdgeData.method = edgeMethodsClass.LAPLACIAN
         self.returnEdgeData.selected = self.radioButtonLaplacian.isChecked()
 
@@ -124,7 +127,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateSIFT(self):
+    def clicked_SIFT(self):
+        self.returnEdgeData.method = edgeMethodsClass.NONE
+
         self.returnFeatureData.method = featureMethodsClass.SIFT
         self.returnFeatureData.selected = self.radioButtonSIFT.isChecked()
 
@@ -132,8 +137,17 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
-    def updateORB(self):
+    def clicked_ORB(self):
+        self.returnEdgeData.method = edgeMethodsClass.NONE
+
         self.returnFeatureData.method = featureMethodsClass.ORB
         self.returnFeatureData.selected = self.radioButtonORB.isChecked()
 
         self.featureDetectionSignal.emit(self.returnFeatureData)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------------------------------------------
+    def spinBoxOrbMaxFeaturesChanged(self):
+        self.returnFeatureData.orbMaxFeatures = self.spinBoxOrbMaxFeaturesChanged().value()
+        self.featureDetectionSignal.emit(self.returnFeatureData)
+

@@ -51,16 +51,21 @@ class USGS_NIMS:
     def initCameraDictionary(self):
         cameraDictionary = {}
 
-        # QUERY CAMERA LIST
-        uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?"
+        try:
+            # QUERY CAMERA LIST
+            uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?"
 
-        response = urllib.request.urlopen(uri)
-        data = response.read()  # a `bytes` object
-        raw_text = data.decode('utf-8')
-        cameraData = json.loads(data)
+            response = urllib.request.urlopen(uri)
+            data = response.read()  # a `bytes` object
+            raw_text = data.decode('utf-8')
+            cameraData = json.loads(data)
 
-        for index, element in enumerate(cameraData):
-            cameraDictionary[index] = element
+            for index, element in enumerate(cameraData):
+                # ONLY DEAL WITH NIMS SITES AND IGNORE HIVIS SITES
+                if element['locus'] == 'aws':
+                    cameraDictionary[index] = element
+        except:
+            cameraDictionary = {}
 
         return cameraDictionary
 
@@ -157,9 +162,13 @@ class USGS_NIMS:
             else:
                 nWebImageCount = 0
                 latestImage = []
-                print("404: Download Latest Image")
                 nErrorCode = -1
                 nRetryCount = nRetryCount - 1
+                if nRetryCount == 0:
+                    print("404: NIMS - Download Latest Image Fail")
+
+        if nErrorCode == -1:
+            nErrorCode = 404
 
         return nErrorCode, latestImage
 

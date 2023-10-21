@@ -16,20 +16,20 @@ class GRIME_ProcessImage:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def processCanny(self, img1, gray):
+    def processCanny(self, img1, gray, edgeMethodSettings):
 
-        # JEShighThreshold = self.spinBoxCannyHighThreshold.value()
-        # JESlowThreshold = self.spinBoxCannyLowThreshold.value()
         # JESkernelSize = self.spinBoxCannyKernel.value()
-        highThreshold = 100
-        lowThreshold = 50
-        kernelSize = 3
+        highThreshold = edgeMethodSettings.getCannyThresholdHigh()
+        lowThreshold  = edgeMethodSettings.getCannyThresholdLow()
+        kernelSize    = 3
 
         # BLUR IMAGE TO REMOVE NOISE
         img_blur = cv2.GaussianBlur(gray, (3, 3), 0)
 
-        otsu_thresh, _     = cv2.threshold(img_blur, 0, 255, cv2.THRESH_OTSU)
-        triangle_thresh, _ = cv2.threshold(img_blur, 0, 255, cv2.THRESH_TRIANGLE)
+        #otsu_thresh, _     = cv2.threshold(img_blur, 0, 255, cv2.THRESH_OTSU)
+        #triangle_thresh, _ = cv2.threshold(img_blur, 0, 255, cv2.THRESH_TRIANGLE)
+        otsu_thresh, _     = cv2.threshold(img_blur, lowThreshold, highThreshold, cv2.THRESH_OTSU)
+        triangle_thresh, _ = cv2.threshold(img_blur, lowThreshold, highThreshold, cv2.THRESH_TRIANGLE)
 
         otsu_thresh     = self.getThresholdRange(otsu_thresh)
         triangle_thresh = self.getThresholdRange(triangle_thresh)
@@ -37,7 +37,8 @@ class GRIME_ProcessImage:
         # Find Canny edges
         #edges = cv2.Canny(img_blur, highThreshold, lowThreshold, kernelSize)
         #edges = cv2.Canny(img_blur, *otsu_thresh, kernelSize)
-        edges = cv2.Canny(img_blur, *triangle_thresh)
+        #edges = cv2.Canny(img_blur, *triangle_thresh)
+        edges = cv2.Canny(img_blur, highThreshold, lowThreshold, kernelSize)
 
         # Find Contours
         # Use a copy of the image e.g. edged.copy() since findContours alters the image
@@ -135,8 +136,7 @@ class GRIME_ProcessImage:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def processORB(self, img1, gray):
-        value = self.spinBoxOrbMaxFeatures.value()
+    def processORB(self, img1, gray, featureMethodSettings):
 
         # convert from RGB color-space to YCrCb
         ycrcb_img = cv2.cvtColor(img1, cv2.COLOR_RGB2YCrCb)
@@ -154,13 +154,10 @@ class GRIME_ProcessImage:
         # gray = Image.fromarray(gray)
 
         gray = cv2.cvtColor(ycrcb_img, cv2.COLOR_RGB2GRAY)
-        edges = calcOrb(gray, value)
+        edges = calcOrb(gray, featureMethodSettings.orbMaxFeatures)
         q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_RGB888)
 
         del gray
-        del grayEQ
-        del grayBlur
-        # del lapImg
         del edges
 
         return(QPixmap(q_img))

@@ -88,22 +88,22 @@ class GRIME_AI_Save_Utils:
     #
     # ------------------------------------------------------------------------------------------------------------------------
     def USGS_getSaveFolderPath(self):
-        configFilePath = self.getSettingsFolder()
-
-        config = ConfigParser()
-
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
-        f = open(configFile, 'r')
-
-        config.read(configFile)
-
         try:
+            configFilePath = self.getSettingsFolder()
+
+            config = ConfigParser()
+
+            configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+            f = open(configFile, 'r')
+
+            config.read(configFile)
+
             szSection = 'USGS'
             USGS_FolderPath = config.get(szSection, 'SaveFilePath')
+
+            f.close()
         except:
             USGS_FolderPath = ""
-
-        f.close()
 
         return USGS_FolderPath
 
@@ -111,21 +111,22 @@ class GRIME_AI_Save_Utils:
     #
     # ------------------------------------------------------------------------------------------------------------------------
     def NEON_getSaveFolderPath(self):
-        configFilePath = self.getSettingsFolder()
-
-        config = ConfigParser()
-
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
-        f = open(configFile, 'r')
-
-        config.read(configFile)
 
         try:
+            configFilePath = self.getSettingsFolder()
+
+            config = ConfigParser()
+
+            configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+            f = open(configFile, 'r')
+
+            config.read(configFile)
+
             szSection = 'NEON'
             NEON_FolderPath = config.get(szSection, 'SaveFilePath')
+
+            f.close()
         except:
             NEON_FolderPath = ""
-
-        f.close()
 
         return NEON_FolderPath

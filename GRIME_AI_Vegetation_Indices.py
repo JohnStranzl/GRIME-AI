@@ -3,8 +3,6 @@ from urllib.request import urlopen
 import cv2
 import numpy as np
 
-from GRIME_AI_Utils import GRIME_AI_Utils
-
 class greennessIndex():
     GCC  = False
     GLI  = False
@@ -12,14 +10,14 @@ class greennessIndex():
     RGI  = False
     NDVI = False
 
-class GRIME_Vegetation_Indices:
+class GRIME_AI_Vegetation_Indices:
     def __init__(self):
         self.className = "GRIME_AI_Vegetation_Indices"
 
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def computeGreennessIndex(redSum, greenSum, blueSum):
+    def computeGreennessIndex(self, redSum, greenSum, blueSum):
 
         try:
             greennessIndex = greenSum / (redSum + greenSum + blueSum)
@@ -32,7 +30,7 @@ class GRIME_Vegetation_Indices:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def computeExcessGreenIndex(redSum, greenSum, blueSum):
+    def computeExcessGreenIndex(self, redSum, greenSum, blueSum):
 
         try:
             greennessIndex = (2.0 * greenSum) - redSum - blueSum
@@ -45,7 +43,7 @@ class GRIME_Vegetation_Indices:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def computeGreenLeafIndex(redSum, greenSum, blueSum):
+    def computeGreenLeafIndex(self, redSum, greenSum, blueSum):
 
         try:
             greennessIndex = ((2.0 * greenSum) - redSum - blueSum)/ ((2.0 * greenSum) + redSum + blueSum)
@@ -58,7 +56,7 @@ class GRIME_Vegetation_Indices:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def computeNormalizedDifferenceVegetationIndex(redSum, greenSum):
+    def computeNormalizedDifferenceVegetationIndex(self, redSum, greenSum):
 
         try:
             greennessIndex = (greenSum - redSum) / (redSum + greenSum)
@@ -70,9 +68,25 @@ class GRIME_Vegetation_Indices:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def computeRedGreenIndex(redSum, greenSum):
+    def computeRedGreenIndex(self, redSum, greenSum):
 
         redGreenIndex = redSum / greenSum
 
         return(redGreenIndex)
 
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def computeGreennessValue(self, dlg, redSum, greenSum, blueSum):
+
+        if dlg.checkBox_GCC.isChecked():
+            return ('%3.2f' % GRIME_AI_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum))
+        if dlg.checkBox_GLI.isChecked():
+            return('%3.2f' % GRIME_AI_Vegetation_Indices().computeGreenLeafIndex(redSum, greenSum, blueSum))
+        if dlg.checkBox_NDVI.isChecked():
+            return('%3.2f' % GRIME_AI_Vegetation_Indices().computeNormalizedDifferenceVegetationIndex(redSum, greenSum))
+        if dlg.checkBox_ExG.isChecked():
+            return('%3.2f' % GRIME_AI_Vegetation_Indices().computeExcessGreenIndex(redSum, greenSum, blueSum))
+        if dlg.checkBox_RGI.isChecked():
+            return('%3.4f' % GRIME_AI_Vegetation_Indices().computeRedGreenIndex(redSum, greenSum))

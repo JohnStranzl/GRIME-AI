@@ -56,7 +56,8 @@ class EXIFData:
 
         f.close()
 
-        return self.header, self.EXIF
+        #return self.header, self.EXIF
+        return exif
 
     # ----------------------------------------------------------------------------------------------------
     #

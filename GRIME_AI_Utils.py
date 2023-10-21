@@ -13,8 +13,10 @@ from urllib.request import urlopen
 
 from siteData import siteData
 
-from GRIME_QMessageBox import GRIMe_QMessageBox
+from pathlib import Path
 
+from GRIME_QMessageBox import GRIMe_QMessageBox
+from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
 
 # ======================================================================================================================
 #
@@ -22,11 +24,13 @@ from GRIME_QMessageBox import GRIMe_QMessageBox
 class GRIME_AI_Utils:
     def __init__(self):
         self.className = "GRIME_AI_Utils"
+        self.instance = 1
+
 
     # ======================================================================================================================
     # Converts a QImage into an opencv MAT format
     # ======================================================================================================================
-    def convertQImageToMat(incomingImage):
+    def convertQImageToMat(self, incomingImage):
         incomingImage = incomingImage.convertToFormat(4)
 
         width = incomingImage.width()
@@ -47,7 +51,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def ResizeWithAspectRatio(image, width=None, height=None, inter=cv2.INTER_AREA):
+    def ResizeWithAspectRatio(self, image, width=None, height=None, inter=cv2.INTER_AREA):
         dim = None
         (h, w) = image.shape[:2]
 
@@ -67,7 +71,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     # THIS FUNCTION PARSES THE FIELD SITE TABLE THAT IS FETCHED FROM THE NEON SITE.
     # ======================================================================================================================
-    def parseCSV(filename_with_path):
+    def parseCSV(self, filename_with_path):
         # FULLY QUALIFIED PATH OF THE CSV DOWNLOADED ONTO THE LOCAL COMPUTER
         filename = filename_with_path
 
@@ -109,7 +113,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def extractDateFromFilename(filename):
+    def extractDateFromFilename(self, filename):
 
         nYear = 1970
         nMonth = 1
@@ -192,7 +196,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getImageCount(folder, extensions):
+    def getImageCount(self, folder, extensions):
         imageCount = 0
 
         for root, dirs, files in os.walk(folder):
@@ -207,7 +211,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getFileList(folder, extensions, bFetchRecursive):
+    def getFileList(self, folder, extensions, bFetchRecursive):
 
         filenames = []
 
@@ -229,7 +233,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def drawGridOnImage(img):
+    def drawGridOnImage(self, img):
         GRID_SIZE = 100
 
         height, width, channels = img.shape
@@ -241,6 +245,7 @@ class GRIME_AI_Utils:
 
         # cv2.imshow('Hehe', numpyImage)
         # key = cv2.waitKey(0)
+
 
     # ======================================================================================================================
     #
@@ -268,6 +273,12 @@ class GRIME_AI_Utils:
         configFilePath = os.path.join(rootFolder, 'Settings')
         if not os.path.exists(configFilePath):
             os.mkdir(configFilePath)
+
+        # CHECK TO SEE IF THE CONFIGURATION FILE EXISTS. IF IT DOES NOT, THEN CREATE IT USING touch
+        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        if not os.path.isfile(configFile):
+            configFileWithPath = Path(configFile)
+            configFileWithPath.touch(exist_ok=True)
 
         # --------------------------------------------------
         # CREATE DOWNLOAD FOLDER IN USER'S DOCUMENTS FOLDER
@@ -302,7 +313,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def check_url_validity(my_url):
+    def check_url_validity(self, my_url):
         nErrorCode = -1
         nRetryCount = 3
 
@@ -409,6 +420,7 @@ class GRIME_AI_Utils:
 
         return downloadsFilePath
 
+
     # ======================================================================================================================
     #
     # ======================================================================================================================
@@ -424,3 +436,49 @@ class GRIME_AI_Utils:
         date_list = date_list.strftime("%Y-%m")
 
         return date_list.tolist()
+
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def separateChannels(self, image):
+        # greennessIndex = green / (red + green + blue)
+        red = image[:, :, 0]
+        red = red.flatten()
+        red = red.astype(float)
+
+        green = image[:, :, 1]
+        green = green.flatten()
+        green = green.astype(float)
+
+        blue = image[:, :, 2]
+        blue = blue.flatten()
+        blue = blue.astype(float)
+
+        return red, green, blue
+
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def sumChannels(self, red, green, blue):
+
+        redSum = np.sum(red)
+        greenSum = np.sum(green)
+        blueSum = np.sum(blue)
+
+        return redSum, greenSum, blueSum
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def getMaxNumColorClusters(self, roiList):
+        maxColorClusters = 0
+
+        for roiObj in roiList:
+            if roiObj.getNumColorClusters() > maxColorClusters:
+                maxColorClusters = roiObj.getNumColorClusters()
+
+        return maxColorClusters
+
