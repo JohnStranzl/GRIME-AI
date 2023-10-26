@@ -107,6 +107,8 @@ from GRIME_roiData import GRIME_roiData, ROIShape
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
 
+from colorSegmentationParams import colorSegmentationParamsClass
+
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
@@ -126,6 +128,7 @@ from chrome_driver import *
 #
 # ------------------------------------------------------------
 from constants import edgeMethodsClass, featureMethodsClass
+
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
@@ -338,6 +341,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.createToolBar()
 
         # ----------------------------------------------------------------------------------------------------
+        #
+        # ----------------------------------------------------------------------------------------------------
+        self.colorSegmentationParams = colorSegmentationParamsClass()
+
+        # ----------------------------------------------------------------------------------------------------
         # GET DATA, POPULATE WIDGETS, ETC.
         # ----------------------------------------------------------------------------------------------------
         self.USGS_InitProductTable()
@@ -354,7 +362,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.labelEdgeImage.installEventFilter(self)
         self.labelOriginalImage.installEventFilter(self)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
         self.pushButton_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
 
         self.pushButton_RetrieveNEONData.clicked.connect(self.RetrieveNEONDataClicked)
@@ -435,7 +442,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         self.USGS_FormatProductTable(self.table_USGS_Sites)
 
-        exif = self.extractEXIFdata('F:/000 - Hydrology Images/Reconyx/RCNX0009.jpg')
+        exif = EXIFData().extractEXIFdata('F:/000 - Hydrology Images/Reconyx/RCNX0009.jpg')
 
         x = 1
 
@@ -458,24 +465,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         myFeatureExport = GRIME_AI_Feature_Export()
         imagesList = dailyImagesList.getVisibleList()
 
-        colorSegmentationParams = self.getColorSegmentationParams()
+        if self.colorSegmentationDlg != None:
+            self.getColorSegmentationParams()
 
-        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationDlg)
+        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
     def getColorSegmentationParams(self):
-        colorSegmentationParams.GCC            = self.colorSegmentationDlg.checkBox_GCC.isChecked()
-        colorSegmentationParams.GLI            = self.colorSegmentationDlg.checkBox_GLI.isChecked()
-        colorSegmentationParams.NDVI           = self.colorSegmentationDlg.checkBox_NDVI.isChecked()
-        colorSegmentationParams.ExG            = self.colorSegmentationDlg.checkBox_ExG.isChecked()
-        colorSegmentationParams.RGI            = self.colorSegmentationDlg.checkBox_RGI.isChecked()
-        colorSegmentationParams.Intensity      = self.colorSegmentationDlg.checkBox_Intensity.isChecked()
-        colorSegmentationParams.ShannonEntropy = self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked()
-        colorSegmentationParams.Texture        = self.colorSegmentationDlg.checkBox_Texture.isChecked()
-
-        return colorSegmentationParams
+        self.colorSegmentationParams.GCC            = self.colorSegmentationDlg.checkBox_GCC.isChecked()
+        self.colorSegmentationParams.GLI            = self.colorSegmentationDlg.checkBox_GLI.isChecked()
+        self.colorSegmentationParams.NDVI           = self.colorSegmentationDlg.checkBox_NDVI.isChecked()
+        self.colorSegmentationParams.ExG            = self.colorSegmentationDlg.checkBox_ExG.isChecked()
+        self.colorSegmentationParams.RGI            = self.colorSegmentationDlg.checkBox_RGI.isChecked()
+        self.colorSegmentationParams.Intensity      = self.colorSegmentationDlg.checkBox_Intensity.isChecked()
+        self.colorSegmentationParams.ShannonEntropy = self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked()
+        self.colorSegmentationParams.Texture        = self.colorSegmentationDlg.checkBox_Texture.isChecked()
 
     # ------------------------------------------------------------------------------------------------------------------
     # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
@@ -755,9 +761,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ------------------------------------------------------------------------------------------------------------------
     def USGS_DisplayLatestImage(self):
-        self.USGS_labelLatestImage.setPixmap(self.USGS_latestImage.scaled(self.USGS_labelLatestImage.size(),
-                                                                     QtCore.Qt.KeepAspectRatio,
-                                                                     QtCore.Qt.SmoothTransformation))
+        if self.USGS_latestImage != []:
+            self.USGS_labelLatestImage.setPixmap(self.USGS_latestImage.scaled(self.USGS_labelLatestImage.size(),
+                                                                         QtCore.Qt.KeepAspectRatio,
+                                                                         QtCore.Qt.SmoothTransformation))
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -973,80 +980,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         return header
 
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def buildROI_ScalarHeader(self, header):
-
-        newHeader = header
-
-        # ADD HEADER TO CSV FILE FOR EACH ROI ASSUMING ROIs HAVE BEEN CREATED
-        for roiObj in self.roiList:
-            template = ', ' + (roiObj.getROIName() + ': ') + '#'
-
-            if self.colorSegmentationDlg.checkBox_GCC.isChecked():
-                newHeader = (newHeader + template).replace('#', 'GCC')
-
-            if self.colorSegmentationDlg.checkBox_GLI.isChecked():
-                newHeader = (newHeader + template).replace('#', 'GLI')
-
-            if self.colorSegmentationDlg.checkBox_NDVI.isChecked():
-                newHeader = (newHeader + template).replace('#', 'NDVI')
-
-            if self.colorSegmentationDlg.checkBox_ExG.isChecked():
-                newHeader = (newHeader + template).replace('#', 'ExG')
-
-            if self.colorSegmentationDlg.checkBox_RGI.isChecked():
-                newHeader = (newHeader + template).replace('#', 'RGI')
-
-            if self.colorSegmentationDlg.checkBox_Intensity.isChecked():
-                newHeader = (newHeader + template).replace('#', 'Intensity')
-
-            if self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked():
-                newHeader = (newHeader + template).replace('#', 'Entropy')
-
-            if self.colorSegmentationDlg.checkBox_Texture.isChecked():
-                newHeader = (newHeader + template).replace('#', 'Texture')
-
-                    # IF THERE IS MORE THAN ONE (1) ROI, APPEND AN INDEX ONTO THE HEADER LABEL
-
-            nClusters = roiObj.getNumColorClusters()
-
-            if self.colorSegmentationDlg.checkBoxColor_HSV.isChecked():
-                template = ', ' + (roiObj.getROIName() + ': ') + '#'
-
-                if nClusters == 1:
-                    newHeader = (newHeader + template).replace('#', 'H')
-                    newHeader = (newHeader + template).replace('#', 'S')
-                    newHeader = (newHeader + template).replace('#', 'V')
-                else:
-                    for idx in range(nClusters):
-                        newHeader = (newHeader + template).replace('#', 'H') + ('_' + idx.__str__())
-                        newHeader = (newHeader + template).replace('#', 'S') + ('_' + idx.__str__())
-                        newHeader = (newHeader + template).replace('#', 'V') + ('_' + idx.__str__())
-
-        newHeader = newHeader + '\n'
-
-        return newHeader
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def buildScalarHeader(self, nClusters):
-        # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
-        header = 'Image, Date (ISO), Time (ISO)'
-
-        if self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked():
-            header = self.buildImageScalarHeader(header)
-
-        if self.colorSegmentationDlg.checkBoxScalarRegion_ROI.isChecked():
-            header = self.buildROI_ScalarHeader(header)
-
-        return header
-
-
     # ==================================================================================================================
     #
     # ==================================================================================================================
@@ -1163,61 +1096,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # ----------------------------------------------------------------------------------------------------------
             #JES self.spinBoxColorClusters.setDisabled(True)
 
-
-    # ==================================================================================================================
-    # CALCULATE THE FEATURE SCALARS FOR THE VARIOUS ROIs AND SAVE THEM TO THE CSV FILE
-    # ==================================================================================================================
-    def calculateROIScalars(self, img):
-
-        strOutputString = ''
-
-        for roiObj in self.roiList:
-            texture = -999
-
-            nClusters = roiObj.getNumColorClusters()
-
-            rgb = extractROI(roiObj.getImageROI(), img)
-
-            # CONVERT THE IMAGE FROM BGR TO RGB AND HSV
-            hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-
-            # IMAGE INTENSITY CALCULATIONS
-            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-            # COMPUTE ENTROPY FOR ROI
-            entropyValue = self.calcEntropy(gray)
-
-            # EXTRACT 'n' DOMINANT HSV COLORS
-            myGRIMe_Color = GRIME_AI_Color()
-            qhsvImg, hsvClusterCenters, hist = myGRIMe_Color().KMeans(hsv, nClusters)
-
-            # KMeans QUANTIZES THE HUE VALUE TO 0..180 WHEN THE ACTUAL HSV COLOR SPACE HUE VALUE 0..360.
-            # THEREFORE WE MULTIPLY THE KMeans HUE VALUE BY 2 TO STANDARDIZE ON THE ACTUAL COLOR SPACE HUE RANGE.
-            hsvClusterCenters[:, 0] = hsvClusterCenters[:, 0] * 2.0
-
-            red, green, blue = GRIME_AI_Utils().separateChannels(rgb)
-            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
-
-            strOutputString = strOutputString + ',' + self.computeGreennessValue(self.colorSegmentationDlg, redSum, greenSum, blueSum)
-
-            if self.colorSegmentationDlg.checkBox_Intensity.isChecked():
-                strOutputString = strOutputString + ', %3.4f' % intensity
-            if self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked():
-                strOutputString = strOutputString + ', %3.4f' % entropyValue
-            if self.colorSegmentationDlg.checkBox_Texture.isChecked():
-                strOutputString = strOutputString + ', %3.2f' % texture
-            if self.colorSegmentationDlg.checkBoxColor_HSV.isChecked():
-                for idx in range(nClusters):
-                    # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
-                    h = float(hsvClusterCenters[idx][0])
-                    s = float(hsvClusterCenters[idx][1])
-                    v = float(hsvClusterCenters[idx][2])
-                    strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
-
-        return strOutputString
-
-
     # ==================================================================================================================
     #
     # ==================================================================================================================
@@ -1241,54 +1119,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             sum_en = 0.0
 
         return sum_en
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def extractEXIFdata(self, fullPathAndFilename):
-        nYear = 1970
-        nMonth = 1
-        nDay = 1
-
-        try:
-            # extract EXIF info to determine what time the image was acquired. If EXIF info is not found,
-            # throw an exception and see if the information is embedded in the filename. Currently, we are
-            # working with images from NEON and PBT. The PBT images have EXIF data and the NEON/PhenoCam
-            # do not appear to have EXIF data.
-            myEXIFData = EXIFData()
-            header, data = myEXIFData.extractEXIFData(fullPathAndFilename)
-
-            strTemp = str(myEXIFData.getEXIF()[8])
-            dateOriginal = re.search('\d{4}:\d{2}:\d{2}', strTemp).group(0)
-            timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
-
-            nYear = int(str(dateOriginal[0:4]))
-            nMonth = int(str(dateOriginal[5:7]))
-            nDay = int(str(dateOriginal[8:10]))
-
-            nHours = int(str(timeOriginal[1:3]))
-            nMins = int(str(timeOriginal[4:6]))
-            nSecs = int(str(timeOriginal[7:9]))
-
-            bEXIFDataFound = True
-        except:
-            # assume the filename contains the timestamp for the image (assumes the image file is a PBT image)
-            bEXIFDataFound = False
-
-            try:
-                nHours = int(str(strTime[0:2]))
-                nMins = int(str(strTime[2:4]))
-                nSecs = int(str(strTime[4:6]))
-            except:
-                nHours = 0
-                nMins = 0
-                nSecs = 0
-
-        image_date = datetime.date(nYear, nMonth, nDay)
-        image_time = datetime.time(nHours, nMins, nSecs)
-
-        return(image_date, image_time)
 
 
     # ==================================================================================================================
@@ -1775,6 +1605,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def closeColorSegmentationDlg(self):
         if self.colorSegmentationDlg != None:
+            self.getColorSegmentationParams()
+
             self.colorSegmentationDlg.close()
             del self.colorSegmentationDlg
             self.colorSegmentationDlg = None
@@ -2406,30 +2238,42 @@ def processLocalImage(self, nImageIndex=0):
                     # ------------------------------------------------------------------------------------------
                     # CALCULATE THE GREENNESS INDEX FOR THE ROI
                     # ------------------------------------------------------------------------------------------
-                    red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
-                    redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
-                    fGreennessIndex = GRIME_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum)
-                    strGreennessIndex = "{:.4f}".format(fGreennessIndex)
-                    self.greennessLabel = QtWidgets.QLabel()
-                    self.greennessLabel.setText(strGreennessIndex)
-                    self.tableWidget_ROIList.setCellWidget(nRow, 3, self.greennessLabel)
+                    try:
+                        # CALCULATE THE ROI'S GREENNES INDEX
+                        red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+                        redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+                        fGreennessIndex = GRIME_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum)
+
+                        # DISPLAY ROI'S GREENNESS INDEX ON THE GUI
+                        strGreennessIndex = "{:.4f}".format(fGreennessIndex)
+                        self.greennessLabel = QtWidgets.QLabel()
+                        self.greennessLabel.setText(strGreennessIndex)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 3, self.greennessLabel)
+                    except:
+                        print('Something went wrong with the ROI Greenness Index calculation.')
 
                     # ------------------------------------------------------------------------------------------
                     # CALCULATE THE INTENSITY FOR THE ROI
                     # ------------------------------------------------------------------------------------------
                     try:
+                        # CALCULATE THE ROI'S INTENSITY
                         strIntensity = "{:.4f}".format(cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+
+                        # DISPALY THE ROI'S INTENSITY ON THE GUI
                         self.intensityLabel = QtWidgets.QLabel()
                         self.intensityLabel.setText(strIntensity)
                         self.tableWidget_ROIList.setCellWidget(nRow, 4, self.intensityLabel)
                     except:
-                        pass
+                        print('Something went wrong with the ROI Intensity calculation.')
 
                     # ------------------------------------------------------------------------------------------
                     # COMPUTE ENTROPY FOR ENTIRE IMAGE
                     # ------------------------------------------------------------------------------------------
                     try:
+                        # CALCULATE THE ROI'S ENTROPY
                         strEntropyValue = "{:.4f}".format(self.calcEntropy(gray)[0])
+
+                        # DISPLAY THE ROI'S ENTROPY ON THE GUI
                         self.entropyLabel = QtWidgets.QLabel()
                         self.entropyLabel.setText(strEntropyValue)
                         self.tableWidget_ROIList.setCellWidget(nRow, 5, self.entropyLabel)
@@ -2956,13 +2800,11 @@ def featureMatch():
     cv2.imshow("Matches", final_img)
     cv2.waitKey(0)
 
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
 def extractROI(rect, image):
     return(image[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()])
-
 
 # ======================================================================================================================
 #
@@ -3098,8 +2940,7 @@ def NEON_updateSiteInfo(self, item):
 
     global SITENAME
     SITENAME = siteInfo['data']['siteName']
-    if full == 1 or full == 4:
-        self.labelNEONSite.setText(SITENAME)
+    self.labelNEONSite.setText(SITENAME)
 
     keys = siteInfo['data'].keys()
 

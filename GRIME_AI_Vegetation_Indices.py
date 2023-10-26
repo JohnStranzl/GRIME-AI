@@ -78,15 +78,15 @@ class GRIME_AI_Vegetation_Indices:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def computeGreennessValue(self, dlg, redSum, greenSum, blueSum):
+    def computeGreennessValue(self, colorSegmentationParams, redSum, greenSum, blueSum):
 
-        if dlg.checkBox_GCC.isChecked():
+        if colorSegmentationParams.GCC:
             return ('%3.2f' % GRIME_AI_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum))
-        if dlg.checkBox_GLI.isChecked():
+        if colorSegmentationParams.GLI:
             return('%3.2f' % GRIME_AI_Vegetation_Indices().computeGreenLeafIndex(redSum, greenSum, blueSum))
-        if dlg.checkBox_NDVI.isChecked():
+        if colorSegmentationParams.NDVI:
             return('%3.2f' % GRIME_AI_Vegetation_Indices().computeNormalizedDifferenceVegetationIndex(redSum, greenSum))
-        if dlg.checkBox_ExG.isChecked():
+        if colorSegmentationParams.ExG:
             return('%3.2f' % GRIME_AI_Vegetation_Indices().computeExcessGreenIndex(redSum, greenSum, blueSum))
-        if dlg.checkBox_RGI.isChecked():
+        if colorSegmentationParams.RGI:
             return('%3.4f' % GRIME_AI_Vegetation_Indices().computeRedGreenIndex(redSum, greenSum))
