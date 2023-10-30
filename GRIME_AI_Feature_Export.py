@@ -263,7 +263,7 @@ class GRIME_AI_Feature_Export:
             if colorSegmentationParams.Texture:
                 newHeader = (newHeader + template).replace('#', 'Texture')
 
-                    # IF THERE IS MORE THAN ONE (1) ROI, APPEND AN INDEX ONTO THE HEADER LABEL
+            # IF THERE IS MORE THAN ONE (1) ROI, APPEND AN INDEX ONTO THE HEADER LABEL
 
             nClusters = roiObj.getNumColorClusters()
 

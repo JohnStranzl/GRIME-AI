@@ -1,3 +1,5 @@
+import cv2
+import numpy as np
 from enum import Enum
 
 from PyQt5.QtCore import QRect, QSize
@@ -103,3 +105,30 @@ class GRIME_roiData:
         self.hsvHist = hist
     def getHSVClusterCenters(self):
         return self.hsvClusterCenters, self.hsvHist
+
+    # --------------------------------------------------------------------------------
+    def extractROI(self, rect, image):
+        return (image[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()])
+
+    # --------------------------------------------------------------------------------
+    def calcEntropy(self, img):
+        entropy = []
+
+        hist = cv2.calcHist([img], [0], None, [256], [0, 255])
+        total_pixel = img.shape[0] * img.shape[1]
+
+        for item in hist:
+            probability = item / total_pixel
+            if probability == 0:
+                en = 0
+            else:
+                en = -1 * probability * (np.log(probability) / np.log(2))
+            entropy.append(en)
+
+        try:
+            sum_en = np.sum(entropy)
+        except:
+            sum_en = 0.0
+
+        return sum_en
+

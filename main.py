@@ -46,6 +46,16 @@ import promptlib
 import cv2
 import numpy as np
 
+# ------------------------------------------------------------
+# WHERE THE BITS MEET THE DIGITAL ROAD
+# ------------------------------------------------------------
+import torch
+import torchvision
+import torchvision.transforms as transforms
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
 # import tensorflow as tf
 # import torch
 # print(torch.__version__)
@@ -58,8 +68,11 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
     QGraphicsScene, QMessageBox, QSplashScreen, QAction
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import numpy as np
 
 # ------------------------------------------------------------
 #
@@ -226,21 +239,10 @@ root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 MSTFolder = 'C:/Users/Astrid Haugen/Documents/000 - MeanStride'
 
-class features():
-    shannonEntropy = True
-    intensity      = True
-    color_hsv      = True
-    texture        = False
-
-class regionSelect():
-    wholeImage = False
-    ROIShape   = True
-
 class displayOptions():
     displayROIs = True
 
 g_displayOptions   = displayOptions()
-g_regionSelect     = regionSelect()
 #g_featureDetection = featureDetection()
 #g_edgeDetection    = edgeDetection()
 #g_features         = features()
@@ -248,6 +250,28 @@ g_greennessIndex   = greennessIndex()
 
 g_edgeMethodSettings = edgeMethodsClass()
 g_featureMethodSettings = featureMethodsClass()
+
+# ======================================================================================================================
+# 2. DEEP LEARNING: DEFINE A CONVOLUTIONAL NETWORK
+# ======================================================================================================================
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)  # flatten all dimensions except batch
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 # ======================================================================================================================
 #
@@ -362,17 +386,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.labelEdgeImage.installEventFilter(self)
         self.labelOriginalImage.installEventFilter(self)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        self.pushButton_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
 
         self.pushButton_RetrieveNEONData.clicked.connect(self.RetrieveNEONDataClicked)
 
         self.pushButtonBrowseSaveImages_USGS_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_USGS_DownloadFolderClicked)
         self.pushButtonBrowseSaveImages_NEON_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_NEON_DownloadFolderClicked)
 
-        #JES self.pushButton_BuildFeatureFile.clicked.connect(self.GRIMe_NSF_Build)
         #JES self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
         #JES self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
-        #JES self.pushButton_ColorSegmentation.clicked.connect(self.pushButtonColorSegmentationClicked)
         #JES self.pushButton_TrainGood.clicked.connect(self.pushButtonTrainGoodTriggered)
         #JES self.pushButton_TrainBad.clicked.connect(self.pushButtonTrainBadTriggered)
 
@@ -455,8 +476,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_USGSDownload.setStyleSheet('QPushButton {background-color: steelblue;}')
         self.pushButtonBrowseSaveImages_USGS_DownloadFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
 
-        self.pushButton_BuildFeatureFile.setStyleSheet('QPushButton {background-color: steelblue;}')
-
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
@@ -479,9 +498,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.colorSegmentationParams.NDVI           = self.colorSegmentationDlg.checkBox_NDVI.isChecked()
         self.colorSegmentationParams.ExG            = self.colorSegmentationDlg.checkBox_ExG.isChecked()
         self.colorSegmentationParams.RGI            = self.colorSegmentationDlg.checkBox_RGI.isChecked()
+
         self.colorSegmentationParams.Intensity      = self.colorSegmentationDlg.checkBox_Intensity.isChecked()
         self.colorSegmentationParams.ShannonEntropy = self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked()
         self.colorSegmentationParams.Texture        = self.colorSegmentationDlg.checkBox_Texture.isChecked()
+
+        self.colorSegmentationParams.wholeImage     = self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked()
+
 
     # ------------------------------------------------------------------------------------------------------------------
     # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
@@ -539,6 +562,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         button_action = QAction(QIcon(icon_path), "Settings", self)
         button_action.setStatusTip("Change options and settings")
         button_action.triggered.connect(self.onMyToolBarSettings)
+        toolbar.addAction(button_action)
+
+        #--- DEEP LEARNING
+        icon_path = str(Path(__file__).parent / "icons/Green Brain Icon.png")
+        button_action = QAction(QIcon(icon_path), "Deep Learning", self)
+        button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
+        button_action.triggered.connect(self.toolbarButtonDeepLearning)
         toolbar.addAction(button_action)
 
         #--- GRIME2
@@ -1017,14 +1047,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 roiObj.setDisplaySize(scaledCurrentImage.size())
                 roiObj.calcROI()
 
-                if full == 1:
-                    roiObj.setROIShape(ROIShape.RECTANGLE)
-                    #if self.radioButton_ROIShapeRectangle.isChecked():
-                    #roiObj.setROIShape(ROIShape.RECTANGLE)
-                    #else:
-                    #roiObj.setROIShape(ROIShape.ELLIPSE)
-                else:
-                    roiObj.setROIShape(ROIShape.RECTANGLE)
+                roiObj.setROIShape(ROIShape.RECTANGLE)
+                #if self.radioButton_ROIShapeRectangle.isChecked():
+                #roiObj.setROIShape(ROIShape.RECTANGLE)
+                #else:
+                #roiObj.setROIShape(ROIShape.ELLIPSE)
             except:
                 msgBox = GRIMe_QMessageBox('ROI Error',
                                            'An unexpected error occurred calculating the ROI of the full resolution image!')
@@ -1059,6 +1086,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # CREATE NEW ROW IN ROI TABLE
             nRow = self.tableWidget_ROIList.rowCount()
             self.tableWidget_ROIList.insertRow(nRow)
+
+            #if (nRow == 0):
+            #    numToAdd = 3
+            #else:
+            #    numToAdd = 1
+
+            #for i in range(numToAdd):
+            #    self.tableWidget_ROIList.insertRow(nRow)
+            #    nRow += 1
 
             # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
             colorBar = self.createColorBar(hist, colorClusters)
@@ -1303,51 +1339,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def pushButtonColorSegmentationClicked(self):
-        global currentImage
-
-        myGRIMe_Color = GRIME_AI_Color()
-
-        if len(self.roiList) == 0:
-            strError = "You must train at least one ROI before segmenting the image."
-            msgBox = GRIMe_QMessageBox('Color Segmentation Error', strError)
-            response = msgBox.displayMsgBox()
-            return
-
-        # ----------------------------------------------------------------------------------------------------
-        # DISPLAY IMAGE FROM NEON SITE
-        # ----------------------------------------------------------------------------------------------------
-        if currentImage:
-            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-            width = scaledCurrentImage.width()
-            height = scaledCurrentImage.height()
-
-            # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-
-            rgb = cv2.blur(img1, ksize=(11, 11))
-
-            # convert image to HSV
-            hsv = cv2.cvtColor(img1, cv2.COLOR_RGB2HSV)
-
-            if len(self.roiList) > 0:
-                # DIAGNOSTICS
-                if self.checkBoxColorDiagnostics.checkState():
-                    GRIMe_Diagnostics.RGB3DPlot(rgb)
-                    GRIMe_Diagnostics.plotHSVChannelsGray(hsv)
-                    GRIMe_Diagnostics.plotHSVChannelsColor(hsv)
-
-                # segment colors
-                rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
-
-            # display the segemented image on the GUI
-            qImg = QImage(rgb1.data, rgb1.shape[1], rgb1.shape[0], QImage.Format_BGR888)
-            pix = QPixmap(qImg)
-            self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
     #def checkboxNEONSitesClicked(self):
     #    if self.checkBoxNEONSites.isChecked():
     #        # GET LIST OF ALL SITES ON NEON
@@ -1470,6 +1461,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
+    def toolbarButtonDeepLearning(self):
+        strMessage = 'This is for producing models for Deep Learning. This is experimental at this time.'
+        msgBox = GRIMe_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
+        response = msgBox.displayMsgBox()
+
+        self.myDeepLearning()
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
     def toolbarButtonGRIME2(self):
         strMessage = 'Potential future home for GRIME2 Water Level/Stage measurement functionality.'
         msgBox = GRIMe_QMessageBox('Water Level Measurement', strMessage, QMessageBox.Close)
@@ -1486,6 +1487,164 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.edgeDetectionDlg.featureDetectionSignal.connect(self.featureDetectionMethod)
 
         self.edgeDetectionDlg.show()
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def imshow(self, img):
+        img = img / 2 + 0.5  # unnormalize
+        npimg = img.numpy()
+        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.show()
+
+    # ======================================================================================================================
+    # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
+    # https://pytorch.org/tutorials/beginner/blitz/neural_networks_tutorial.html
+    # https://www.cs.toronto.edu/~kriz/cifar.html
+    # ======================================================================================================================
+    def myDeepLearning(self):
+
+        # CHECK TO SEE IF THE COMPUTER HAS A GPU
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        # Assuming that we are on a CUDA machine, this should print a CUDA device:
+        print(device)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 1. LOAD AND NORMALIZE CIFAR10
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+        batch_size = 4
+
+        torchvision.datasets.
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                                  shuffle=True, num_workers=2)
+
+        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                               download=True, transform=transform)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                                 shuffle=False, num_workers=2)
+
+        classes = ('plane', 'car', 'bird', 'cat',
+                   'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+        net = Net()
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 3. DEEP LEARNING: DEFINE A LOSS FUNCTION AND OPTIMIZER
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 4a. DEEP LEARNING: TRAIN THE NETWORK
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        for epoch in range(2):  # loop over the dataset multiple times
+
+            running_loss = 0.0
+            for i, data in enumerate(trainloader, 0):
+                # get the inputs; data is a list of [inputs, labels]
+                inputs, labels = data
+
+                # zero the parameter gradients
+                optimizer.zero_grad()
+
+                # forward + backward + optimize
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+                # print statistics
+                running_loss += loss.item()
+                if i % 2000 == 1999:  # print every 2000 mini-batches
+                    print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+                    running_loss = 0.0
+
+        print('Finished Training')
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 4b. DEEP LEARNING: SAVE THE TRAINED MODEL
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        PATH = './cifar_net.pth'
+        torch.save(net.state_dict(), PATH)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 5a. DEEP LEARNING: TEST THE NETWORK ON THE TEST DATA
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        dataiter = iter(testloader)
+        images, labels = next(dataiter)
+
+        # print images
+        self.imshow( torchvision.utils.make_grid(images))
+        print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 5b. DEEP LEARNING: RELOAD THE TEST DATA
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        net = Net()
+        net.load_state_dict(torch.load(PATH))
+
+        # LET'S SEE WHAT THE NEURAL NET CLASSIFIES THE IMAGES AS
+        outputs = net(images)
+
+        _, predicted = torch.max(outputs, 1)
+
+        print('Predicted: ', ' '.join(f'{classes[predicted[j]]:5s}'
+                                      for j in range(4)))
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # CHECK TO SEE HOW THE NEURAL NET PERFORMS ON THE WHOLE DATA SET
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        correct = 0
+        total = 0
+        # since we're not training, we don't need to calculate the gradients for our outputs
+        with torch.no_grad():
+            for data in testloader:
+                images, labels = data
+                # calculate outputs by running images through the network
+                outputs = net(images)
+                # the class with the highest energy is what we choose as prediction
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # WHICH CLASSES PERFORMED WELL AND WHICH CLASSES PERFORMED POORLY
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # prepare to count predictions for each class
+        correct_pred = {classname: 0 for classname in classes}
+        total_pred = {classname: 0 for classname in classes}
+
+        # again no gradients needed
+        with torch.no_grad():
+            for data in testloader:
+                images, labels = data
+                outputs = net(images)
+                _, predictions = torch.max(outputs, 1)
+                # collect the correct predictions for each class
+                for label, prediction in zip(labels, predictions):
+                    if label == prediction:
+                        correct_pred[classes[label]] += 1
+                    total_pred[classes[label]] += 1
+
+        # print accuracy for each class
+        for classname, correct_count in correct_pred.items():
+            accuracy = 100 * float(correct_count) / total_pred[classname]
+            print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
+
 
     # ==================================================================================================================
     #
@@ -1594,6 +1753,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.colorSegmentationDlg.addROI_Signal.connect(self.trainROI)
             self.colorSegmentationDlg.deleteAllROI_Signal.connect(self.deleteAllROI)
             self.colorSegmentationDlg.close_signal.connect(self.closeColorSegmentationDlg)
+            self.colorSegmentationDlg.buildFeatureFile_Signal.connect(self.buildFeatureFile)
 
             self.colorSegmentationDlg.accepted.connect(self.closeColorSegmentationDlg)
             self.colorSegmentationDlg.rejected.connect(self.closeColorSegmentationDlg)
@@ -1827,22 +1987,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def eventFilter(self, source, event):
 
-        if full == 1 or full == 4:
-            if event.type() == QtCore.QEvent.MouseMove and source is self.labelEdgeImage:
-                # print("A")
-                pass
+        if event.type() == QtCore.QEvent.MouseMove and source is self.labelEdgeImage:
+            # print("A")
+            pass
 
-            if event.type() == QtCore.QEvent.MouseMove and source is self.labelOriginalImage:
-                if 0:
-                    x, y = pyautogui.position()
-                    pixelColor = pyautogui.screenshot().getpixel((x, y))
-                    ss = 'Screen Pos - X:' + str(x).rjust(4) + ' Y:' + str(y).rjust(4)
-                    ss += ' RGB: (' + str(pixelColor[0]).rjust(3)
-                    ss += ', ' + str(pixelColor[1]).rjust(3)
-                    ss += ', ' + str(pixelColor[2]).rjust(3) + ')'
-                    print(ss)
-                    # print("B")
-                pass
+        if event.type() == QtCore.QEvent.MouseMove and source is self.labelOriginalImage:
+            if 0:
+                x, y = pyautogui.position()
+                pixelColor = pyautogui.screenshot().getpixel((x, y))
+                ss = 'Screen Pos - X:' + str(x).rjust(4) + ' Y:' + str(y).rjust(4)
+                ss += ' RGB: (' + str(pixelColor[0]).rjust(3)
+                ss += ', ' + str(pixelColor[1]).rjust(3)
+                ss += ', ' + str(pixelColor[2]).rjust(3) + ')'
+                print(ss)
+                # print("B")
+            pass
 
         if event.type() == QtCore.QEvent.MouseButtonDblClick and source is self.labelOriginalImage:
             # labelEdgeImageDoubleClickEvent(self)
@@ -1968,6 +2127,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.NEON_labelLatestImage.setText("No Images Available")
         else:
             self.NEON_labelLatestImage.setPixmap(self.NEON_latestImage.scaled(self.NEON_labelLatestImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def WholeImage_ExtractFeatures(self, img, bWholeImageCalc):
+        if bWholeImageCalc:
+            # BLUR THE IMAGE
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+            red, green, blue = GRIME_AI_Utils().separateChannels(img)
+            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+            strGCC = '%3.3f' % (GRIME_AI_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum))
+
+            # IMAGE INTENSITY CALCULATIONS
+            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+            strIntensity = '%3.3f' % (intensity)
+
+            # COMPUTE ENTROPY FOR ENTIRE IMAGE
+            entropyValue = self.calcEntropy(gray)
+            strEntropy = '%3.3f' % (entropyValue)
+        else:
+            strGCC = '---'
+            strIntensity = '---'
+            strEntropy = '---'
+
+        return strGCC, strIntensity, strEntropy
+
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -2119,7 +2306,6 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
         processLocalImage(self)
         #refreshImage(self)
 
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -2174,34 +2360,36 @@ def processLocalImage(self, nImageIndex=0):
 
         img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
 
-        if g_regionSelect.wholeImage:
-            # BLUR THE IMAGE
-            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # EXTRACT FEATURES FOR WHOLE IMAGE
+        strGCC, strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
 
-            red, green, blue = GRIME_AI_Utils().separateChannels(img)
-            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
-            strGCC = '%3.3f' % (GRIME_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum))
-            self.label_GreennessIndex_Value.setText(strGCC)
+        nRow = self.tableWidget_ROIList.rowCount()
+        if nRow == 0:
+            self.tableWidget_ROIList.insertRow(nRow)
 
-            # IMAGE INTENSITY CALCULATIONS
-            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-            strIntensity = '%3.3f' % (intensity)
-            self.label_ImageIntensityValue.setText(strIntensity)
+        wholeImageLabel = QtWidgets.QLabel()
+        wholeImageLabel.setText("Whole Image")
+        self.tableWidget_ROIList.setCellWidget(0, 0, wholeImageLabel)
 
-            # COMPUTE ENTROPY FOR ENTIRE IMAGE
-            entropyValue = self.calcEntropy(gray)
-            strEntropy = '%3.3f' % (entropyValue)
-            self.label_ImageEntropyValue.setText(strEntropy)
-        else:
-            self.label_GreennessIndex_Value.setText("")
-            self.label_ImageIntensityValue.setText("")
-            self.label_ImageEntropyValue.setText("")
+        greennessLabel = QtWidgets.QLabel()
+        greennessLabel.setText(strGCC)
+        self.tableWidget_ROIList.setCellWidget(0, 3, greennessLabel)
 
+        intensityLabel = QtWidgets.QLabel()
+        intensityLabel.setText(strIntensity)
+        self.tableWidget_ROIList.setCellWidget(0, 4, intensityLabel)
+
+        entropyLabel = QtWidgets.QLabel()
+        entropyLabel.setText(strEntropy)
+        self.tableWidget_ROIList.setCellWidget(0, 5,entropyLabel)
+
+        # DISPLAY THE PROGRESS WHEEL
         progressBar = QProgressWheel()
         progressBar.setRange(0, len(self.roiList) + 1)
         #JES progressBar.show()
 
-        nRow = 0
+        # EXTRACT THE FEATURES FOR EACH ROI
+        nRow = 1
         for roiObj in self.roiList:
             progressBar.setValue(nRow+1)
             progressBar.repaint()
@@ -2242,7 +2430,7 @@ def processLocalImage(self, nImageIndex=0):
                         # CALCULATE THE ROI'S GREENNES INDEX
                         red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
                         redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
-                        fGreennessIndex = GRIME_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum)
+                        fGreennessIndex = GRIME_AI_Vegetation_Indices().computeGreennessIndex(redSum, greenSum, blueSum)
 
                         # DISPLAY ROI'S GREENNESS INDEX ON THE GUI
                         strGreennessIndex = "{:.4f}".format(fGreennessIndex)
@@ -3127,14 +3315,6 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
         gWebImageCount = len(dailyImagesList.getVisibleList())
 
-        # INIT SPINBOX CONTROLS BASED UPON NUMBER OF IMAGES AVAILABLE
-        #if (0):
-        #    if full == 1 or full == 4:
-        #        self.labelImageCountNumber.setText(str(gWebImageCount))
-        #        self.spinBoxDailyImage.setMinimum(1)
-        #        self.spinBoxDailyImage.setMaximum(gWebImageCount)
-        #        self.spinBoxDailyImage.setValue(1)
-        #        self.labelImageCountNumber.setText(str(gWebImageCount))
     else:
         dailyURLvisible = []
 
@@ -3162,21 +3342,12 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
             if os.path.isfile(completeFilename) == False:
                 urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
 
-        # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
-        # DISABLE THE CHECK BOX SO THAT ONCE THE IMAGES ARE DOWNLOADED, IMAGES ARE NOT CONTINUED TO BE SAVED UNBEKNOWNST TO THE USER
-        #if full == 1:
-        #    self.checkBoxSaveImages.setChecked(False)
-
         # clean-up before exiting function
         # 1. close and delete the progress bar
         # 2. no other clean-up tasks
         progressBar.close()
         del progressBar
 
-        #if full == 1:
-        #    strMessage = 'Data download is complete!' + '\n\n' + 'If you selected "Save Images", it will be deselected to avoid unnecessary re-downloading of the same data.' + '\n\n' + 'If you want to re-download the same data or additional data, you will have to reselect "Save Images."'
-        #    msgBox = GRIMe_QMessageBox('Data Download', strMessage)
-        #    response = msgBox.displayMsgBox()
         strMessage = 'Data download is complete!'
         msgBox = GRIMe_QMessageBox('Data Download', strMessage)
         response = msgBox.displayMsgBox()
@@ -3793,12 +3964,7 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     # DISPLAY SPLASH SCREEN
     # ------------------------------------------------------------------------------------------------------------------
-    if full == 1:
-        pixmap = QPixmap('Splash_007.jpg')
-    elif full == 4:
-        pixmap = QPixmap('Splash_007FE.jpg')
-    else:
-        pixmap = QPixmap('Splash_007DM.jpg')
+    pixmap = QPixmap('Splash_007.jpg')
     splash = QSplashScreen(pixmap)
     splash.show()
     time.sleep(5)
@@ -3854,4 +4020,54 @@ if __name__ == '__main__':
 
     # Run the program
     sys.exit(app.exec())
+
+
+
+
+
+    # ==================================================================================================================
+    # DIAGNOSTIC FUNCTION???
+    # JES self.pushButton_ColorSegmentation.clicked.connect(self.pushButtonColorSegmentationClicked)
+    # ==================================================================================================================
+    def pushButtonColorSegmentationClicked(self):
+        global currentImage
+
+        myGRIMe_Color = GRIME_AI_Color()
+
+        if len(self.roiList) == 0:
+            strError = "You must train at least one ROI before segmenting the image."
+            msgBox = GRIMe_QMessageBox('Color Segmentation Error', strError)
+            response = msgBox.displayMsgBox()
+            return
+
+        # ----------------------------------------------------------------------------------------------------
+        # DISPLAY IMAGE FROM NEON SITE
+        # ----------------------------------------------------------------------------------------------------
+        if currentImage:
+            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            width = scaledCurrentImage.width()
+            height = scaledCurrentImage.height()
+
+            # KMeans EXPECTS THE BYTE ORDER TO BE RGB
+            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+
+            rgb = cv2.blur(img1, ksize=(11, 11))
+
+            # convert image to HSV
+            hsv = cv2.cvtColor(img1, cv2.COLOR_RGB2HSV)
+
+            if len(self.roiList) > 0:
+                # DIAGNOSTICS
+                if self.checkBoxColorDiagnostics.checkState():
+                    GRIMe_Diagnostics.RGB3DPlot(rgb)
+                    GRIMe_Diagnostics.plotHSVChannelsGray(hsv)
+                    GRIMe_Diagnostics.plotHSVChannelsColor(hsv)
+
+                # segment colors
+                rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
+
+            # display the segemented image on the GUI
+            qImg = QImage(rgb1.data, rgb1.shape[1], rgb1.shape[0], QImage.Format_BGR888)
+            pix = QPixmap(qImg)
+            self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
 

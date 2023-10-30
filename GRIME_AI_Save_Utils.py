@@ -41,6 +41,9 @@ class GRIME_AI_Save_Utils:
         config.set(szSection, 'Trees1', 'TBD')
         config.set(szSection, 'Trees2', 'TBD')
 
+        szSection = 'FilePaths'
+        config.add_section(szSection)
+
         config.write(f)
         f.close()
 

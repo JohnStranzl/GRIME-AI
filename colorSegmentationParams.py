@@ -20,6 +20,6 @@ class colorSegmentationParamsClass():
 
         self.ROI            = True
 
-        self.wholeImage     = False
+        self.wholeImage     = True
 
         self.numColorClusters = 4

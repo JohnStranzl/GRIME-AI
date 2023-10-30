@@ -197,11 +197,10 @@ class GRIME_AI_Resize_Controls:
         gap = 10
         border = 25
         vertical_margin = 50
-        newWidthAvailable = (int)(windowSize.width() - (gap * (3 + 1)) - (2*border))
+        newWidthAvailable = (int)(windowSize.width() - (gap * (2 + 1)) - (2*border))
 
         one   = selfControl.labelOriginalImage.pos()
-        paneWidth  = (int)(newWidthAvailable * 0.45)
-        tableWidth = (int)(newWidthAvailable * 0.10)
+        paneWidth  = (int)(newWidthAvailable * 0.50)
 
         # --------------------------------------------------------------------------------
         # TAB WIDGET - RESIZE THE TAB WIDGET
@@ -228,12 +227,6 @@ class GRIME_AI_Resize_Controls:
         left   = left + paneWidth + gap
         selfControl.labelEdgeImage.setGeometry(left, top, width, height)
 
-        # ROW 1, COL 3 - WHOLE IMAGE FEATURES
-        left   = left + paneWidth + gap
-        width = (int)(newWidthAvailable * 0.10)
-        height = selfControl.groupBox_WholeImageStats.height()
-        selfControl.groupBox_WholeImageStats.setGeometry(left, top, width, height)
-
         # --------------------------------------------------------------------------------
         # ROW 2
         # --------------------------------------------------------------------------------
@@ -247,10 +240,3 @@ class GRIME_AI_Resize_Controls:
         # ROW 2, COL 2 - ROI LIST
         left   = left + paneWidth + gap
         selfControl.tableWidget_ROIList.setGeometry(left, top, width, height)
-
-        # ROW 2, COL 3 - BUILD FEATURES BUTTON
-        width  = selfControl.pushButton_BuildFeatureFile.width()
-        height = selfControl.pushButton_BuildFeatureFile.height()
-        left   = left + paneWidth + gap
-        top    = top
-        selfControl.pushButton_BuildFeatureFile.setGeometry(left, top, width, height)
