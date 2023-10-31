@@ -8,7 +8,7 @@ REM pyinstaller --onefile --noconfirm --hidden-import=hook-sklearnneighborstyped
 REM "C:\Users\Astrid Haugen\AppData\Local\Programs\Python\Python311\Scripts\pyinstaller" --onefile main.py --hidden-import=hook-sklearnneighborstypedef.py --noconfirm
 REM pyinstaller setup.py --hidden-import=hook-sklearnneighborstypedef.py --noconfirm
 
-pyinstaller --clean --noconfirm main.py
+pyinstaller --clean --noconfirm --hidden-import playsound main.py
 REM Copy the splash screen graphic to the distribution folder
 copy "SplashScreen Images\Splash_007.jpg" dist\main
 

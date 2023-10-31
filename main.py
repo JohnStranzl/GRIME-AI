@@ -49,12 +49,14 @@ import numpy as np
 # ------------------------------------------------------------
 # WHERE THE BITS MEET THE DIGITAL ROAD
 # ------------------------------------------------------------
+'''
 import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+'''
 
 # import tensorflow as tf
 # import torch
@@ -67,7 +69,9 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QSplashScreen, QAction
+    QGraphicsScene, QMessageBox, QAction
+
+from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -147,7 +151,7 @@ from constants import edgeMethodsClass, featureMethodsClass
 # ------------------------------------------------------------
 from exifData import EXIFData
 
-# from playsound import playsound
+from playsound import playsound
 # import GRIME_KMeans
 # from webdriver_manager.core.utils import ChromeType
 
@@ -254,6 +258,7 @@ g_featureMethodSettings = featureMethodsClass()
 # ======================================================================================================================
 # 2. DEEP LEARNING: DEFINE A CONVOLUTIONAL NETWORK
 # ======================================================================================================================
+'''
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -272,6 +277,7 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+'''
 
 # ======================================================================================================================
 #
@@ -427,7 +433,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #--- USGS
         #self.listboxUSGSSites.itemDoubleClicked.connect(self.USGS_SiteClicked)
         self.listboxUSGSSites.itemClicked.connect(self.USGS_SiteClicked)
-        self.listboxUSGSSites.currentItemChanged.connect(self.USGS_SiteClicked)
+        #self.listboxUSGSSites.currentItemChanged.connect(self.USGS_SiteClicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
         folderPath = GRIME_AI_Save_Utils().USGS_getSaveFolderPath()
@@ -764,6 +770,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if (cameraIndex >= 0):
             strCamID    = self.listboxUSGSSites.currentItem().text()
 
+            currentRow = self.listboxUSGSSites.currentRow()
+
             self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
 
             try:
@@ -773,6 +781,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.listboxUSGSSites.addItems(cameraList)
                 self.listboxUSGSSiteInfo.clear()
                 self.listboxUSGSSiteInfo.addItems(self.myNIMS.getCameraInfo(strCamID))
+
+                self.listboxUSGSSites.setCurrentRow(currentRow)
 
                 siteName = self.myNIMS.get_camId()
 
@@ -1382,33 +1392,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def pushButton_USGSDownloadClicked(self):
         currentRow = self.listboxUSGSSites.currentRow()
-        site = self.listboxUSGSSites.currentItem().text()
 
-        startDateCol = 4
-        nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, startDateCol).date())
-        startDate = datetime.date(nYear, nMonth, nDay)
+        if currentRow >= 0:
+            site = self.listboxUSGSSites.currentItem().text()
 
-        endDateCol = 5
-        nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, endDateCol).date())
-        endDate = datetime.date(nYear, nMonth, nDay)
+            startDateCol = 4
+            nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, startDateCol).date())
+            startDate = datetime.date(nYear, nMonth, nDay)
 
-        startTimeCol = 6
-        nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time())
-        startTime = datetime.time(nHour, nMinute, nSecond)
+            endDateCol = 5
+            nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, endDateCol).date())
+            endDate = datetime.date(nYear, nMonth, nDay)
 
-        endTimeCol = 7
-        nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
-        endTime = datetime.time(nHour, nMinute, nSecond)
+            startTimeCol = 6
+            nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, startTimeCol).dateTime().time())
+            startTime = datetime.time(nHour, nMinute, nSecond)
 
-        nwisID = self.myNIMS.get_nwisID()
+            endTimeCol = 7
+            nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
+            endTime = datetime.time(nHour, nMinute, nSecond)
 
-        downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
-        if not os.path.exists(downloadsFilePath):
-            os.makedirs(downloadsFilePath)
+            nwisID = self.myNIMS.get_nwisID()
 
-        self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=downloadsFilePath, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
+            if not os.path.exists(downloadsFilePath):
+                os.makedirs(downloadsFilePath)
 
-        #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
+            self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=downloadsFilePath, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+
+            #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
 
     # ==================================================================================================================
     #
@@ -1507,7 +1519,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # https://www.cs.toronto.edu/~kriz/cifar.html
     # ======================================================================================================================
     def myDeepLearning(self):
+        return
 
+        '''
         # CHECK TO SEE IF THE COMPUTER HAS A GPU
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -1523,7 +1537,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         batch_size = 4
 
-        torchvision.datasets.
         trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                 download=True, transform=transform)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
@@ -1644,7 +1657,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for classname, correct_count in correct_pred.items():
             accuracy = 100 * float(correct_count) / total_pred[classname]
             print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
-
+        '''
 
     # ==================================================================================================================
     #
@@ -3964,13 +3977,22 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     # DISPLAY SPLASH SCREEN
     # ------------------------------------------------------------------------------------------------------------------
-    pixmap = QPixmap('Splash_007.jpg')
-    splash = QSplashScreen(pixmap)
-    splash.show()
-    time.sleep(5)
-    splash.finish(frame)
+    splash = GRIME_AI_SplashScreen(QPixmap('Splash_007.jpg'))
+    splash.show(frame)
+    #time.sleep(5)
+    #splash.finish(frame)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ARTISTIC LICENSE
+    # ------------------------------------------------------------------------------------------------------------------
+    #try:
+    #    playsound('shall-we-play-a-game.mp3')
+    #except:
+    #    pass
+
+    # ------------------------------------------------------------------------------------------------------------------
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
+    # ------------------------------------------------------------------------------------------------------------------
     app.processEvents()
 
     # ------------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialog, QVBoxLayout
 from PyQt5.uic import loadUi
 
 # ====================================================================================================
@@ -33,6 +33,8 @@ class GRIME_ColorSegmentationDlg(QDialog):
     # -----------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
         super(QDialog, self).__init__(parent)
+
+        layout = QVBoxLayout(self)
 
         # SET BEHAVIOR OF DIALOG BOX
         self.setModal(False)
