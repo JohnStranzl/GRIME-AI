@@ -7,17 +7,20 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>702</height>
+    <height>676</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Select Features</string>
   </property>
   <widget class="QDialogButtonBox" name="buttonBox_Close">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="geometry">
     <rect>
-     <x>150</x>
-     <y>650</y>
+     <x>0</x>
+     <y>670</y>
      <width>81</width>
      <height>32</height>
     </rect>
@@ -32,7 +35,7 @@
     <enum>Qt::Horizontal</enum>
    </property>
    <property name="standardButtons">
-    <set>QDialogButtonBox::Close</set>
+    <set>QDialogButtonBox::NoButton</set>
    </property>
   </widget>
   <widget class="QGroupBox" name="groupBox_ScalarOutputs">
@@ -672,45 +675,54 @@
     </layout>
    </widget>
   </widget>
-  <widget class="QCheckBox" name="checkBoxColorDiagnostics">
+  <widget class="QPushButton" name="pushButton_Dlg_BuildFeatureFile">
    <property name="geometry">
     <rect>
-     <x>205</x>
-     <y>594</y>
-     <width>151</width>
-     <height>20</height>
+     <x>80</x>
+     <y>600</y>
+     <width>211</width>
+     <height>51</height>
     </rect>
    </property>
    <property name="font">
     <font>
-     <family>MS Shell Dlg 2</family>
-     <pointsize>8</pointsize>
+     <family>Calibri</family>
+     <pointsize>10</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
     </font>
    </property>
-   <property name="text">
-    <string>Color Diagnostics</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_ColorSegmentation">
-   <property name="geometry">
-    <rect>
-     <x>50</x>
-     <y>590</y>
-     <width>131</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>MS Shell Dlg 2</family>
-     <pointsize>8</pointsize>
-    </font>
+   <property name="autoFillBackground">
+    <bool>true</bool>
    </property>
    <property name="text">
-    <string>Color Segmentation</string>
+    <string>Build
+Feature File</string>
    </property>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>lineEdit_roiName</tabstop>
+  <tabstop>pushButtonAddROI</tabstop>
+  <tabstop>checkBoxScalarRegion_WholeImage</tabstop>
+  <tabstop>checkBoxScalarRegion_ROI</tabstop>
+  <tabstop>checkBox_ShannonEntropy</tabstop>
+  <tabstop>checkBox_Intensity</tabstop>
+  <tabstop>checkBox_Texture</tabstop>
+  <tabstop>checkBoxColor_HSV</tabstop>
+  <tabstop>checkBox_GCC</tabstop>
+  <tabstop>checkBox_GLI</tabstop>
+  <tabstop>checkBox_ExG</tabstop>
+  <tabstop>checkBoxDisplayROIs</tabstop>
+  <tabstop>checkBox_RGI</tabstop>
+  <tabstop>checkBox_NDVI</tabstop>
+  <tabstop>pushButton_Dlg_BuildFeatureFile</tabstop>
+  <tabstop>checkBoxCalcColors</tabstop>
+  <tabstop>spinBoxColorClusters</tabstop>
+  <tabstop>pushButton_deleteAllROIs</tabstop>
+  <tabstop>radioButton_ROIShapeRectangle</tabstop>
+  <tabstop>radioButton_ROIShapeEllipse</tabstop>
+ </tabstops>
  <resources/>
  <connections>
   <connection>
