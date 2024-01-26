@@ -1,6 +1,5 @@
 import os
-import datetime as datetime
-import re
+from datetime import datetime
 
 import csv
 import cv2
@@ -10,22 +9,22 @@ import pandas as pd
 
 import urllib.request
 from urllib.request import urlopen
+import ssl
 
 from siteData import siteData
 
 from pathlib import Path
 
 from GRIME_QMessageBox import GRIMe_QMessageBox
-from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 class GRIME_AI_Utils:
+
     def __init__(self):
         self.className = "GRIME_AI_Utils"
         self.instance = 1
-
 
     # ======================================================================================================================
     # Converts a QImage into an opencv MAT format
@@ -108,90 +107,6 @@ class GRIME_AI_Utils:
                                      row[fieldLatitudeIndex], row[fieldLongitudeIndex]))
 
         return siteList
-
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def extractDateFromFilename(self, filename):
-
-        nYear = 1970
-        nMonth = 1
-        nDay = 1
-        arrDate = []
-        arrTime = []
-
-        # TRY PBT DATE/TIME FORMAT: 'MicksSlide_20220610_Forsberg_814.jpg'
-        try:
-            arrDate.append(re.search('\d{4}\d{2}\d{2}', filename)[0][0:4])
-            arrDate.append(re.search('\d{4}\d{2}\d{2}', filename)[0][4:6])
-            arrDate.append(re.search('\d{4}\d{2}\d{2}', filename)[0][6:8])
-            arrTime.append('0')
-            arrTime.append('0')
-            arrTime.append('0')
-            delimiter = ''
-        except:
-            arrDate = None
-            arrTime = None
-
-        # TRY NEON DATE/TIME FORMAT: 'NEON.D03.BARC.DP1.20002_2022_06_01_073006.jpg'
-        if arrDate == None:
-            arrDate = re.search('\d{4}_\d{2}_\d{2}', filename)
-            arrTime = re.search('\d{2}\d{2}\d{2}', filename)
-            delimiter = '_'
-
-        # TRY USGS DATE/TIME FORMAT: 'VA_Pinewood_Virginia_Beach___2022-06-04_11-00-01-8586-05-00_overlay.jpg'
-        try:
-            if arrDate == None:
-                arrDate = re.search('\d{4}-\d{2}-\d{2}', filename)
-                arrTime = re.search('\d{2}-\d{2}-\d{2}', re.search('\d{2}-\d{2}-\d{2}', filename)[0])
-                delimiter = '-'
-        except:
-            arrDate = None
-            arrTine = None
-
-        # PARSE DATE
-        try:
-            if len(delimiter) > 0:
-                nYear  = int(arrDate.group().split(delimiter)[0])
-                nMonth = int(arrDate.group().split(delimiter)[1])
-                nDay   = int(arrDate.group().split(delimiter)[2])
-            else:
-                nYear  = int(arrDate[0])
-                nMonth = int(arrDate[1])
-                nDay   = int(arrDate[2])
-        except:
-            nYear  = 1970
-            nMonth = 1
-            nDay   = 1
-
-        # PARSE TIME
-        try:
-            if len(delimiter) > 0:
-                nHours   = int(arrTime.group().split(delimiter)[0])
-                nMinutes = int(arrTime.group().split(delimiter)[1])
-                nSeconds = int(arrTime.group().split(delimiter)[2])
-            else:
-                nHours   = int(arrTime[0])
-                nMinutes = int(arrTime[1])
-                nSeconds = int(arrTime[2])
-        except:
-            nHours   = 0
-            nMinutes = 0
-            nSeconds = 0
-
-        # PERFORM RANGE CHECK ON DATE
-        if nYear > 2100 or nYear < 1970 or nMonth > 12 or nDay > 31:
-            nYear  = 1970
-            nMonth = 1
-            nDay   = 1
-
-        # CREATE DATE AND TIME OBJECTS
-        fileDate = datetime.date(nYear, nMonth, nDay)
-        fileTime = datetime.time(nHours, nMinutes, nSeconds)
-
-        return fileDate, fileTime
-
 
     # ======================================================================================================================
     #
@@ -387,6 +302,7 @@ class GRIME_AI_Utils:
             req = urllib.request.Request(my_url)
 
             try:
+                ssl._create_default_https_context = ssl._create_unverified_context
                 response = urlopen(req)
                 nErrorCode = 0
             except urllib.error.HTTPError as e:

@@ -21,9 +21,13 @@ class GRIME_AI_SplashScreen(QSplashScreen):
         bigSplash = QSplashScreen(self.pixmap)
         bigSplash.show()
         time.sleep(2)
-        self.splashSound()
+
+        #self.splashSound()
         bigSplash.finish(mainWin)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ARTISTIC LICENSE
+    # ------------------------------------------------------------------------------------------------------------------
     def splashSound(self):
         try:
            playsound('.\shall-we-play-a-game.mp3')

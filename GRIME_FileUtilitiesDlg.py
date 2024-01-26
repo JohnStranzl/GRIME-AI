@@ -4,6 +4,8 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 import promptlib
+import datetime
+
 import GRIME_AI_Utils
 
 class Datapaths():
@@ -61,12 +63,12 @@ class GRIME_FileUtilitiesDlg(QDialog):
         #JES self.pushButtonCreateGIF.setStyleSheet('QPushButton {background-color: steelblue;}')
         #JES self.pushButtonCreateEXIFFile.setStyleSheet('QPushButton {background-color: steelblue;}')
 
+    @pyqtSlot()
     def pushButtonFetchImageListClicked(self):
         if len(self.lineEditImageFolder.text()) > 0:
             self.fetchImageList_Signal.emit(self.lineEditImageFolder.text(), self.checkBox_FetchRecursive.isChecked())
         else:
             self.pushButtonBrowseImageFolderClicked()
-
             self.fetchImageList_Signal.emit(self.lineEditImageFolder.text(), self.checkBox_FetchRecursive.isChecked())
 
     def checkboxNEONSitesClicked(self):

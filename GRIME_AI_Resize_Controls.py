@@ -124,11 +124,11 @@ class GRIME_AI_Resize_Controls:
         # Left 30%
         # ------------------------------------------------------------
         left   = gap
-        top    = selfControl.listboxUSGSSites.pos().y()
+        top    = selfControl.USGS_listboxSites.pos().y()
         top    = gap
         width  = (int)(windowSize.width() * 0.30 - (2.0 * gap))
         height = (int)(windowSize.height() - 150)
-        selfControl.listboxUSGSSites.setGeometry(left, top, width, height)
+        selfControl.USGS_listboxSites.setGeometry(left, top, width, height)
 
         # ------------------------------------------------------------
         # Right Top-half 70%

@@ -444,7 +444,7 @@
        <x>33</x>
        <y>25</y>
        <width>251</width>
-       <height>22</height>
+       <height>24</height>
       </rect>
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout">
@@ -698,6 +698,27 @@
    <property name="text">
     <string>Build
 Feature File</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_Dlg_TEST">
+   <property name="geometry">
+    <rect>
+     <x>300</x>
+     <y>600</y>
+     <width>80</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>10</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="text">
+    <string>TEST</string>
    </property>
   </widget>
  </widget>

@@ -1,14 +1,15 @@
 import os
-import re
 import datetime
 import cv2
+import numpy as np
+
 from GRIME_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
+from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
 from GRIME_roiData import GRIME_roiData
 
-from exifData import EXIFData
 
 # ======================================================================================================================
 #
@@ -34,7 +35,7 @@ class GRIME_AI_Feature_Export:
     def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams):
 
         bCreateEXIFFile = False
-        bCreateVideos = False
+        bCreateVideos   = False
 
         myGRIMe_Color = GRIME_AI_Color()
 
@@ -42,17 +43,17 @@ class GRIME_AI_Feature_Export:
 
         # GENERATE LIST OF IMAGE FILES IN FOLDER
         videoFileList = imagesList
-        nFrameCount = len(videoFileList)
+        nFrameCount   = len(videoFileList)
 
         if nFrameCount > 0:
 
             # ----------------------------------------------------------------------------------------------------------
-            # CREATE AND OPEN NEW TRAINING DATA CSV FILE AND LABEL COLUMNS
+            # CREATE TRAINING DATA FILENAME
             # ----------------------------------------------------------------------------------------------------------
             csvFile = self.createTrainingDataFilename(hardDriveImageFolder);
 
             # ----------------------------------------------------------------------------------------------------------
-            # OUTPUT THE TRAINING FILE a) NAMES, b) TRAINED COLOR CLUSTERS, c) IMAGE INTENSITY, d) ETC.
+            # CREATE THE OUTPUT FILE COLUMN HEADER
             # ----------------------------------------------------------------------------------------------------------
             nMaxNumColorClusters = GRIME_AI_Utils().getMaxNumColorClusters(roiList)
 
@@ -89,9 +90,7 @@ class GRIME_AI_Feature_Export:
                 intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
                 # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                entropyValue = 0.0
-                #JES - THIS IS CRASHING. THE SUM FUNCTION WITHIN calcEntropy IS TRYING TO SUM A STRUCTURE.
-                #JES entropyValue = self.calcEntropy(gray)[0]
+                entropyValue = self.calcEntropy(gray)
 
                 texture = -999
 
@@ -135,77 +134,79 @@ class GRIME_AI_Feature_Export:
             # PROCESS IMAGES
             # ----------------------------------------------------------------------------------------------------------
             #E:\\000 - University of Nebraska\\2022_USGS104b\\imagery\\PBT_MittelstetsMeanderCam\\20220709
-            for fname in videoFileList:
 
-                if os.path.isfile(fname.fullPathAndFilename):
+            try:
+                for fname in videoFileList:
 
-                    # LOAD THE IMAGE FILE
-                    img = myGRIMe_Color.loadColorImage(fname.fullPathAndFilename)
+                    if os.path.isfile(fname.fullPathAndFilename):
 
-                    # CREATE HYPERLINK TO FILE
-                    strHyperlink = '=HYPERLINK(' + '"' + fname.fullPathAndFilename + '"' + ')'
+                        # CREATE A STRING THAT IS A HYPERLINK TO THE FILE
+                        strHyperlink = '=HYPERLINK(' + '"' + fname.fullPathAndFilename + '"' + ')'
 
-                    # EXTRACT DATE/TIME STAMP FROM IMAGE EXIF DATA
-                    image_date, image_time = EXIFData().extractEXIFdata(fname.fullPathAndFilename)
-                    strDate = image_date.isoformat().strip()
-                    strTime = image_time.isoformat().strip()
+                        # EXTRACT DATE/TIME STAMP FROM IMAGE
+                        myGRIME_AI_TimeStamp_Utils = GRIME_AI_TimeStamp_Utils()
+                        myGRIME_AI_TimeStamp_Utils.detectDateTime(fname.fullPathAndFilename)
+                        strDate, strTime = myGRIME_AI_TimeStamp_Utils.extractDateTime(fname.fullPathAndFilename)
 
-                    strOutputString = '%s,%s,%s' % (strHyperlink, strDate, strTime)
+                        # WRITE THE HYPERLINK, DATE, AND TIME STAMP TO THE OUTPUT FILE
+                        strOutputString = '%s,%s,%s' % (strHyperlink, strDate, strTime)
 
-                    # --------------------------------------------------------------------------------------------------
-                    # CALCULATE THE FEATURE SCALARS FOR THE ENTIRE IMAGE AND SAVE THEM TO THE CSV FILE
-                    # --------------------------------------------------------------------------------------------------
-                    if colorSegmentationParams.wholeImage:
-                        # BLUR THE IMAGE
-                        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                        # LOAD THE IMAGE FILE TO START THE PROCESS OF EXTRACTING FEATURE DATA
+                        img = myGRIMe_Color.loadColorImage(fname.fullPathAndFilename)
 
-                        # IMAGE INTENSITY CALCULATIONS
-                        intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+                        #
+                        if colorSegmentationParams.wholeImage:
+                            # BLUR THE IMAGE
+                            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-                        # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                        entropyValue = self.calcEntropy(gray)[0]
+                            # IMAGE INTENSITY CALCULATIONS
+                            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
-                        # EXTRACT 'n' DOMINANT HSV COLORS
-                        hist, clusterCenters = myGRIMe_Color.extractDominant_HSV(img, nClusters)
+                            # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                            entropyValue = self.calcEntropy(gray)
 
-                        texture = -999
+                            # EXTRACT 'n' DOMINANT HSV COLORS
+                            hist, clusterCenters = myGRIMe_Color.extractDominant_HSV(img, nClusters)
 
-                        red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                        redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+                            texture = -999
 
-                        strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, redSum, greenSum, blueSum)
+                            red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+                            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
 
-                        if colorSegmentationParams.Intensity:
-                            strOutputString = strOutputString + ', %3.4f' % intensity
-                        if colorSegmentationParams.ShannonEntropy:
-                            strOutputString = strOutputString + ', %3.4f' % entropyValue
-                        if colorSegmentationParams.Texture:
-                            strOutputString = strOutputString + ', %3.2f' % texture
+                            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, redSum, greenSum, blueSum)
 
-                        if colorSegmentationParams.HSV:
-                            for idx in range(nClusters):
-                                # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
-                                h = float(clusterCenters[idx][0])
-                                s = float(clusterCenters[idx][1])
-                                v = float(clusterCenters[idx][2])
-                                strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
+                            if colorSegmentationParams.Intensity:
+                                strOutputString = strOutputString + ', %3.4f' % intensity
+                            if colorSegmentationParams.ShannonEntropy:
+                                strOutputString = strOutputString + ', %3.4f' % entropyValue
+                            if colorSegmentationParams.Texture:
+                                strOutputString = strOutputString + ', %3.2f' % texture
 
-                    # --------------------------------------------------------------------------------------------------
-                    #
-                    # --------------------------------------------------------------------------------------------------
-                    progressBar.setValue(progressBarIndex)
-                    progressBarIndex = progressBarIndex + 4
+                            if colorSegmentationParams.HSV:
+                                for idx in range(nClusters):
+                                    # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
+                                    h = float(clusterCenters[idx][0])
+                                    s = float(clusterCenters[idx][1])
+                                    v = float(clusterCenters[idx][2])
+                                    strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
 
-                    if colorSegmentationParams.ROI:
+                        # --------------------------------------------------------------------------------------------------
+                        #
+                        # --------------------------------------------------------------------------------------------------
+                        progressBar.setValue(progressBarIndex)
+                        progressBarIndex = progressBarIndex + 1
 
-                        strROI = self.calculateROIScalars(img, roiList, colorSegmentationParams)
+                        if colorSegmentationParams.ROI:
 
-                        strOutputString = strOutputString + strROI
+                            strROI = self.calculateROIScalars(img, roiList, colorSegmentationParams)
 
+                            strOutputString = strOutputString + strROI
 
-                    # WRITE STRING TO CSV FILE
-                    strOutputString = strOutputString  + '\n'
-                    csvFile.write(strOutputString)
+                        # WRITE STRING TO CSV FILE
+                        strOutputString = strOutputString  + '\n'
+                        csvFile.write(strOutputString)
+            except:
+                exceptValue = 0
 
             csvFile.close()
 
@@ -221,12 +222,59 @@ class GRIME_AI_Feature_Export:
         header = 'Image, Date (ISO), Time (ISO)'
 
         if colorSegmentationParams.wholeImage:
-            header = self.buildImageScalarHeader(header)
+            header = self.buildImageScalarHeader(header, roiList, colorSegmentationParams)
 
         if colorSegmentationParams.ROI:
             header = self.buildROI_ScalarHeader(header, roiList, colorSegmentationParams)
 
         return header
+
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def buildImageScalarHeader(self, header, roiList, colorSegmentationParams):
+        nClusters = GRIME_AI_Utils().getMaxNumColorClusters(roiList)
+
+        if colorSegmentationParams.GCC:
+            header = header + ", GCC"
+
+        if colorSegmentationParams.GLI:
+            header = header + ", GLI"
+
+        if colorSegmentationParams.NDVI:
+            header = header + ", NDVI"
+
+        if colorSegmentationParams.ExG:
+            header = header + ", ExG"
+
+        if colorSegmentationParams.RGI:
+            header = header + ", RGI"
+
+        if colorSegmentationParams.Intensity:
+            header = header + ", Intensity"
+
+        if colorSegmentationParams.ShannonEntropy:
+            header = header + ", Entropy"
+
+        if colorSegmentationParams.Texture:
+            header = header + ", Texture"
+
+        if colorSegmentationParams.HSV:
+            template = ', ' + 'Image_' + '#'
+
+            if nClusters == 1:
+                header = (header + template).replace('#', 'H')
+                header = (header + template).replace('#', 'S')
+                header = (header + template).replace('#', 'V')
+            else:
+                for idx in range(nClusters):
+                    header = (header + template).replace('#', 'H') + (': ' + idx.__str__())
+                    header = (header + template).replace('#', 'S') + (': ' + idx.__str__())
+                    header = (header + template).replace('#', 'V') + (': ' + idx.__str__())
+
+        return header
+
 
     # ==================================================================================================================
     #
@@ -299,14 +347,17 @@ class GRIME_AI_Feature_Export:
             rgb = GRIME_roiData().extractROI(roiObj.getImageROI(), img)
 
             # CONVERT THE IMAGE FROM BGR TO RGB AND HSV
-            hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+            try:
+                hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+                gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+            except:
+                tempValue = 0
 
             # IMAGE INTENSITY CALCULATIONS
             intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
             # COMPUTE ENTROPY FOR ROI
-            entropyValue = GRIME_roiData().calcEntropy(gray)
+            entropyValue = self.calcEntropy(gray)
 
             # EXTRACT 'n' DOMINANT HSV COLORS
             myGRIMe_Color = GRIME_AI_Color()
@@ -337,3 +388,27 @@ class GRIME_AI_Feature_Export:
 
         return strOutputString
 
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def calcEntropy(self, img):
+        entropy = []
+
+        hist = cv2.calcHist([img], [0], None, [256], [0, 255])
+        total_pixel = img.shape[0] * img.shape[1]
+
+        for item in hist:
+            probability = item / total_pixel
+            if probability == 0:
+                en = 0
+            else:
+                en = -1 * probability * (np.log(probability) / np.log(2))
+            entropy.append(en)
+
+        try:
+            sum_en = sum(entropy)
+        except:
+            sum_en = 0.0
+
+        return sum_en[0]

@@ -1,11 +1,13 @@
 import os
 import re
-import datetime
+from datetime import datetime, date, time
 
 import exifreader
 
-from PIL import Image, ImageQt
+from PIL import Image, ImageQt, ExifTags
 from PIL.ExifTags import TAGS
+
+
 
 # ======================================================================================================================
 #
@@ -76,7 +78,7 @@ class EXIFData:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def extractEXIFdata(self, fullPathAndFilename):
+    def extractEXIFDataDateTime(self, fullPathAndFilename):
         nYear = 1970
         nMonth = 1
         nDay = 1
@@ -86,20 +88,24 @@ class EXIFData:
             # throw an exception and see if the information is embedded in the filename. Currently, we are
             # working with images from NEON and PBT. The PBT images have EXIF data and the NEON/PhenoCam
             # do not appear to have EXIF data.
-            myEXIFData = EXIFData()
-            header, data = myEXIFData.extractEXIFData(fullPathAndFilename)
+            #myEXIFData = EXIFData()
+            #header, data = myEXIFData.extractEXIFData(fullPathAndFilename)
 
-            strTemp = str(myEXIFData.getEXIF()[8])
-            dateOriginal = re.search('\d{4}:\d{2}:\d{2}', strTemp).group(0)
-            timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
+            # FETCH THE EXIF DATA FROM THE IMAGE FILE
+            image_exif = Image.open(fullPathAndFilename)._getexif()
 
-            nYear = int(str(dateOriginal[0:4]))
-            nMonth = int(str(dateOriginal[5:7]))
-            nDay = int(str(dateOriginal[8:10]))
+            exif = {ExifTags.TAGS[k]: v for k, v in image_exif.items() if k in ExifTags.TAGS and type(v) is not bytes}
 
-            nHours = int(str(timeOriginal[1:3]))
-            nMins = int(str(timeOriginal[4:6]))
-            nSecs = int(str(timeOriginal[7:9]))
+            # FETCH THE DATE
+            date_obj = datetime.strptime(exif['DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
+
+            nYear = date_obj.date().year
+            nMonth = date_obj.date().month
+            nDay = date_obj.date().day
+
+            nHours = date_obj.time().hour
+            nMins = date_obj.time().minute
+            nSecs = date_obj.time().second
 
             bEXIFDataFound = True
         except:
@@ -115,8 +121,8 @@ class EXIFData:
                 nMins = 0
                 nSecs = 0
 
-        image_date = datetime.date(nYear, nMonth, nDay)
-        image_time = datetime.time(nHours, nMins, nSecs)
+        image_date = date(nYear, nMonth, nDay)
+        image_time = time(nHours, nMins, nSecs)
 
         return(image_date, image_time)
 

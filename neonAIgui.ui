@@ -48,7 +48,7 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>2</number>
+     <number>0</number>
     </property>
     <property name="tabsClosable">
      <bool>true</bool>
@@ -425,7 +425,7 @@
      <attribute name="title">
       <string>USGS Sites</string>
      </attribute>
-     <widget class="QListWidget" name="listboxUSGSSites">
+     <widget class="QListWidget" name="USGS_listboxSites">
       <property name="geometry">
        <rect>
         <x>10</x>
@@ -685,24 +685,6 @@
      <attribute name="title">
       <string>Image Analysis</string>
      </attribute>
-     <widget class="QLabel" name="labelNEONSite">
-      <property name="geometry">
-       <rect>
-        <x>13</x>
-        <y>22</y>
-        <width>101</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>10</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>&lt;NEON Site&gt;</string>
-      </property>
-     </widget>
      <widget class="QLabel" name="label_2">
       <property name="geometry">
        <rect>
@@ -724,20 +706,20 @@
        <rect>
         <x>10</x>
         <y>405</y>
-        <width>590</width>
+        <width>680</width>
         <height>350</height>
        </rect>
       </property>
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
        <size>
-        <width>450</width>
-        <height>350</height>
+        <width>0</width>
+        <height>0</height>
        </size>
       </property>
       <property name="baseSize">
@@ -767,20 +749,20 @@
        <rect>
         <x>10</x>
         <y>50</y>
-        <width>590</width>
+        <width>680</width>
         <height>350</height>
        </rect>
       </property>
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
        <size>
-        <width>450</width>
-        <height>350</height>
+        <width>0</width>
+        <height>0</height>
        </size>
       </property>
       <property name="baseSize">
@@ -811,9 +793,9 @@
       </property>
       <property name="geometry">
        <rect>
-        <x>605</x>
+        <x>700</x>
         <y>50</y>
-        <width>590</width>
+        <width>680</width>
         <height>350</height>
        </rect>
       </property>
@@ -825,8 +807,8 @@
       </property>
       <property name="minimumSize">
        <size>
-        <width>450</width>
-        <height>350</height>
+        <width>0</width>
+        <height>0</height>
        </size>
       </property>
       <property name="frameShape">
@@ -845,9 +827,9 @@
      <widget class="QTableWidget" name="tableWidget_ROIList">
       <property name="geometry">
        <rect>
-        <x>605</x>
+        <x>700</x>
         <y>405</y>
-        <width>590</width>
+        <width>680</width>
         <height>350</height>
        </rect>
       </property>
@@ -933,256 +915,6 @@
         <string>New Column</string>
        </property>
       </column>
-     </widget>
-     <widget class="QGroupBox" name="groupBox_WholeImageStats">
-      <property name="geometry">
-       <rect>
-        <x>1200</x>
-        <y>40</y>
-        <width>170</width>
-        <height>280</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Calibri</family>
-        <pointsize>10</pointsize>
-        <weight>75</weight>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="title">
-       <string>Whole Image Stats</string>
-      </property>
-      <widget class="QLabel" name="label_GreennessIndex">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>30</y>
-         <width>130</width>
-         <height>22</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Greenness (GCC)</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_GreennessIndex_Value">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>50</y>
-         <width>120</width>
-         <height>25</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="frameShape">
-        <enum>QFrame::Box</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Sunken</enum>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageIntensity">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>90</y>
-         <width>130</width>
-         <height>22</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Intensity</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageIntensityValue">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>110</y>
-         <width>120</width>
-         <height>25</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="frameShape">
-        <enum>QFrame::Box</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Sunken</enum>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageEntropy">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>150</y>
-         <width>130</width>
-         <height>22</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Entropy</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageEntropyValue">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>170</y>
-         <width>120</width>
-         <height>25</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="frameShape">
-        <enum>QFrame::Box</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Sunken</enum>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageTexture">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>210</y>
-         <width>130</width>
-         <height>22</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Texture</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="label_ImageTextureValue">
-       <property name="geometry">
-        <rect>
-         <x>13</x>
-         <y>230</y>
-         <width>120</width>
-         <height>25</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Calibri</family>
-         <pointsize>10</pointsize>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="frameShape">
-        <enum>QFrame::Box</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Sunken</enum>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-     </widget>
-     <widget class="QPushButton" name="pushButton_BuildFeatureFile">
-      <property name="geometry">
-       <rect>
-        <x>1220</x>
-        <y>430</y>
-        <width>141</width>
-        <height>61</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Calibri</family>
-        <pointsize>10</pointsize>
-        <weight>75</weight>
-        <bold>true</bold>
-       </font>
-      </property>
-      <property name="autoFillBackground">
-       <bool>true</bool>
-      </property>
-      <property name="text">
-       <string>Build
-Feature File</string>
-      </property>
      </widget>
     </widget>
     <widget class="QWidget" name="tab_Graphs">
@@ -1293,6 +1025,25 @@ Feature File</string>
    <header location="global">GRIME_QTableWidget</header>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>tableWidget_ROIList</tabstop>
+  <tabstop>NEON_listboxSites</tabstop>
+  <tabstop>NEON_listboxSiteInfo</tabstop>
+  <tabstop>NEON_listboxSiteProducts</tabstop>
+  <tabstop>NEON_tableProducts</tabstop>
+  <tabstop>edit_NEONSaveFilePath</tabstop>
+  <tabstop>pushButtonBrowseSaveImages_NEON_DownloadFolder</tabstop>
+  <tabstop>pushButton_RetrieveNEONData</tabstop>
+  <tabstop>checkBox_UniqueDates</tabstop>
+  <tabstop>USGS_listboxSites</tabstop>
+  <tabstop>listboxUSGSSiteInfo</tabstop>
+  <tabstop>table_USGS_Sites</tabstop>
+  <tabstop>pushButton_USGSDownload</tabstop>
+  <tabstop>edit_USGSSaveFilePath</tabstop>
+  <tabstop>pushButtonBrowseSaveImages_USGS_DownloadFolder</tabstop>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>graphicsView</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

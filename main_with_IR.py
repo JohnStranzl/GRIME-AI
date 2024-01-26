@@ -1007,6 +1007,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 # ======================================================================================================================
 def loadColorImage(self, filename):
     if self.radioButtonWebSiteImages.isChecked():
+        ssl._create_default_https_context = ssl._create_unverified_context
         data = urlopen(filename).read()
         origImg = QPixmap()
         origImg.loadFromData(data)
@@ -1104,6 +1105,7 @@ def processSpinBoxImage(self, item):
         # DOWNLOAD IMAGE FORM NEON SITE
         # ----------------------------------------------------------------------------------------------------
         print("---\n---")
+        ssl._create_default_https_context = ssl._create_unverified_context
         data = urlopen(imageFile).read()
         currentImage = QPixmap()
         currentImage.loadFromData(data)
@@ -1118,6 +1120,7 @@ def processSpinBoxImage(self, item):
         if 0:   # JES
             print("---\n---")
             start_time = time.time()
+            ssl._create_default_https_context = ssl._create_unverified_context
             data = urlopen(imageFile_IR).read()
             currentImage_IR = QPixmap()
             currentImage_IR.loadFromData(data)
@@ -1442,6 +1445,7 @@ def ResizeWithAspectRatio(image, width=None, height=None, inter=cv2.INTER_AREA):
 # ======================================================================================================================
 def url_to_image(url):
     # download the image, convert it to a NumPy array, and then read it into OpenCV format
+    ssl._create_default_https_context = ssl._create_unverified_context
     resp = urlopen(url)
 
     image = np.asarray(bytearray(resp.read()), dtype="uint8")
@@ -1967,6 +1971,7 @@ def check_url_validity(my_url):
         req = urllib.request.Request(my_url)
 
         try:
+            ssl._create_default_https_context = ssl._create_unverified_context
             response = urlopen(req)
             nErrorCode = 0
         except urllib.error.HTTPError as e:
@@ -1997,6 +2002,7 @@ def getIR_Images(self, dailyImagesURL_IR):
     if r.status_code != 404:
         # ----------------------------------------------------------------------------------------------------
         # GET THE FILENAMES OF EACH VISIBLE LIGHT IMAGE FOR THE SELECTED DATE
+        ssl._create_default_https_context = ssl._create_unverified_context
         response = urlopen(dailyImagesURL_IR)
         webContent = response.read()
 
@@ -2695,6 +2701,7 @@ def downloadLatestImage(siteCode, domainCode):
 
         if r.status_code != 404:
             gWebImageCount = 1
+            ssl._create_default_https_context = ssl._create_unverified_context
             data = urlopen(latestImageURL).read()
             latestImage = QPixmap()
             latestImage.loadFromData(data)

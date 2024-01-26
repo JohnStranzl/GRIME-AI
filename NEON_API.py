@@ -5,6 +5,10 @@ import requests
 from PyQt5.QtGui import QPixmap
 import shutil
 from urllib.request import urlopen
+import ssl
+
+import time
+
 from bs4 import BeautifulSoup
 from GRIME_AI_Utils import GRIME_AI_Utils
 
@@ -61,6 +65,7 @@ class  NEON_API:
 
         # r = requests.get(my_url)
         #ssl._create_default_https_context = ssl._create_unverified_context
+        ssl._create_default_https_context = ssl._create_unverified_context
         r = urlopen(my_url)
         # context = ssl._create_unverified_context()
         # r = urlopen(my_url, context=context)
@@ -201,11 +206,14 @@ class  NEON_API:
         tmp = latestImageURL.replace('ARIK', siteCode)
         latestImageURL = tmp.replace('D10', domainCode)
 
+        start_time = time.time()
+
         while nErrorCode == -1 and nRetryCount > 0:
             r = requests.get(latestImageURL, stream=True)
 
             if r.status_code != 404:
                 nWebImageCount = 1
+                ssl._create_default_https_context = ssl._create_unverified_context
                 data = urlopen(latestImageURL).read()
                 latestImage = QPixmap()
                 latestImage.loadFromData(data)
@@ -218,6 +226,8 @@ class  NEON_API:
                 if nRetryCount == 0:
                     print("404: PhenoCam - Download Latest Image Fail")
 
+        end_time = time.time()
+        print ("Download Latest Image Elapsed Time: ", end_time - start_time)
 
         return r.status_code, latestImage, nWebImageCount
 

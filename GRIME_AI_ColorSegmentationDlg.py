@@ -1,3 +1,5 @@
+import os
+
 from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QDialog, QVBoxLayout
@@ -25,6 +27,7 @@ class GRIME_ColorSegmentationDlg(QDialog):
     deleteAllROI_Signal = pyqtSignal()
     close_signal = pyqtSignal()
     buildFeatureFile_Signal = pyqtSignal()
+    universalTestButton_Signal = pyqtSignal(int)
 
     returnROIParameters = roiParameters()
 
@@ -49,6 +52,11 @@ class GRIME_ColorSegmentationDlg(QDialog):
         self.pushButton_deleteAllROIs.clicked.connect(self.deleteAllROI)
         self.buttonBox_Close.clicked.connect(self.closeClicked)
         self.pushButton_Dlg_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
+        if os.getlogin() == 'johns':
+            self.pushButton_Dlg_TEST.clicked.connect(self.universalTestButton)
+        else:
+            self.pushButton_Dlg_TEST.setEnabled(False)
+            self.pushButton_Dlg_TEST.hide()
 
         # SET CONTROL COLORS
         self.pushButton_Dlg_BuildFeatureFile.setStyleSheet('QPushButton {background-color: steelblue; color: yellow;}')
@@ -57,6 +65,11 @@ class GRIME_ColorSegmentationDlg(QDialog):
     # ----------------------------------------------------------------------------------------------------
     def buildFeatureFile(self):
         self.buildFeatureFile_Signal.emit()
+
+    # ----------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------
+    def universalTestButton(self):
+        self.universalTestButton_Signal.emit(1)
 
     # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------

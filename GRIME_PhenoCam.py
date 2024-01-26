@@ -1,6 +1,8 @@
 import datetime
 import requests
 import urllib.request
+import ssl
+
 import re
 
 from GRIME_QProgressWheel import QProgressWheel
@@ -96,6 +98,7 @@ class GRIME_PhenoCam():
         url = "https://phenocam.nau.edu/webcam/sites/NEON.D03.BARC.DP1.20002/"
 
         # opening the url for reading
+        ssl._create_default_https_context = ssl._create_unverified_context
         html = urllib.request.urlopen(url)
 
         # parsing the html file
@@ -128,6 +131,7 @@ class GRIME_PhenoCam():
 
         try:
             # opening the url for reading
+            ssl._create_default_https_context = ssl._create_unverified_context
             html = urllib.request.urlopen(url)
 
             # parsing the html file
@@ -162,6 +166,7 @@ class GRIME_PhenoCam():
 
         try:
             # opening the url for reading
+            ssl._create_default_https_context = ssl._create_unverified_context
             html = urllib.request.urlopen(url)
 
             # parsing the html file

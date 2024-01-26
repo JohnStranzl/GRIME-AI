@@ -1,9 +1,9 @@
 import os
 import json
-import csv
 import urllib
 import requests
 from urllib.request import urlopen
+import ssl
 
 from datetime import timedelta
 
@@ -55,6 +55,7 @@ class USGS_NIMS:
             # QUERY CAMERA LIST
             uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?"
 
+            ssl._create_default_https_context = ssl._create_unverified_context
             response = urllib.request.urlopen(uri)
             data = response.read()  # a `bytes` object
             raw_text = data.decode('utf-8')
@@ -155,6 +156,7 @@ class USGS_NIMS:
 
             if r.status_code != 404:
                 nWebImageCount = 1
+                ssl._create_default_https_context = ssl._create_unverified_context
                 data = urlopen(latestImageURL).read()
                 latestImage = QPixmap()
                 latestImage.loadFromData(data)
@@ -290,6 +292,7 @@ class USGS_NIMS:
                 timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
                 fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
 
+                ssl._create_default_https_context = ssl._create_unverified_context
                 with urllib.request.urlopen(fullURL) as response:
                     html = response.read()
 

@@ -20,7 +20,11 @@ class GRIME_AI_Vegetation_Indices:
     def computeGreennessIndex(self, redSum, greenSum, blueSum):
 
         try:
-            greennessIndex = greenSum / (redSum + greenSum + blueSum)
+            denominator = redSum + greenSum + blueSum
+            if denominator > 0.0:
+                greennessIndex = greenSum / (redSum + greenSum + blueSum)
+            else:
+                greennessIndex = 0.0
         except:
             greennessIndex = -999
 
