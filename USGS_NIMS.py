@@ -281,6 +281,14 @@ class USGS_NIMS:
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # FETCH STAGE AND DISCHARGE
+            # https://waterservices.usgs.gov/test-tools/
+            # https://help.waterdata.usgs.gov/codes-and-parameters/parameters
+            #
+            # OLD NWIS SITE
+            # https://waterservices.usgs.gov/rest/IV-Test-Tool.html
+            #
+            # NEW https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=06800500&startDT=2023-12-01&endDT=2024-02-01&siteStatus=all&siteType=ST&outputDataTypeCd=iv,dv,gw,qw,id.
+            # OLD https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             for i in range(numberOfDays):
                 startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)

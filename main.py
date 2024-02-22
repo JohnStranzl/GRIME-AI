@@ -301,6 +301,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     roiList = []
     imageStatsList = []
 
+    os.environ['R_HOME'] = 'C:/Program Files/R/R - 4.2.2'
+
     # INITIALIZE POP-UP DIALOG BOXES
     fileFolderDlg        = None
     edgeDetectionDlg     = None

@@ -35,7 +35,7 @@ class GRIME_AI_Feature_Export:
     def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams):
 
         bCreateEXIFFile = False
-        bCreateVideos   = False
+        bCreateVideos = False
 
         myGRIMe_Color = GRIME_AI_Color()
 
