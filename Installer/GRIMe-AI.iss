@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.3.8b"
+#define MyAppVersion "0.0.3.9"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIMe-AI.exe"
@@ -22,9 +22,11 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
-;PrivilegesRequired=lowest
-OutputDir=C:\Users\Astrid Haugen\Desktop\TestInstall
-OutputBaseFilename=GRIMe-AI 0.0.3.8b Setup
+; PrivilegesRequired=lowest
+OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
+; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
+; the periods.
+OutputBaseFilename=GRIMe-AI 0_0_3_9 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
@@ -32,8 +34,8 @@ WizardStyle=modern
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "french"; MessagesFile: "compiler:Languages\French.isl"
-Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+Name: "french";  MessagesFile: "compiler:Languages\French.isl"
+Name: "german";  MessagesFile: "compiler:Languages\German.isl"
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
@@ -41,12 +43,13 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\R-4.2.2-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
-Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\icons\*.*"; DestDir: "{app}\icons"
-Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\QDialog*.ui"; DestDir: "{app}"
+Source: "C:\Users\johns\pycharmprojects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.2.2-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
+Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
+Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}"
+Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
+Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
-;Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
