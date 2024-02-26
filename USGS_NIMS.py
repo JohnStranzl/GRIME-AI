@@ -5,6 +5,8 @@ import requests
 from urllib.request import urlopen
 import ssl
 
+import pandas as pd
+
 from datetime import timedelta
 
 from PyQt5.QtGui import QPixmap
@@ -44,6 +46,8 @@ class USGS_NIMS:
         self.cameraDictionary = self.initCameraDictionary()
 
         self.siteCount = 0;
+
+        __dfs = []
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -279,6 +283,8 @@ class USGS_NIMS:
             progressBar.close()
             del progressBar
 
+            self.fetchStageAndDischarge(nwisID, siteName, startDate, endDate, startTime, endTime, saveFolder)
+
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # FETCH STAGE AND DISCHARGE
             # https://waterservices.usgs.gov/test-tools/
@@ -289,54 +295,70 @@ class USGS_NIMS:
             #
             # NEW https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=06800500&startDT=2023-12-01&endDT=2024-02-01&siteStatus=all&siteType=ST&outputDataTypeCd=iv,dv,gw,qw,id.
             # OLD https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=
+            #
+            # If start and end time
+            # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
+            # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
+            #
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            for i in range(numberOfDays):
-                startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
-
-                water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites="
-                fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
-
-                startDay = startDate + timedelta(days=i)
-                timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
-                fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
-
-                ssl._create_default_https_context = ssl._create_unverified_context
-                with urllib.request.urlopen(fullURL) as response:
-                    html = response.read()
-
-                urllib.request.urlretrieve(fullURL, fullFilename)
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # FETCH STAGE AND DISCHARGE
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # for i in range(numberOfDays):
-            #     startDT, endDT = self.buildStageDateTimeFilter(i, startDate, endDate, startTime, endTime)
-            #
             #     water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=json&sites="
             #     fullURL = water_services_endpoint + nwisID + startDT + endDT + '&parameterCd=00060,00065&siteStatus=all'
-            #
-            #     startDay = startDate + timedelta(days=i)
-            #     timeStamp = startDay.strftime("%Y%m%d") + "T" + startTime.strftime("%H%M") + " - " + endTime.strftime("%H%M")
-            #     fullFilename = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".json")
-            #
-            #     response = urlopen(fullURL)
-            #     data_json = json.loads(response.read())
-            #
-            #     #urllib.request.urlretrieve(fullURL, fullFilename)
-            #
-            #     data_file = open(fullFilename, 'w', newline='')
-            #     csv_writer = csv.writer(data_file)
-            #
-            #     count = 0
-            #     for data in data_json:
-            #         if type(data) != str:
-            #             if count == 0:
-            #                 header = data.keys()
-            #                 csv_writer.writerow(header)
-            #                 count += 1
-            #             csv_writer.writerow(data.values())
-            #
-            #     data_file.close()
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def fetchStageAndDischarge(self, nwisID, siteName, startDate, endDate, startTime, endTime, saveFolder):
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # FETCH STAGE AND DISCHARGE
+        # https://waterservices.usgs.gov/test-tools/
+        # https://help.waterdata.usgs.gov/codes-and-parameters/parameters
+        #
+        # OLD NWIS SITE
+        # https://waterservices.usgs.gov/rest/IV-Test-Tool.html
+        #
+        # NEW https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=06800500&startDT=2023-12-01&endDT=2024-02-01&siteStatus=all&siteType=ST&outputDataTypeCd=iv,dv,gw,qw,id.
+        # OLD https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=
+        #
+        # If start and end time
+        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
+        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
+        #
+        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
+        #
+        # Instantaneous values:
+        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2022-02-01T15:02&endDT=2024-02-01T15:02&siteStatus=all
+        #
+        # Daily values (including max, mean and min values for each day):
+        # https://waterservices.usgs.gov/nwis/dv/?format=rdb,1.0&sites=06800500&startDT=2022-02-01&endDT=2024-02-01&siteStatus=all
+        #
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites="
+        #fullURL = water_services_endpoint + nwisID + startDate + endDate + '&parameterCd=00060,00065&siteStatus=all'
+        fullURL = water_services_endpoint + nwisID + '&startDT=' + startDate.strftime("%Y-%m-%d") + '&endDT=' + endDate.strftime("%Y-%m-%d") + '&siteStatus=all'
+
+        timeStamp = startDate.strftime("%Y-%m-%d") + "T" + startTime.strftime("%H%M") + " - " + endDate.strftime("%Y-%m-%d") + "T" + endTime.strftime("%H%M")
+        fullFilename_txt = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
+
+        try:
+            ssl._create_default_https_context = ssl._create_unverified_context
+            with urllib.request.urlopen(fullURL) as response:
+                html = response.read()
+
+            # RETRIEVE DISCHARGE REPORT
+            urllib.request.urlretrieve(fullURL, fullFilename_txt)
+
+            fullFilename_csv = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".csv")
+            self.reformat_file(fullFilename_txt, fullFilename_csv)
+        except:
+            strMessage = 'Unable to retrieve data from the USGS site.'
+            msgBox = GRIMe_QMessageBox('USGS - Retrieval Error', strMessage, QMessageBox.Close)
+            response = msgBox.displayMsgBox()
+
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -355,6 +377,7 @@ class USGS_NIMS:
 
         return after, before
 
+
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
@@ -372,23 +395,28 @@ class USGS_NIMS:
 
         return listOfImages_text
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # &startDT=2023-07-27T10:00-0400
-    # &endDT  =2023-07-30T14:00-0400
-    # ------------------------------------------------------------------------------------------------------------------
-    def buildStageDateTimeFilter(self, index, startDate, endDate, startTime, endTime):
-        startDay = startDate + timedelta(days=index)
 
-        # IF START AND END TIME ARE 0, GET ALL IMAGES FOR THE ENTIRE DAY
-        if startTime.hour == 0 and startTime.minute == 0 and endTime.hour == 0 and endTime.minute == 0:
-            startDT = '&startDT=' + startDay.strftime("%Y-%m-%d")
-            endDT   = "&endDT="   + startDay.strftime("%Y-%m-%d")
-        # OTHERWISE, ONLY GET IMAGES BETWEEN THE SPECIFIED START AND END TIMES FOR EACH DAY
-        else:
-            startDT = "&startDT=" + startDay.strftime("%Y-%m-%d") + "T" + startTime.strftime("%H:%M-0400")
-            endDT   = "&endDT="   + startDay.strftime("%Y-%m-%d") + "T" + endTime.strftime("%H:%M-0400")
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def reformat_file(self, input_folder_path, output_file):
+        """
+        :param input_folder_path:
+        :param output_file:
+        :return:
+        """
+        # Initialize an empty list to store DataFrames
+        dfs = []
 
-        return startDT, endDT
+        #import file and remove commented-out rows at the top of the original file
+        df_temp = pd.read_csv(input_folder_path, delimiter='\t', comment='#')
+        dfs.append(df_temp)
+
+        # Concatenate all DataFrames into a single DataFrame
+        USGS_stage_df = pd.concat(dfs, ignore_index=True)
+        USGS_stage_df = USGS_stage_df[~USGS_stage_df['agency_cd'].astype(str).str.contains("5s")]
+
+        USGS_stage_df.to_csv(output_file, index=False)
 
     # ------------------------------------------------------------------------------------------------------------------
     # ASCII Format
