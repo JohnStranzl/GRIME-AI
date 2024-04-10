@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.3.9"
+#define MyAppVersion "0.0.4.0"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIMe-AI.exe"
@@ -26,7 +26,7 @@ DisableProgramGroupPage=yes
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIMe-AI 0_0_3_9 Setup
+OutputBaseFilename=GRIMe-AI 0_0_4_0 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
