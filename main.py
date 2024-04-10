@@ -42,6 +42,7 @@ from urllib.request import urlopen
 #import chromedriver_autoinstaller
 
 from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
+from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
 
 import promptlib
 
@@ -1345,7 +1346,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ==================================================================================================================
     def pushButtonTrainGoodTriggered(self):
-        blur, intensity = computeBlurAndBrightness(self.spinBoxShiftSize.value())
+        blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
         imageStats = GRIMe_ImageStats()
         imageStats.setBlurValue(blur)
         imageStats.setBrightnessValue(intensity)
@@ -1356,7 +1357,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ==================================================================================================================
     def pushButtonTrainBadTriggered(self):
-        blur, intensity = computeBlurAndBrightness(self.spinBoxShiftSize.value())
+        blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
         imageStats = GRIMe_ImageStats()
         imageStats.setBlurValue(blur)
         imageStats.setBrightnessValue(intensity)
@@ -2506,8 +2507,9 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
             response = TriageDlg.exec_()
 
             if response == 1:
-                cleanImages(folder, \
-                            True, \
+                myTriage = GRIME_AI_ImageTriage()
+                myTriage.cleanImages(folder, \
+                            False, \
                             TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
                             TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
                             TriageDlg.getCreateReport(), TriageDlg.getMoveImages())
@@ -2543,184 +2545,6 @@ def resizeImage(image, scale_percent):
         resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
 
         return resized
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def computeBlurAndBrightness(shiftSize):
-    global currentImage
-
-    img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-    grayImage = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
-
-    # DECIMATE IMAGE
-    grayImage = resizeImage(grayImage, 50.0)
-
-    hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
-
-    ''' BLUR DETECTION CALCULATIONS'''
-    # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
-    (h, w) = grayImage.shape
-    (cX, cY) = (int(w / 2.0), int(h / 2.0))
-
-    fft = np.fft.fft2(grayImage)
-    fftShift = np.fft.fftshift(fft)
-
-    # compute the magnitude spectrum of the transform
-    magnitude = 20 * np.log(np.abs(fftShift))
-
-    # zero-out the center of the FFT shift (i.e., remove low frequencies),
-    # apply the inverse shift such that the DC component once again becomes the top-left,
-    # and then apply the inverse FFT
-    fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
-    fftShift = np.fft.ifftshift(fftShift)
-    recon = np.fft.ifft2(fftShift)
-
-    # compute the magnitude spectrum of the reconstructed image,
-    # then compute the mean of the magnitude values
-    magnitude = 20 * np.log(np.abs(recon))
-    mean = np.mean(magnitude)
-
-    # IMAGE INTENSITY CALCULATIONS
-    # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
-    blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
-    intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-    # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
-    del fftShift
-    del fft
-    del recon
-    del blur
-
-    return mean, intensity
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def cleanImages(folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport, bMoveImages):
-    extensions = ('.jpg', '.jpeg', '.png')
-
-    myGRIMe_Color = GRIME_AI_Color()
-
-    if bCreateReport:
-        csvFilename = 'ImageTriage_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
-        imageQualityFile = os.path.join(folder, csvFilename)
-        csvFile = open(imageQualityFile, 'a', newline='')
-        csvFile.write('Focus Value, Focus Attrib, Intensity Value, Intensity Attrib., Filename\n')
-
-    # count the number of images that will potentially be processed and possibly saved with the specified extension
-    # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
-    # of images will help determine whether or not there is enough disk space to accomodate storing the images.
-    imageCount = GRIME_AI_Utils().getImageCount(folder, extensions)
-
-    progressBar = QProgressWheel(0, imageCount + 1)
-    progressBar.show()
-
-    imageIndex = 0
-
-    # process images to determine which ones are too dark/too light, blurry/clear, etc and move them into a subfolder
-    # created so they are not processed with nominal images.
-    files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
-
-    for file in files:
-        progressBar.setWindowTitle(file)
-        progressBar.setValue(imageIndex)
-        progressBar.repaint()
-        imageIndex += 1
-
-        ext = os.path.splitext(file)[-1].lower()
-
-        if ext in extensions:
-            filename = os.path.join(folder, file)
-            numpyImage = myGRIMe_Color.loadColorImage(filename)
-            grayImage = cv2.cvtColor(numpyImage, cv2.COLOR_RGB2GRAY)
-
-            # DECIMATE IMAGE TO SPEED UP PROCESSING
-            grayImage = resizeImage(grayImage, 50.0)
-
-            hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
-
-            ''' BLUR DETECTION CALCULATIONS'''
-            # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
-            (h, w) = grayImage.shape
-            (cX, cY) = (int(w / 2.0), int(h / 2.0))
-
-            fft = np.fft.fft2(grayImage)
-            fftShift = np.fft.fftshift(fft)
-
-            # compute the magnitude spectrum of the transform
-            magnitude = 20 * np.log(np.abs(fftShift))
-
-            # zero-out the center of the FFT shift (i.e., remove low frequencies),
-            # apply the inverse shift such that the DC component once again becomes the top-left,
-            # and then apply the inverse FFT
-            fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
-            fftShift = np.fft.ifftshift(fftShift)
-            recon = np.fft.ifft2(fftShift)
-
-            # compute the magnitude spectrum of the reconstructed image,
-            # then compute the mean of the magnitude values
-            magnitude = 20 * np.log(np.abs(recon))
-            mean = np.mean(magnitude)
-
-            # IMAGE INTENSITY CALCULATIONS
-            # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
-            blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
-            intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-            # DECISION LOGIC
-            bMove = False
-            strFFTFocusMetric = 'Nominal'
-            strFocusMetric = 'N/A'
-            strIntensity = 'Nominal'
-
-            # CHECK MEAN AGAINST THRESHHOLD TO DETERMINE IF THE IMAGE IS BLURRY/FOGGY/OUT-OF-FOCUS/ETC.
-            if mean <= blurThreshhold:
-                strFFTFocusMetric = "Blurry"
-                bMove = True
-
-            # CHECK TO SEE IF THE OVERALL IMAGE IS TOO DARK OR TOO BRIGHT
-            if intensity < brightnessMin:
-                strIntensity = "Too Dark"
-                bMove = True
-            elif intensity > brightnessMAX:
-                strIntensity = "Too Light"
-                bMove = True
-
-            # MOVE THE IMAGE REJECTS TO A SUBFOLDER IF THE USER CHOOSE THIS OPTION
-            if bMoveImages and bMove:
-                # create a subfolder beneath the current root folder if the option to move less than nominal images is selected
-                filename = os.path.basename(file)
-                filepath = os.path.dirname(file)
-                tempFolder = os.path.join(filepath, "MovedImages")
-                if not os.path.exists(tempFolder):
-                    os.makedirs(tempFolder)
-
-                shutil.move(file, tempFolder)
-
-                filename = os.path.join(tempFolder, filename)
-
-            # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
-            if bCreateReport:
-                strHyperlink = '=HYPERLINK(' + '"' + filename + '"' + ')'
-                strOutputString = '%3.2f,%s,%3.2f,%s,%s\n' % (mean, strFFTFocusMetric, intensity, strIntensity, strHyperlink)
-                csvFile.write(strOutputString)
-
-            # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
-            del fftShift
-            del fft
-            del recon
-            del blur
-
-    # clean-up before exiting function
-    # 1. close and delete the progress bar
-    # 2. close the EXIF log file, if opened
-    if bCreateReport:
-        csvFile.close()
-    progressBar.close()
-    del progressBar
 
 
 # ======================================================================================================================
@@ -3656,158 +3480,6 @@ def test(img):
     asm, con, eng, idm = feature_computer(glcm_0)
     return [asm, con, eng, idm]
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def googleMap(self):
-        # Enter your api key here
-        api_key = "_your_api_key_"
-
-        # url variable store url
-        url = "https://maps.googleapis.com/maps/api/staticmap?"
-
-        # center defines the center of the map,
-        # equidistant from all edges of the map.
-        center = "Dehradun"
-
-        # zoom defines the zoom
-        # zoom defines the zoom
-        # level of the map
-        zoom = 10
-
-        # get method of requests module
-        # return response object
-        r = requests.get(
-            url + "center =" + center + "&zoom =" + str(zoom) + "&size = 400x400&key =" + api_key + "sensor = false")
-
-        # wb mode is stand for write binary mode
-        f = open('address of the file location ', 'wb')
-
-        # r.content gives content,
-        # in this case gives image
-        f.write(r.content)
-
-        # close method of file object
-        # save and close the file
-        f.close()
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def loadChromeDriver():
-
-    #JES
-    #return
-
-    # ----------------------------------------------------------------------------------------------------
-    # GET THE VERSION OF CHROME INSTALLED ON THE COMPUTER AND THE VERSION OF THE CHROME DRIVER INSTALLED WITH GRIME-AI
-    # ----------------------------------------------------------------------------------------------------
-    strChromeVersion = get_chrome_version()
-    print(strChromeVersion)
-
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--disable-gpu')  # Last I checked this was necessary.
-
-    # strChromeExe = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver/', strChromeVersion, 'chromedriver.exe')
-    # Old driver = webdriver.Chrome(strChromeExe, options=options)  # Optional argument, if not specified will search path.
-
-    options = webdriver.ChromeOptions()
-
-    #webdriver.Chrome.close()
-
-    try:
-        try:
-            strChromeDriverPath = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver')
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager(path=strChromeDriverPath).install()), options=options)
-        except:
-            strChromeExe = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe')
-            print(strChromeExe)
-            # driver = webdriver.Chrome(strChromeExe, options=options)  # Optional argument, if not specified will search path.
-            driver = webdriver.Chrome(strChromeExe)  # Optional argument, if not specified will search path.
-
-        strChromeDriverVersion = driver.capabilities['browserVersion']
-    except:
-        pass
-
-    """
-    if strChromeVersion != strChromeDriverVersion:
-        msgBox = GRIMe_QMessageBox('Chrome Driver Error!', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion + '\n\nYou can use the software for analyzing data but you cannot download images from the Internet until the Chrome Driver and Chrome Browser versions match.')
-        response = msgBox.displayMsgBox()
-    else:
-        msgBox = GRIMe_QMessageBox('Chrome Version', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion)
-        response = msgBox.displayMsgBox()
-    """
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-# def download_chromedriver():
-#     def get_latestversion(version):
-#         url = 'https://chromedriver.storage.googleapis.com/LATEST_RELEASE_' + str(version)
-#         response = requests.get(url)
-#         version_number = response.text
-#         return version_number
-#
-#     def download(download_url, driver_binaryname, target_name):
-#         # download the zip file using the url built above
-#         latest_driver_zip = wget.download(download_url, out='./temp/chromedriver.zip')
-#
-#         # extract the zip file
-#         with zipfile.ZipFile(latest_driver_zip, 'r') as zip_ref:
-#             zip_ref.extractall(path='./temp/')  # you can specify the destination folder path here
-#         # delete the zip file downloaded above
-#         os.remove(latest_driver_zip)
-#         os.rename(driver_binaryname, target_name)
-#         os.chmod(target_name, 755)
-#
-#     if os.name == 'nt':
-#         replies = os.popen(r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version').read()
-#         replies = replies.split('\n')
-#         for reply in replies:
-#             if 'version' in reply:
-#                 reply = reply.rstrip()
-#                 reply = reply.lstrip()
-#                 tokens = re.split(r"\s+", reply)
-#                 fullversion = tokens[len(tokens) - 1]
-#                 tokens = fullversion.split('.')
-#                 version = tokens[0]
-#                 break
-#         target_name = './bin/chromedriver-win-' + version + '.exe'
-#         found = os.path.exists(target_name)
-#         if not found:
-#             version_number = get_latestversion(version)
-#             # build the donwload url
-#             download_url = "https://chromedriver.storage.googleapis.com/" + version_number + "/chromedriver_win32.zip"
-#             download(download_url, './temp/chromedriver.exe', target_name)
-#
-#     elif os.name == 'posix':
-#         reply = os.popen(r'chromium --version').read()
-#
-#         if reply != '':
-#             reply = reply.rstrip()
-#             reply = reply.lstrip()
-#             tokens = re.split(r"\s+", reply)
-#             fullversion = tokens[1]
-#             tokens = fullversion.split('.')
-#             version = tokens[0]
-#         else:
-#             reply = os.popen(r'google-chrome --version').read()
-#             reply = reply.rstrip()
-#             reply = reply.lstrip()
-#             tokens = re.split(r"\s+", reply)
-#             fullversion = tokens[2]
-#             tokens = fullversion.split('.')
-#             version = tokens[0]
-#
-#         target_name = './bin/chromedriver-linux-' + version
-#         print('new chrome driver at ' + target_name)
-#         found = os.path.exists(target_name)
-#         if not found:
-#             version_number = get_latestversion(version)
-#             download_url = "https://chromedriver.storage.googleapis.com/" + version_number + "/chromedriver_linux64.zip"
-#             download(download_url, './temp/chromedriver', target_name)
 
 # ======================================================================================================================
 #
