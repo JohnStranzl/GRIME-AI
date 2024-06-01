@@ -251,6 +251,7 @@ class GRIME_AI_Utils:
             301: ('Moved Permanently', 'Object moved permanently -- see URI list'),
             302: ('Found', 'Object moved temporarily -- see URI list'),
             303: ('See Other', 'Object moved -- see Method and URL list'),
+            303: ('See Other', 'Object moved -- see Method and URL list'),
             304: ('Not Modified',
                   'Document has not changed since given time'),
             305: ('Use Proxy',

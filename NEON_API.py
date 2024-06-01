@@ -23,7 +23,7 @@ from nitrateData import nitrateData
 
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-# https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20230309.csv
+# https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20240423.csv
 
 class  NEON_API:
     def __init__(self, parent=None):
@@ -77,7 +77,7 @@ class  NEON_API:
             soup = BeautifulSoup(r, 'html5lib')
 
             # FIND ALL CSV LINKS ON THE WEB-PAGE. CURRENTLY THERE IS ONLY ONE. HOWEVER, THERE COULD BE MULTIPLES IN THE FUTURE
-            links = soup.findAll("a", href=lambda href: href and "csv" in href)
+            links = soup.findAll("a", href=lambda href: href and "Metadata" in href)
 
             # CREATE COMPLETE URL FOR LINK TO CSV FILE. ASSUME THERE IS ONLY ONE FOR NOW BUT LOOP FOR FUTURE USE-CASES
             for link in links:
@@ -93,7 +93,7 @@ class  NEON_API:
     #
     # ======================================================================================================================
     def DownloadFieldSiteTableFiles(self, csv_links):
-        link = csv_links
+        link = 'https://www.neonscience.org' + csv_links + '.csv'
 
         # obtain filename by splitting url and getting last string
         file_name = link.split('/')[-1]

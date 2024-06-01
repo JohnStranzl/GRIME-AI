@@ -61,3 +61,18 @@ class featureMethodsClass():
 
     def getOrbMaxFeatures(self):
         return self.orbMaxFeatures
+
+# ====================================================================================================
+#
+# ====================================================================================================
+class modelSettingsClass():
+
+    def __init__(self, parent=None):
+        self.saveOriginalModelImage = False
+        self.saveModelMasks = False
+
+    def getSaveModelMasks(self):
+        return self.saveModelMasks
+
+    def getSaveOriginalModelMask(self):
+        return self.saveOriginalModelImage

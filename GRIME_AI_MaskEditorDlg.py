@@ -1,8 +1,7 @@
 from PyQt5 import QtCore
-from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
-from PyQt5.QtGui import QColor
 
 # ======================================================================================================================
 #

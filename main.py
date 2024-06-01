@@ -2,6 +2,12 @@
 # !/usr/bin/env python
 # coding: utf-8
 
+# THIS TO INVESTIGATE
+# https://github.com/smhassanerfani/atlantis/tree/master/aquanet
+# https://github.com/smhassanerfani/atlantis/tree/master
+
+
+
 # 1. SCRAPE FIELD SITE TABLE (CSV) FILE FROM https://www.neonscience.org/field-sites/explore-field-sites
 #
 # 2. PERSIST A COPY OF THE CONTENTS OF THE FIELD SITE TABLE
@@ -40,9 +46,6 @@ from configparser import ConfigParser
 from pathlib import Path
 from urllib.request import urlopen
 #import chromedriver_autoinstaller
-
-from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
-from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
 
 import promptlib
 
@@ -100,6 +103,7 @@ from GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
 from GRIME_ProcessImage import GRIME_ProcessImage
 from GRIME_AI_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
 from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
+from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, greennessIndex
 
@@ -129,6 +133,11 @@ from GRIME_roiData import GRIME_roiData, ROIShape
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
 
+from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
+from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
+
+from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
+
 from colorSegmentationParams import colorSegmentationParamsClass
 
 # ------------------------------------------------------------
@@ -149,7 +158,7 @@ from chrome_driver import *
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
-from constants import edgeMethodsClass, featureMethodsClass
+from constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 
 # ------------------------------------------------------------
 #
@@ -259,6 +268,8 @@ g_greennessIndex   = greennessIndex()
 g_edgeMethodSettings = edgeMethodsClass()
 g_featureMethodSettings = featureMethodsClass()
 
+g_modelSettings = modelSettingsClass()
+
 # ======================================================================================================================
 # 2. DEEP LEARNING: DEFINE A CONVOLUTIONAL NETWORK
 # ======================================================================================================================
@@ -312,6 +323,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     maskEditorDlg        = None
     imageNavigationDlg   = None
     releaseNotesDlg      = None
+    buildModelDlg        = None
 
     global dailyImagesList
     dailyImagesList = dailyList([], [])
@@ -556,7 +568,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- COLOR SEGMENTATION
         icon_path = str(Path(__file__).parent / "icons/FileFolder_1.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Folder Operations", self)
         button_action.setStatusTip("Select input and output folder locations")
         button_action.triggered.connect(self.onMyToolBarFileFolder)
@@ -564,7 +575,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- IMAGE TRIAGE
         icon_path = str(Path(__file__).parent / "icons/Triage_2.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Image Triage", self)
         button_action.setStatusTip("Move images that are of poor quality")
         button_action.triggered.connect(toolbarButtonImageTriage)
@@ -572,7 +582,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- MASK EDITOR
         icon_path = str(Path(__file__).parent / "icons/ImageNav_3.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Image Navigation", self)
         button_action.setStatusTip("Navigate (scroll) through images")
         button_action.triggered.connect(self.onMyToolBarImageNavigation)
@@ -580,7 +589,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- IMAGE NAVIGATION
         icon_path = str(Path(__file__).parent / "icons/Mask.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Create Masks", self)
         button_action.setStatusTip("Draw polygons to create image masks")
         button_action.triggered.connect(self.onMyToolBarCreateMask)
@@ -588,7 +596,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- COLOR SEGMENTATION
         icon_path = str(Path(__file__).parent / "icons/ColorWheel_4.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Color Segmentation", self)
         button_action.setStatusTip("Create ROIs to segment regions by color")
         button_action.triggered.connect(self.onMyToolBarColorSegmentation)
@@ -596,7 +603,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- EDGE FILTERS
         icon_path = str(Path(__file__).parent / "icons/EdgeFilters_2.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Edge and Feature Detection", self)
         button_action.setStatusTip("Edge Detection Filters")
         button_action.triggered.connect(self.toolbarButtonEdgeDetection)
@@ -604,7 +610,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- SETTINGS
         icon_path = str(Path(__file__).parent / "icons/Settings_1.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Settings", self)
         button_action.setStatusTip("Change options and settings")
         button_action.triggered.connect(self.onMyToolBarSettings)
@@ -612,15 +617,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- DEEP LEARNING
         icon_path = str(Path(__file__).parent / "icons/Green Brain Icon.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Deep Learning", self)
         button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
-        button_action.triggered.connect(self.toolbarButtonDeepLearning)
+        #button_action.triggered.connect(self.toolbarButtonDeepLearning)
+        button_action.triggered.connect(self.onMyToolBarBuildModel)
         toolbar.addAction(button_action)
 
         #--- GRIME2
         icon_path = str(Path(__file__).parent / "icons/grime2_StopSign.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "GRIME2", self)
         button_action.setStatusTip("GRIME2 - Water Level Measurement")
         button_action.triggered.connect(self.toolbarButtonGRIME2)
@@ -628,7 +632,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- HELP
         icon_path = str(Path(__file__).parent / "icons/Help_2.png")
-        print(icon_path)
         button_action = QAction(QIcon(icon_path), "Help", self)
         button_action.setStatusTip("Help and Release Notes")
         button_action.triggered.connect(self.toolbarButtonReleaseNotes)
@@ -1375,16 +1378,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
-    def toolbarButtonDeepLearning(self):
-        strMessage = 'This is for producing models for Deep Learning. This is experimental at this time.'
-        msgBox = GRIMe_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
-        response = msgBox.displayMsgBox()
-
-        self.myDeepLearning()
-
-    # ======================================================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
     def toolbarButtonGRIME2(self):
         strMessage = 'Potential future home for GRIME2 Water Level/Stage measurement functionality.'
         msgBox = GRIMe_QMessageBox('Water Level Measurement', strMessage, QMessageBox.Close)
@@ -1416,14 +1409,62 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         plt.show()
 
     # ======================================================================================================================
-    # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
-    # https://pytorch.org/tutorials/beginner/blitz/neural_networks_tutorial.html
-    # https://www.cs.toronto.edu/~kriz/cifar.html
     # ======================================================================================================================
-    def myDeepLearning(self):
-        return
+    # ======================================================================================================================
+    # Function to get prompts for each image
+    def get_prompts(self, image_name):
+        # Customize this function to return prompts based on the image name or content
+        # For example:
+        if 'cat' in image_name:
+            return {'texts': ['cat']}
+        elif 'dog' in image_name:
+            return {'texts': ['dog']}
+        # Add more conditions as needed
+        return {'texts': ['default object description']}  # Default prompt
 
-        '''
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    '''
+    def tuneSAM(self):
+        import torch
+        from segment_anything import SamPredictor, sam_model_registry, SamTrainer
+        from pycocotools.coco import COCO
+
+        # Load your labeled images in COCO format
+        coco = COCO('instances_default.json')
+
+        #sam = sam_model_registry"<model_type>"
+        DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        MODEL_TYPE = "vit_h"
+        sam = sam_model_registry[MODEL_TYPE]
+        sam.to(device=DEVICE)
+        predictor = SamPredictor(sam)
+
+        # Prepare your dataset
+        # Make sure to organize your dataset in the format expected by the SAM model
+        # Typically, this involves having a directory with images and another with annotations
+
+        # Define the training parameters
+        train_params = {
+            "batch_size": 4,
+            "shuffle": True,
+            "num_workers": 4,
+            "pin_memory": True
+        }
+
+        # Initialize the trainer
+        trainer = SamTrainer(sam, train_params)
+
+        # Train the model
+        trainer.train(coco, epochs=100)
+
+        # Save the trained model
+        torch.save(sam.state_dict(), 'my_sam_vit_h_4b8939.pth')
+    '''
+
+    '''
         # CHECK TO SEE IF THE COMPUTER HAS A GPU
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -1559,7 +1600,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for classname, correct_count in correct_pred.items():
             accuracy = 100 * float(correct_count) / total_pred[classname]
             print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
-        '''
+    '''
 
     # ==================================================================================================================
     #
@@ -1735,6 +1776,75 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # IMAGE MASK FUNCTIONALITY
     # ==================================================================================================================
     # ==================================================================================================================
+    def onMyToolBarBuildModel(self):
+
+        if self.buildModelDlg == None:
+            self.buildModelDlg = GRIME_AI_buildModelDlg()
+
+            self.buildModelDlg.close_signal.connect(self.buildModelDialogClose)
+            self.buildModelDlg.saveModelMasks_Signal.connect(self.saveModelMasksChanged)
+            self.buildModelDlg.saveOriginalModelImage_Signal.connect(self.saveOriginalModelImageChanged)
+            self.buildModelDlg.segment_Signal.connect(self.segmentClicked)
+
+            self.buildModelDlg.show()
+
+            global g_modelSettings
+            g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
+            g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def buildModelDialogClose(self):
+        global g_modelSettings
+        g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
+        g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
+
+        self.buildModelDlg.close()
+
+        del self.buildModelDlg
+        self.buildModelDlg = None
+
+    def saveModelMasksChanged(self, bSave):
+        global g_modelSettings
+        g_modelSettings.saveModelMasks = bSave
+
+    def saveOriginalModelImageChanged(self, bSave):
+        global g_modelSettings
+        g_modelSettings.saveOriginalModelImage = bSave
+
+    def segmentClicked(self):
+        global g_modelSettings
+        self.myDeepLearning(g_modelSettings)
+
+    # ======================================================================================================================
+    # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
+    # https://pytorch.org/tutorials/beginner/blitz/neural_networks_tutorial.html
+    # https://www.cs.toronto.edu/~kriz/cifar.html
+    # ======================================================================================================================
+    def myDeepLearning(self, modelSettings):
+
+        #self.tuneSAM()
+        DL = GRIME_AI_DeepLearning()
+        DL.SAM_001(modelSettings, dailyImagesList)
+        #self.SAM_002()
+
+        return
+
+
+    # ======================================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    #def toolbarButtonDeepLearning(self):
+    #    strMessage = 'This is for producing models for Deep Learning. This is experimental at this time.'
+    #    msgBox = GRIMe_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
+    #    response = msgBox.displayMsgBox()
+
+    #    self.myDeepLearning(g_modelSettings)
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # IMAGE MASK FUNCTIONALITY
+    # ==================================================================================================================
+    # ==================================================================================================================
     def onMyToolBarCreateMask(self):
 
         if self.colorSegmentationDlg == None:
@@ -1746,8 +1856,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.maskEditorDlg.generateMask_Signal.connect(self.generateMask)
             self.maskEditorDlg.drawingColorChange_Signal.connect(self.changePolygonColor)
             self.maskEditorDlg.reset_Signal.connect(self.resetMask)
-            self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
             self.maskEditorDlg.polygonFill_Signal.connect(self.fillPolygonChanged)
+
+            self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
 
             self.maskEditorDlg.show()
 
@@ -2501,22 +2612,29 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
             msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
             response = msgBox.displayMsgBox()
         else:
-#            global TriageDlg
             TriageDlg = GRIME_TriageOptionsDlg()
 
             response = TriageDlg.exec_()
 
             if response == 1:
-                myTriage = GRIME_AI_ImageTriage()
-                myTriage.cleanImages(folder, \
-                            False, \
-                            TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
-                            TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
-                            TriageDlg.getCreateReport(), TriageDlg.getMoveImages())
 
-                strMessage = 'Image triage is complete.'
-                msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
-                response = msgBox.displayMsgBox()
+                if len(TriageDlg.getReferenceImageFilename()) == 0 and TriageDlg.getCorrectAlignment() == True:
+                    strMessage = 'Please select reference image if you want to correct image alignment.'
+                    msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                    response = msgBox.displayMsgBox()
+                else:
+                    myTriage = GRIME_AI_ImageTriage()
+                    myTriage.cleanImages(folder, \
+                                False, \
+                                TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
+                                TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
+                                TriageDlg.getCreateReport(), TriageDlg.getMoveImages(), \
+                                TriageDlg.getCorrectAlignment(), TriageDlg.getSavePolylines(),
+                                TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
+
+                    strMessage = 'Image triage is complete!'
+                    msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                    response = msgBox.displayMsgBox()
             else:
                 strMessage = 'ABORT! You cancelled the triage operation.'
                 msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
@@ -3497,6 +3615,8 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     splash = GRIME_AI_SplashScreen(QPixmap('Splash_007.jpg'))
     splash.show(frame)
+    splash = GRIME_AI_SplashScreen(QPixmap('GRIME-AI Logo.jpg'), 5)
+    splash.show(frame)
     #time.sleep(5)
     #splash.finish(frame)
 
@@ -3515,7 +3635,8 @@ if __name__ == '__main__':
 
     # GET LIST OF ALL SITES ON NEON
     #if frame.checkBoxNEONSites.isChecked():
-    siteList = NEON_API().readFieldSiteTable()
+    myNEON_API = NEON_API()
+    siteList = myNEON_API.readFieldSiteTable()
     #else:
     #NEON_FormatProductTable(frame.tableProducts)
 
@@ -3798,4 +3919,76 @@ if __name__ == '__main__':
             qImg = QImage(rgb1.data, rgb1.shape[1], rgb1.shape[0], QImage.Format_BGR888)
             pix = QPixmap(qImg)
             self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+'''
+
+
+'''
+import torch
+import torchvision
+from torchvision.models.detection import MaskRCNN
+from torchvision.models.detection.rpn import AnchorGenerator
+from torchvision.transforms import transforms
+from torch.utils.data import DataLoader
+from torchvision.datasets import CocoDetection  
+
+# Define transformations for data augmentation
+transform = transforms.Compose([
+    transforms.ToTensor(),
+])
+
+# Load COCO dataset
+train_dataset = CocoDetection(root='path/to/coco/train', annFile='annotations/train.json', transform=transform)
+val_dataset = CocoDetection(root='path/to/coco/val', annFile='annotations/val.json', transform=transform)
+
+# Define dataloaders
+train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4, collate_fn=utils.collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=utils.collate_fn)
+
+# Define the model
+model = MaskRCNN(num_classes=91)
+
+# Define optimizer and learning rate scheduler
+params = [p for p in model.parameters() if p.requires_grad]
+optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+
+# Define the device
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+# Move model to the device
+model.to(device)
+
+# Training loop
+num_epochs = 10
+for epoch in range(num_epochs):
+    model.train()
+    for images, targets in train_loader:
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+        loss_dict = model(images, targets)
+
+        losses = sum(loss for loss in loss_dict.values())
+
+        optimizer.zero_grad()
+        losses.backward()
+        optimizer.step()
+
+    # Update the learning rate
+    lr_scheduler.step()
+
+    # Evaluation on the validation dataset
+    model.eval()
+    for images, targets in val_loader:
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+        with torch.no_grad():
+            val_loss_dict = model(images, targets)
+    
+    # Print training and validation losses
+    print(f'Epoch [{epoch}/{num_epochs}], Training Loss: {losses.item()}, Validation Loss: {sum(val_loss_dict.values()).item()}')
+
+# Save the trained model
+torch.save(model.state_dict(), 'trained_model.pth')
 '''
