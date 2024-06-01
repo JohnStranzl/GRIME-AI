@@ -313,30 +313,6 @@ class USGS_NIMS:
     #
     # ------------------------------------------------------------------------------------------------------------------
     def fetchStageAndDischarge(self, nwisID, siteName, startDate, endDate, startTime, endTime, saveFolder):
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # FETCH STAGE AND DISCHARGE
-        # https://waterservices.usgs.gov/test-tools/
-        # https://help.waterdata.usgs.gov/codes-and-parameters/parameters
-        #
-        # OLD NWIS SITE
-        # https://waterservices.usgs.gov/rest/IV-Test-Tool.html
-        #
-        # NEW https://waterservices.usgs.gov/nwis/site/?format=rdb&sites=06800500&startDT=2023-12-01&endDT=2024-02-01&siteStatus=all&siteType=ST&outputDataTypeCd=iv,dv,gw,qw,id.
-        # OLD https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=
-        #
-        # If start and end time
-        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
-        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
-        #
-        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2024-02-01&endDT=2024-02-01&siteStatus=all
-        #
-        # Instantaneous values:
-        # https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites=06800500&startDT=2022-02-01T15:02&endDT=2024-02-01T15:02&siteStatus=all
-        #
-        # Daily values (including max, mean and min values for each day):
-        # https://waterservices.usgs.gov/nwis/dv/?format=rdb,1.0&sites=06800500&startDT=2022-02-01&endDT=2024-02-01&siteStatus=all
-        #
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         water_services_endpoint = "https://waterservices.usgs.gov/nwis/iv/?format=rdb,1.0&sites="
         #fullURL = water_services_endpoint + nwisID + startDate + endDate + '&parameterCd=00060,00065&siteStatus=all'
         fullURL = water_services_endpoint + nwisID + '&startDT=' + startDate.strftime("%Y-%m-%d") + '&endDT=' + endDate.strftime("%Y-%m-%d") + '&siteStatus=all'
