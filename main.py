@@ -105,6 +105,7 @@ from GRIME_AI_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
 from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
 from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
+from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, greennessIndex
 
 # ------------------------------------------------------------
@@ -428,8 +429,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.tableWidget_ROIList.removeRow(0)
 
         # SAVE AND RECALL SETTINGS
-        self.actionSave_Settings.triggered.connect(GRIME_AI_Save_Utils().saveSettings)
-
+        self.action_SaveSettings.triggered.connect(self.menubarSaveSettings)
+        self.action_ReleaseNotes.triggered.connect(self.toolbarButtonReleaseNotes)
+        self.action_CompositeSlices.triggered.connect(self.menubarCompositeSlices)
         # GRAPH TAB(S)
 
         self.NEON_labelLatestImage.setScaledContents(True)
@@ -491,6 +493,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #x = 1
 
         self.createToolBar()
+
+
+        # ------------------------------------------------------------------------------------------------------------------
+        # MENU
+        # ------------------------------------------------------------------------------------------------------------------
 
 
         # ------------------------------------------------------------------------------------------------------------------
@@ -1367,6 +1374,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         imageStats.setLabel('bad')
         self.imageStatsList.append(imageStats)
 
+    # ======================1================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def menubarCompositeSlices(self):
+        compositeSlices = GRIME_AI_CompositeSlices()
+
+        global dailyImageList
+        global imageFileFolder
+
+        if not os.path.exists(imageFileFolder+'\compositeSlices'):
+            os.makedirs(imageFileFolder+'\compositeSlices')
+
+        compositeSlices.create_composite_image(dailyImagesList.visibleList, imageFileFolder+'\compositeSlices\Composite_Image.png', "middle")
+
+    # ======================1================================================================================================
+    # ======================================================================================================================
+    # ======================================================================================================================
+    def menubarSaveSettings(self):
+        utils = GRIME_AI_Save_Utils()
+        utils.saveSettings()
+
+
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
@@ -1374,6 +1403,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         releaseNotesDlg = GRIME_ReleaseNotesDlg(frame)
 
         releaseNotesDlg.show()
+
 
     # ======================================================================================================================
     # ======================================================================================================================
@@ -1395,6 +1425,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.edgeDetectionDlg.show()
 
+
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
@@ -1407,6 +1438,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         npimg = img.numpy()
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
         plt.show()
+
 
     # ======================================================================================================================
     # ======================================================================================================================

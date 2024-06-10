@@ -957,22 +957,21 @@
      <x>0</x>
      <y>0</y>
      <width>1440</width>
-     <height>26</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <addaction name="actionSave_Image_Set"/>
-    <addaction name="separator"/>
-    <addaction name="actionSave_Settings"/>
+    <addaction name="action_SaveImageSet"/>
+    <addaction name="action_SaveSettings"/>
    </widget>
    <widget class="QMenu" name="menu_About">
     <property name="title">
      <string>&amp;Help</string>
     </property>
-    <addaction name="actionRelease_Notes"/>
+    <addaction name="action_ReleaseNotes"/>
     <addaction name="separator"/>
     <addaction name="action_About"/>
    </widget>
@@ -980,19 +979,27 @@
     <property name="title">
      <string>Image Set</string>
     </property>
-    <addaction name="actionClean"/>
+    <addaction name="action_Clean"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="action_CompositeSlices"/>
+    <addaction name="action_TriageImages"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuImage_Set"/>
+   <addaction name="menuTools"/>
    <addaction name="menu_About"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionSave_Settings">
+  <action name="action_SaveSettings">
    <property name="text">
     <string>Save Settings</string>
    </property>
   </action>
-  <action name="actionSave_Image_Set">
+  <action name="action_SaveImageSet">
    <property name="text">
     <string>Save Image Set</string>
    </property>
@@ -1002,14 +1009,24 @@
     <string>&amp;About GRIMe-AI</string>
    </property>
   </action>
-  <action name="actionClean">
+  <action name="action_Clean">
    <property name="text">
     <string>Clean</string>
    </property>
   </action>
-  <action name="actionRelease_Notes">
+  <action name="action_ReleaseNotes">
    <property name="text">
     <string>Release Notes</string>
+   </property>
+  </action>
+  <action name="action_CompositeSlices">
+   <property name="text">
+    <string>Composite Slices</string>
+   </property>
+  </action>
+  <action name="action_TriageImages">
+   <property name="text">
+    <string>Triage Images</string>
    </property>
   </action>
  </widget>
