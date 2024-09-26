@@ -2,10 +2,11 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.4.0"
+#define MyAppVersion "0.0.5.8"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
-#define MyAppExeName "GRIMe-AI.exe"
+#define MyAppExeName "GRIME-AI.exe"
+#define MyAppIcoName "GRIME-AI Logo.ico"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -26,11 +27,12 @@ DisableProgramGroupPage=yes
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIMe-AI 0_0_4_0 Setup
+OutputBaseFilename=GRIME-AI 0_0_5_8 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+ChangesEnvironment=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -44,21 +46,26 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "C:\Users\johns\pycharmprojects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.2.2-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
+Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
 Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
 Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
-;Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
+; Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
+    IconFilename: "{app}\{#MyAppIcoName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "R_HOME"; ValueData: "C:\Program Files\R\R-4.4.1"; Flags: preservestringtype
 
 [Run]
-Filename: "{commonpf64}\R\R-4.2.2\bin\x64\r.exe"; Parameters: "-e ""install.packages('neonUtilities', repos='https://cran.rstudio.com/')"""
+; cmd line: r.exe -e "install.packages('neonUtilities', repos='https://cran.rstudio.com/')"
+Filename: "{commonpf64}\R\R-4.4.1\bin\x64\r.exe"; Parameters: "-e ""install.packages('neonUtilities', repos='https://cran.rstudio.com/')"""
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
@@ -66,9 +73,10 @@ procedure RunOtherInstaller;
 var
   ResultCode: Integer;
 begin
-  if not Exec(ExpandConstant('{app}\R-4.2.2-win.exe'), '', '', SW_SHOWNORMAL,
+  if not Exec(ExpandConstant('{app}\R-4.4.1-win.exe'), '', '', SW_SHOWNORMAL,
     ewWaitUntilTerminated, ResultCode)
   then
     MsgBox('Other installer failed to run!' + #13#10 +
       SysErrorMessage(ResultCode), mbError, MB_OK);
 end;
+
