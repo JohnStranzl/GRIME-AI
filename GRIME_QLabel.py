@@ -3,7 +3,7 @@ from PyQt5.QtCore import QRect, QPoint, Qt
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPainterPath, QPolygon, QPolygonF
 from PyQt5.QtWidgets import QLabel, QVBoxLayout
 
-from GRIME_roiData import ROIShape
+from GRIME_AI_roiData import ROIShape
 
 from enum import Enum
 
@@ -11,6 +11,7 @@ class DrawingMode(Enum):
     OFF                 = 0
     COLOR_SEGMENTATION  = 1
     MASK                = 2
+    SLICE               = 3
 
 # ======================================================================================================================
 #
@@ -34,13 +35,19 @@ class GRIME_QLabel(QLabel):
     # ------------------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
         QLabel.__init__(self, parent=parent)
-        lay = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
         self.path = QPainterPath()
         self.points = QPolygon()
 
         self.brushColor = Qt.green
 
         self.polygonList = []
+
+        self.setLayout(layout)
+        self.setWindowTitle("Slice Position")
+
+        self.sliceCenter = int(self.size().width() / 2)
+        self.sliceWidth = int(10)
 
     # ------------------------------------------------------------------------------------------------------------------------
     # Mouse click event
@@ -91,6 +98,28 @@ class GRIME_QLabel(QLabel):
             self.drawColorSegmentationROI()
         elif self.drawingMode == DrawingMode.MASK:
             self.drawPolygon()
+        elif self.drawingMode == DrawingMode.SLICE:
+            self.drawCompositeSlice(self.sliceCenter)
+
+
+    # ------------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------------
+    def drawCompositeSlice(self, sliceCenter):
+        painter = QPainter(self)
+
+        labelSize = self.size()
+
+        self.sliceCenter = sliceCenter
+
+        painter.setPen(QPen(Qt.red, 1, Qt.SolidLine))
+        painter.drawLine(int(self.sliceCenter), 0, int(self.sliceCenter), labelSize.height())
+
+        painter.setPen(QPen(Qt.magenta, 1, Qt.SolidLine))
+        painter.drawLine(int(self.sliceCenter - self.sliceWidth // 2), 0, int(self.sliceCenter - self.sliceWidth // 2), labelSize.height())
+        painter.drawLine(int(self.sliceCenter + self.sliceWidth // 2), 0, int(self.sliceCenter + self.sliceWidth // 2), labelSize.height())
+
+        self.update()
+
 
     # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------
@@ -102,7 +131,8 @@ class GRIME_QLabel(QLabel):
             self.x0 = self.x1
             self.y0 = self.y1
 
-# ------------------------------------------------------------------------------------------------------------------------
+
+    # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------
     def drawColorSegmentationROI(self):
         if self.flag:
@@ -222,3 +252,17 @@ class GRIME_QLabel(QLabel):
 
     def enablePolygonFill(self, bFill):
         self.enableFill = bFill
+
+    # ------------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------------
+    def setSliceCenter(self, sliceCenter):
+        self.sliceCenter = sliceCenter
+
+    def getSliceCenter(self):
+        return(self.sliceCenter)
+
+    def setSliceWidth(self, sliceWidth):
+        self.sliceWidth = sliceWidth
+
+    def getSliceWidth(self):
+        return(self.sliceWidth)

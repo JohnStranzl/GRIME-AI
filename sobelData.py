@@ -1,3 +1,5 @@
+import numpy as np
+
 # ======================================================================================================================
 # THIS CLASS WILL HOLD THE SOBEL EDGE DETECTION INFORMATION FOR THE X-AXIS, THE Y-AXIS AND THE COMBINED
 # X- AND Y-AXIS FOR AN IMAGE
@@ -7,10 +9,12 @@ class sobelData:
         self.className = "sobelData"
 
     def setSobelX(self, sobelX):
-        self.sobelX = sobelX
+        sobel_uint8 = np.uint8(sobelX)
+        self.sobelX = sobel_uint8
 
     def setSobelY(self, sobelY):
-        self.sobelY = sobelY
+        sobel_uint8 = np.uint8(sobelY)
+        self.sobelY = sobel_uint8
 
     def setSobelXY(self, sobelXY):
         self.sobelXY = sobelXY

@@ -6,13 +6,27 @@ import numpy as np
 from GRIME_AI_Utils import GRIME_AI_Utils
 
 class GRIME_AI_Color:
+    """Class for processing color images using GRIME AI utilities."""
+
     def __init__(self):
+        """Initializes the GRIME_AI_Color class with default values."""
+
         self.className = "GRIME_AI_Color"
 
     # ======================================================================================================================
     #
     # ======================================================================================================================
     def loadColorImage(self, filename):
+        """
+        Loads a color image from the specified file.
+
+        Args:
+            filename (str): The path to the image file.
+
+        Returns:
+            numpy.ndarray: The loaded image in RGB color space, or an empty list if loading fails.
+        """
+
         img = cv2.imread(filename)
 
         try:
@@ -28,12 +42,15 @@ class GRIME_AI_Color:
     # ======================================================================================================================
     def segmentColors(self, rgb, hsv, roiList):
         """
-        segmentColors takes an image converted from an RGB color space to an HSV color space and extracts the colors defined
-        by the colors clusters extracted from one or more regions-of-interest trained throughout the image.
-        :param p1: a color image (HSV color space)
-        :param p2: a color image (HSV color space)
-        :param p3: a list of the ROIs and their color clusters that are to be extracted from the input image
-        :return: a color image (HSV) of the colors extracted from the input image
+        Segments colors in an image based on HSV color space and ROI color clusters.
+
+        Args:
+            rgb (numpy.ndarray): The color image in RGB color space.
+            hsv (numpy.ndarray): The color image in HSV color space.
+            roiList (list): A list of regions-of-interest and their color clusters.
+
+        Returns:
+            numpy.ndarray: The segmented color image in HSV color space.
         """
 
         # initialize return image to null
@@ -74,6 +91,17 @@ class GRIME_AI_Color:
     #
     # ======================================================================================================================
     def KMeans(self, img1, nClusters):
+        """
+        Applies KMeans clustering to the image for color quantization.
+
+        Args:
+            img1 (numpy.ndarray): The input image.
+            nClusters (int): The number of clusters to form.
+
+        Returns:
+            tuple: A tuple containing the color bar, cluster centers, and histogram.
+        """
+
         # --------------------------------------------------------------------------------
         # reshape the image to be a list of pixels
         # --------------------------------------------------------------------------------
@@ -121,6 +149,16 @@ class GRIME_AI_Color:
     # EXTRACT DOMINANT HSV COLORS
     # ======================================================================================================================
     def extractDominant_HSV(self, rgb, nNumClusters):
+        """
+        Extracts dominant HSV colors from the image using KMeans clustering.
+
+        Args:
+            rgb (numpy.ndarray): The color image in RGB color space.
+            nNumClusters (int): The number of dominant colors to extract.
+
+        Returns:
+            tuple: A tuple containing the sorted histogram and sorted cluster centers.
+        """
 
         if 0:
             rgb = cv2.blur(rgb, ksize=(5, 5))
@@ -151,6 +189,17 @@ class GRIME_AI_Color:
     #
     # ======================================================================================================================
     def plot_colors(self, hist, centroids):
+        """
+        Plots a color bar representing the relative frequency of each color.
+
+        Args:
+            hist (numpy.ndarray): The histogram of color frequencies.
+            centroids (numpy.ndarray): The color centroids.
+
+        Returns:
+            numpy.ndarray: The color bar chart.
+        """
+
         # initialize the bar chart representing the relative frequency of each of the colors
         # bar = np.zeros((50, 300, 3), dtype="uint8")
         bar = np.zeros((50, 400, 3), dtype="uint8")
@@ -172,6 +221,16 @@ class GRIME_AI_Color:
     #
     # ======================================================================================================================
     def centroid_histogram(self, labels_):
+        """
+        Creates a histogram based on the number of pixels assigned to each cluster.
+
+        Args:
+            labels_ (numpy.ndarray): The array of labels from KMeans clustering.
+
+        Returns:
+            numpy.ndarray: The normalized histogram.
+        """
+
         # grab the number of different clusters and create a histogram based on the number of pixels assigned to each cluster
         numLabels = np.arange(0, len(np.unique(labels_)) + 1)
         (hist, _) = np.histogram(labels_, bins=numLabels)

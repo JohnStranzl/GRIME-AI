@@ -957,7 +957,7 @@
      <x>0</x>
      <y>0</y>
      <width>1440</width>
-     <height>25</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -987,6 +987,11 @@
     </property>
     <addaction name="action_CompositeSlices"/>
     <addaction name="action_TriageImages"/>
+    <addaction name="action_ExtractCOCOMasks"/>
+    <addaction name="separator"/>
+    <addaction name="separator"/>
+    <addaction name="separator"/>
+    <addaction name="action_RefreshNEON"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuImage_Set"/>
@@ -1027,6 +1032,16 @@
   <action name="action_TriageImages">
    <property name="text">
     <string>Triage Images</string>
+   </property>
+  </action>
+  <action name="action_RefreshNEON">
+   <property name="text">
+    <string>Refresh NEON</string>
+   </property>
+  </action>
+  <action name="action_ExtractCOCOMasks">
+   <property name="text">
+    <string>Extract COCO Masks</string>
    </property>
   </action>
  </widget>

@@ -1,5 +1,9 @@
 import os
+
+os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
+
 import csv
+import re
 import multiprocessing
 import requests
 from PyQt5.QtGui import QPixmap
@@ -13,7 +17,9 @@ from bs4 import BeautifulSoup
 from GRIME_AI_Utils import GRIME_AI_Utils
 
 # THIRD PARTY MODULES
-import rpy2.robjects.packages as rpackages
+
+import rpy2.robjects as robjects
+#import rpy2.robjects.packages as rpackages
 from rpy2.robjects.packages import importr
 
 # GRIMe-AI MODULES
@@ -92,7 +98,7 @@ class  NEON_API:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def DownloadFieldSiteTableFiles(self, csv_links):
+    def Download_Field_Site_Metadata(self, csv_links):
         link = 'https://www.neonscience.org' + csv_links + '.csv'
 
         # obtain filename by splitting url and getting last string
@@ -102,10 +108,9 @@ class  NEON_API:
         r = requests.get(link, stream=True)
 
         configFilePath = os.path.expanduser('~')
-        configFilePath = os.path.join(configFilePath, 'Documents')
-        configFilePath = os.path.join(configFilePath, 'GRIMe-AI')
+        configFilePath = os.path.join(configFilePath, 'Documents', 'GRIMe-AI', 'Downloads', 'NEON', 'Metadata')
         if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
+            os.makedirs(configFilePath)
         filename_with_path = os.path.join(configFilePath, file_name)
 
         # download started
@@ -133,24 +138,54 @@ class  NEON_API:
         progressBar.setRange(0, 100)
         progressBar.show()
 
-        neonUtilities = rpackages.importr('neonUtilities')
-        utils = importr('utils')
-
         progressBar.setValue(20)
 
+        neonUtilities = importr('neonUtilities')
+        utils = importr('utils')
+        base = importr('base')
+
+
         try:
-            utils.capture_output(neonUtilities.zipsByProduct(dpID       = strProduct,
-                                        site       = SiteCode,
-                                        savepath   = downloadsFilePath,
-                                        startdate  = strStartDate,
-                                        enddate    = strEndDate,
-                                        package    = 'basic',
-                                        check_size = 'FALSE'))
+            downloadsFilePath =re.sub(r'\\', '/', downloadsFilePath)
+            base.options(timeout=300)
+            '''
+            neon_zips = neonUtilities.zipsByProduct(dpID = strProduct, \
+                                                             site = base.c(SiteCode), \
+                                                             savepath = base.c(downloadsFilePath), \
+                                                             startdate = base.c(strStartDate), \
+                                                             enddate = base.c(strEndDate), \
+                                                             package = base.c('basic'), \
+                                                             include_provisional = robjects.vectors.BoolVector([True]), \
+                                                             load = robjects.vectors.BoolVector([True]), \
+                                                             check_size = robjects.vectors.BoolVector([False]));
+            '''
+
+            neon_zips = neonUtilities.zipsByProduct(dpID = strProduct,
+                                                    site = base.c(SiteCode),
+                                                    savepath = downloadsFilePath,
+                                                    startdate = strStartDate,
+                                                    enddate = strEndDate,
+                                                    package = 'basic',
+                                                    include_provisional = robjects.vectors.BoolVector([True]),
+                                                    check_size = 'FALSE');
+                                                    #load = 'TRUE',
+                                                    #check_size = 'FALSE');
+            '''
+            neon_zips = neonUtilities.zipsByProduct(dpID='DP1.10003.001',
+                                        site=base.c('HARV', 'BART'),
+                                        savepath='C:/Users/johns/Documents/GRIMe-AI/Downloads/NEON/Data/filesToStack10003',
+                                        package='basic',
+                                        check_size='FALSE',
+                                        include_provisional = robjects.vectors.BoolVector([True]));
+            '''
+
+            utils.capture_output(neon_zips)
 
             progressBar.setValue(40)
 
             # PATH WHERE THE zipsByProduct PLACED THE DOWNLOADED ZIP FILES
-            myFolderPath = downloadsFilePath + '\\filesToStack' + strProduct.split('.')[1].zfill(5)
+            myFolderPath = os.path.join(downloadsFilePath, ('filesToStack' + strProduct.split('.')[1].zfill(5)))
+            myFolderPath = os.path.normpath(myFolderPath)
 
             # PATH WHERE WE WANT TO PLACE THE STACKED FILES (i.e., CONCATENATED MONTHLY DATA FILES) WILL BE STORED
             mySavePath = downloadsFilePath + '\\' + foldername
@@ -240,14 +275,22 @@ class  NEON_API:
 
         url = SERVER + 'sites/' + SITE
 
-        site_json = requests.get(url).json()
+        nRetry = 3
+        bSuccess = False
+        while (nRetry > 0) and (bSuccess == False):
+            try:
+                site_json = requests.get(url).json()
 
-        # Get available months of Ecosystem structure data products for TEAK site
-        # Loop through the 'dataProducts' list items (each one is a dictionary) at the site
-        for product in site_json['data']['dataProducts']:
-            # if a list item's 'dataProductCode' dict element equals the product code string
-            if (product['dataProductCode'] == PRODUCTCODE):
-                availableMonths = product['availableMonths']
+                # Get available months of Ecosystem structure data products for TEAK site
+                # Loop through the 'dataProducts' list items (each one is a dictionary) at the site
+                for product in site_json['data']['dataProducts']:
+                    # if a list item's 'dataProductCode' dict element equals the product code string
+                    if (product['dataProductCode'] == PRODUCTCODE):
+                        availableMonths = product['availableMonths']
+                bSuccess = True
+            except:
+                print("Retry NEON Site Access...")
+                nRetry = nRetry - 1
 
         return availableMonths
 
@@ -285,7 +328,7 @@ class  NEON_API:
             csv_links = self.FetchFieldSiteTableURL(url)
 
             # download all CSV files
-            filename_with_path = NEON_API().DownloadFieldSiteTableFiles(csv_links)
+            filename_with_path = NEON_API().Download_Field_Site_Metadata(csv_links)
 
             siteList = GRIME_AI_Utils().parseCSV(filename_with_path)
         # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST

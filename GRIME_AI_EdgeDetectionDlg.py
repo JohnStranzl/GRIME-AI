@@ -10,10 +10,10 @@ from constants import edgeMethodsClass, featureMethodsClass
 class GRIME_AI_EdgeDetectionDlg(QDialog):
 
     # SIGNALS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    edgeDetectionSignal    = pyqtSignal(edgeMethodsClass)
+    edgeDetectionSignal = pyqtSignal(edgeMethodsClass)
     featureDetectionSignal = pyqtSignal(featureMethodsClass)
 
-    returnEdgeData    = edgeMethodsClass()
+    returnEdgeData = edgeMethodsClass()
     returnFeatureData = featureMethodsClass()
 
     # -----------------------------------------------------------------------------------------------------------------
@@ -47,6 +47,9 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
         self.radioButtonORB.clicked.connect(self.clicked_ORB)
         self.spinBoxOrbMaxFeatures.valueChanged.connect(self.spinBoxOrbMaxFeaturesChanged)
 
+        self.returnEdgeData.canny_threshold_high = self.spinBoxCannyHighThreshold.value()
+        self.returnEdgeData.canny_threshold_low = self.spinBoxCannyLowThreshold.value()
+        self.returnEdgeData.sobelKernel = self.spinBoxSobelKernel.value()
 
         #self.spinBoxCannyHighThreshold.setKeyboardTracking(False)
         #self.spinBoxCannyLowThreshold.setKeyboardTracking(False)
@@ -100,7 +103,7 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
     # -----------------------------------------------------------------------------------------------------------------
     # -----------------------------------------------------------------------------------------------------------------
     def spinBoxCannyLowThresholdChanged(self):
-        self.returnEdgeData.canny_threshold_high = self.spinBoxCannyLowThreshold.value()
+        self.returnEdgeData.canny_threshold_low = self.spinBoxCannyLowThreshold.value()
         self.edgeDetectionSignal.emit(self.returnEdgeData)
 
     # -----------------------------------------------------------------------------------------------------------------

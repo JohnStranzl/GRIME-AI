@@ -45,6 +45,7 @@ class edgeMethodsClass():
 class featureMethodsClass():
 
     # CONSTANTS
+    NONE = 0
     SIFT = 20
     ORB = 21
 

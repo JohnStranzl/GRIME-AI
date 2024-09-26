@@ -1,12 +1,11 @@
 import os
-import re
 from datetime import datetime, date, time
 
 import exifreader
 
 from PIL import Image, ImageQt, ExifTags
 from PIL.ExifTags import TAGS
-
+import piexif
 
 
 # ======================================================================================================================
@@ -127,3 +126,18 @@ class EXIFData:
         return(image_date, image_time)
 
 
+
+    def get_original_datetime(self, image_path):
+        # Open the image file
+        img = Image.open(image_path)
+
+        # Extract the EXIF data
+        exif_data = piexif.load(img.info['exif'])
+
+        # Get the original date/time
+        original_datetime = exif_data['Exif'][piexif.ExifIFD.DateTimeOriginal]
+
+        # Convert bytes to string
+        original_datetime = original_datetime.decode('utf-8')
+
+        return original_datetime

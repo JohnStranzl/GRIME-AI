@@ -6,6 +6,12 @@ from PIL import Image, ImageQt
 from PyQt5.QtGui import QPixmap, QImage
 from constants import edgeMethodsClass, featureMethodsClass
 
+from GRIME_AI_Image_Processing import GRIME_AI_Image_Processing
+from GRIME_AI_Image_Conversion import GRIME_AI_Image_Conversion
+
+from GRIME_AI_Utils import GRIME_AI_Utils
+
+
 class GRIME_ProcessImage:
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -68,37 +74,45 @@ class GRIME_ProcessImage:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def processSobel(self, img1, method):
-        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+    def processSobel(self, gray, sobelKernelSize, method):
+
+        myImageProcssing = GRIME_AI_Image_Conversion()
+        #img1 = myImageProcssing.qimage_to_opencv(img1)
+
+        #gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
 
         mySobel = sobelData.sobelData()
 
-        # JES sobelKernelSize = self.spinBoxSobelKernel.value()
-        sobelKernelSize = 5  # TEST
         mySobel.setSobelX(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
         mySobel.setSobelY(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
-        mySobel.setSobelXY(cv2.Sobel(gray, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
 
         if method == edgeMethodsClass.SOBEL_X:
-            # edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
-            edges = mySobel.getSobelX().astype(np.uint8)
+            #edges = mySobel.getSobelX().astype(np.uint8)
+            edges = mySobel.getSobelX()
             q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
             pix = QPixmap(q_img)
 
         elif method == edgeMethodsClass.SOBEL_Y:
-            # edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
-            edges = mySobel.getSobelY().astype(np.uint8)
+            #edges = mySobel.getSobelY().astype(np.uint8)
+            edges = mySobel.getSobelY()
             q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
             pix = QPixmap(q_img)
 
         elif method == edgeMethodsClass.SOBEL_XY:
-            # edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
-            edges = mySobel.getSobelXY().astype(np.uint8)
+            myImageProcessing = GRIME_AI_Image_Processing()
+            edges = myImageProcessing.apply_sobel_filter(gray, sobelKernelSize)
             q_img = QImage(edges.data, edges.shape[1], edges.shape[0], QImage.Format_Grayscale8)
             pix = QPixmap(q_img)
 
         return(pix)
 
+
+    def getGradientMagnitude(self, im):
+        ddepth = cv2.CV_32F
+        dx = cv2.Sobel(im, ddepth, 1, 0)
+        dy = cv2.Sobel(im, ddepth, 0, 1)
+        magnitude = cv2.magnitude(dx, dy)
+        return magnitude
 
     # ------------------------------------------------------------------------------------------------------------------
     #

@@ -7,6 +7,7 @@ import numpy as np
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from datetime import datetime
 
 class GRIME_AI_ImageTriage():
@@ -70,6 +71,7 @@ class GRIME_AI_ImageTriage():
     def cleanImages(self, folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport,
                     bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold):
 
+        badImageCount = 0
         rotationAngle = 0.0
         horizontal_shift = 0.0
         vertical_shift = 0.0
@@ -114,7 +116,8 @@ class GRIME_AI_ImageTriage():
         # created so they are not processed with nominal images.
         files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
 
-        refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)
+        if bCorrectAlignment:
+            refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)
 
         for file in files:
             progressBar.setWindowTitle(file)
@@ -183,7 +186,7 @@ class GRIME_AI_ImageTriage():
                     strIntensity = "Too Light"
                     bMove = True
 
-                if len(strReferenceImageFilename) > 0 and bCorrectAlignment == True:
+                if len(strReferenceImageFilename) > 0 and bCorrectAlignment is True:
                     # ----------------------------------------------------------------------------------------------------
                     # GET THE ROTATION ANGLE OF THE IMAGE
                     # ----------------------------------------------------------------------------------------------------
@@ -219,6 +222,9 @@ class GRIME_AI_ImageTriage():
 
                     filename = os.path.join(tempFolder, filename)
 
+                if bMove:
+                    badImageCount = badImageCount + 1
+
                 # ----------------------------------------------------------------------------------------------------
                 # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
                 # ----------------------------------------------------------------------------------------------------
@@ -235,6 +241,11 @@ class GRIME_AI_ImageTriage():
                 del fft
                 del recon
                 del blur
+
+        if badImageCount == 0:
+            strMessage = 'No bad images found.'
+            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+            response = msgBox.displayMsgBox()
 
         # ----------------------------------------------------------------------------------------------------
         # clean-up before exiting function

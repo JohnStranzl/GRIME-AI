@@ -115,10 +115,10 @@ def loadChromeDriver():
 
     """
     if strChromeVersion != strChromeDriverVersion:
-        msgBox = GRIMe_QMessageBox('Chrome Driver Error!', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion + '\n\nYou can use the software for analyzing data but you cannot download images from the Internet until the Chrome Driver and Chrome Browser versions match.')
+        msgBox = GRIME_AI_QMessageBox('Chrome Driver Error!', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion + '\n\nYou can use the software for analyzing data but you cannot download images from the Internet until the Chrome Driver and Chrome Browser versions match.')
         response = msgBox.displayMsgBox()
     else:
-        msgBox = GRIMe_QMessageBox('Chrome Version', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion)
+        msgBox = GRIME_AI_QMessageBox('Chrome Version', 'Chrome Version: ' + strChromeVersion + '\nChrome Driver Version: ' + strChromeDriverVersion)
         response = msgBox.displayMsgBox()
     """
 

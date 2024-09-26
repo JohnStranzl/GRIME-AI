@@ -12,7 +12,7 @@ from datetime import timedelta
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QMessageBox
 
-from GRIME_QMessageBox import GRIMe_QMessageBox
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_QProgressWheel import QProgressWheel
 
 
@@ -220,7 +220,7 @@ class USGS_NIMS:
 
         if len(listOfImages) == 0:
             strMessage = 'No images available for the site or for the time/date range specified.'
-            msgBox = GRIMe_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
+            msgBox = GRIME_AI_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
             response = msgBox.displayMsgBox()
 
         return len(listOfImages)
@@ -275,7 +275,7 @@ class USGS_NIMS:
                     except:
                         if missingImageCount == 0:
                             strMessage = 'One or more images reported as available by NIMS are not available.'
-                            msgBox = GRIMe_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
+                            msgBox = GRIME_AI_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
                             response = msgBox.displayMsgBox()
                         missingImageCount += 1
 
@@ -332,7 +332,7 @@ class USGS_NIMS:
             self.reformat_file(fullFilename_txt, fullFilename_csv)
         except:
             strMessage = 'Unable to retrieve data from the USGS site.'
-            msgBox = GRIMe_QMessageBox('USGS - Retrieval Error', strMessage, QMessageBox.Close)
+            msgBox = GRIME_AI_QMessageBox('USGS - Retrieval Error', strMessage, QMessageBox.Close)
             response = msgBox.displayMsgBox()
 
 

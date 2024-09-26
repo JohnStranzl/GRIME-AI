@@ -26,6 +26,10 @@
 
 # import pycurl
 
+import os
+os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
+#os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
+
 import sys
 import re
 
@@ -51,6 +55,9 @@ import promptlib
 
 import cv2
 import numpy as np
+
+from pycocotools.coco import COCO
+from pycocotools import mask as maskUtils
 
 # ------------------------------------------------------------
 # WHERE THE BITS MEET THE DIGITAL ROAD
@@ -84,7 +91,6 @@ from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
-import numpy as np
 
 # ------------------------------------------------------------
 #
@@ -95,11 +101,16 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 import sobelData
+
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
 from GRIME_AI_ColorSegmentationDlg import GRIME_ColorSegmentationDlg
 from GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_FileUtilitiesDlg import GRIME_FileUtilitiesDlg
-from GRIME_ImageNavigationDlg import GRIME_ImageNavigationDlg
+from GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
+from GRIME_AI_ImageNavigationDlg import GRIME_ImageNavigationDlg
 from GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+from GRIME_AI_CompositeSliceDlg import GRIME_CompositeSliceDlg
 from GRIME_ProcessImage import GRIME_ProcessImage
 from GRIME_AI_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
 from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
@@ -107,6 +118,9 @@ from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, greennessIndex
+from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
+
+from GRIME_AI_Save_Utils import JsonEditor
 
 # ------------------------------------------------------------
 #
@@ -117,19 +131,19 @@ from GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 #
 # ------------------------------------------------------------
 from GRIME_AI_Diagnostics import GRIMe_Diagnostics
-from GRIME_ImageData import imageData
+from GRIME_AI_ImageData import imageData
 from GRIMe_ImageStats import GRIMe_ImageStats
 
 # ------------------------------------------------------------
 #
 # ------------------------------------------------------------
-from GRIME_PhenoCam import GRIME_PhenoCam, dailyList
+from GRIME_AI_PhenoCam import GRIME_PhenoCam, dailyList
 from GRIME_ProductTable import GRIMe_ProductTable
 from GRIME_QLabel import DrawingMode
-from GRIME_QMessageBox import GRIMe_QMessageBox
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_roiData import GRIME_roiData, ROIShape
+from GRIME_AI_roiData import GRIME_roiData, ROIShape
 
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
@@ -249,13 +263,14 @@ currentImageFilename = ""
 frame = 0
 # Define the maximum number of gray levels
 gray_level = 16
-imageFileFolder = ""
 
 # URLS
 # url = "http://maps.googleapis.com/maps/api/geocode/json?address=googleplex&sensor=false"
 url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
+
+SW_VERSION = "Ver.: 0.0.5.8"
 
 class displayOptions():
     displayROIs = True
@@ -314,7 +329,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     roiList = []
     imageStatsList = []
 
-    os.environ['R_HOME'] = 'C:/Program Files/R/R - 4.2.2'
+    #os.environ[str('R_HOME')] = str('C:/Program Files/R/R-4.4.1')
+    print(os.environ.get('R_HOME'))
 
     # INITIALIZE POP-UP DIALOG BOXES
     fileFolderDlg        = None
@@ -322,9 +338,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     colorSegmentationDlg = None
     TriageDlg            = None
     maskEditorDlg        = None
+    compositeSliceDlg    = None
     imageNavigationDlg   = None
     releaseNotesDlg      = None
     buildModelDlg        = None
+
+
+    imageFileFolder = None
 
     global dailyImagesList
     dailyImagesList = dailyList([], [])
@@ -383,9 +403,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.session = session
         self.ui = Ui_MainWindow()
 
-        self.setWindowTitle("GRIMe-AI: John E. Stranzl Jr.")
+        #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
+        #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
 
+        self.setWindowTitle("GRIMe-AI: John E. Stranzl Jr.")
+        #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setupUi(self)
+
+        # ------------------------------------------------------------------------------------------------------------------
+        # DISPLAY SPLASH SCREEN
+        # ------------------------------------------------------------------------------------------------------------------
+        splash = GRIME_AI_SplashScreen(QPixmap('Splash_007.jpg'), strVersion=SW_VERSION)
+        splash.show(self)
+        splash = GRIME_AI_SplashScreen(QPixmap('GRIME-AI Logo.jpg'), delay=5)
+        splash.show(self)
+
+        # ----------------------------------------------------------------------------------------------------
+        #
+        # ----------------------------------------------------------------------------------------------------
+        #JES file_utils = GRIME_AI_Save_Utils()
+        #JES file_utils.read_config_file()
+
+        global imageFileFolder
+        imageFileFolder = JsonEditor().getValue("Local_Image_Folder")
+
+        #JES folderPath = GRIME_AI_Save_Utils().NEON_getSaveFolderPath()
+        #JES self.edit_NEONSaveFilePath.1setText(folderPath)
+
+        #JES folderPath = GRIME_AI_Save_Utils().USGS_getSaveFolderPath()
+        #JES self.edit_USGSSaveFilePath.setText(folderPath)
 
         # ----------------------------------------------------------------------------------------------------
         #
@@ -432,6 +478,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_SaveSettings.triggered.connect(self.menubarSaveSettings)
         self.action_ReleaseNotes.triggered.connect(self.toolbarButtonReleaseNotes)
         self.action_CompositeSlices.triggered.connect(self.menubarCompositeSlices)
+        self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
+        self.action_TriageImages.triggered.connect(toolbarButtonImageTriage)
+
+        self.action_RefreshNEON.triggered.connect(self.menubar_RefreshNEON)
+
         # GRAPH TAB(S)
 
         self.NEON_labelLatestImage.setScaledContents(True)
@@ -445,17 +496,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.NEON_listboxSites.itemClicked.connect(self.NEON_SiteClicked)
         self.NEON_listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
 
-        folderPath = GRIME_AI_Save_Utils().NEON_getSaveFolderPath()
-        self.edit_NEONSaveFilePath.setText(folderPath)
-
         # ------------------------------------------------------------------------------------------------------------------
         # USGS
         # ------------------------------------------------------------------------------------------------------------------
         self.USGS_listboxSites.itemClicked.connect(self.USGS_SiteClicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
-
-        folderPath = GRIME_AI_Save_Utils().USGS_getSaveFolderPath()
-        self.edit_USGSSaveFilePath.setText(folderPath)
 
         # ------------------------------------------------------------------------------------------------------------------
         # NIMS
@@ -480,7 +525,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.USGS_updateSiteInfo(1)
 
         except:
-            msgBox = GRIMe_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS Database!')
+            msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS Database!')
             response = msgBox.displayMsgBox()
 
         #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIMe-AI\\Downloads\\USGS_Test")
@@ -494,11 +539,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.createToolBar()
 
-
         # ------------------------------------------------------------------------------------------------------------------
         # MENU
         # ------------------------------------------------------------------------------------------------------------------
-
 
         # ------------------------------------------------------------------------------------------------------------------
         # SET THE BACKGROUND COLORS OF SPECIFIC BUTTONS
@@ -508,6 +551,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.pushButton_USGSDownload.setStyleSheet('QPushButton {background-color: steelblue;}')
         self.pushButtonBrowseSaveImages_USGS_DownloadFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+
+        # INITIALIZE GUI CONTROLS
+        # frame.NEON_listboxSites.setCurrentRow(1)
+
+        # GET LIST OF ALL SITES ON NEON
+        # if frame.checkBoxNEONSites.isChecked():
+        myNEON_API = NEON_API()
+        siteList = myNEON_API.readFieldSiteTable()
+        # else:
+        # NEON_FormatProductTable(frame.tableProducts)
+
+        if len(siteList) == 0:
+            pass
+            # frame.radioButtonHardDriveImages.setChecked(True)
+            # frame.radioButtonHardDriveImages.setDisabled(False)
+        # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
+        else:
+            myList = []
+
+            for site in siteList:
+                strSiteName = site.siteID + ' - ' + site.siteName
+                myList.append(strSiteName)
+
+            self.NEON_listboxSites.addItems(myList)
+
+            # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
+            try:
+                self.NEON_listboxSites.setCurrentRow(2)
+                self.NEON_listboxSites.show()
+                self.NEON_SiteClicked(2)
+            except:
+                pass
+
+        self.show()
+
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -520,6 +598,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.colorSegmentationDlg != None:
             self.getColorSegmentationParams()
 
+        global imageFileFolder
         myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -655,35 +734,57 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global gProcessClick
         global gWebImageCount
 
-        if gProcessClick == 0:
-            gProcessClick = 1
+        try:
+            # gProcessClick is checked to see if another process is already handling a click event (gProcessClick == 0).
+            # If not, it sets gProcessClick to 1 to prevent concurrent clicks.
 
-            start_time = time.time()
-            SITECODE = NEON_updateSiteInfo(self, item)
-            end_time = time.time()
-            print ("NEON Site Info Elapsed Time: ", end_time - start_time)
+            if gProcessClick == 0:
+                gProcessClick = 1
 
-            start_time = time.time()
-            self.NEON_updateSiteProducts(item)
-            end_time = time.time()
-            print ("NEON Site Products Elapsed Time: ", end_time - start_time)
-
-            start_time = time.time()
-            nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
-            end_time = time.time()
-            print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
-
-            if nErrorCode == 404:
-                gWebImagesAvailable = 0
-                self.NEON_labelLatestImage.setText("No Images Available")
-            else:
-                gWebImagesAvailable = 1
+                # --------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
+                print("Updating site info...")
 
                 start_time = time.time()
-                self.NEON_DisplayLatestImage()
+                SITECODE = NEON_updateSiteInfo(self, item)
                 end_time = time.time()
-                print ("NEON Display Latest Image Elapsed Time: ", end_time - start_time)
+                print ("NEON Site Info Elapsed Time: ", end_time - start_time)
 
+                # --------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
+                print("Updating site products...")
+                time.sleep(1.0)
+
+                start_time = time.time()
+                self.NEON_updateSiteProducts(item)
+                end_time = time.time()
+                print ("NEON Site Products Elapsed Time: ", end_time - start_time)
+
+                # --------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
+                print("Download latest image...")
+                time.sleep(1.0)
+
+                start_time = time.time()
+                nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
+                end_time = time.time()
+                print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
+
+                # --------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
+                if nErrorCode == 404:
+                    gWebImagesAvailable = 0
+                    self.NEON_labelLatestImage.setText("No Images Available")
+                else:
+                    gWebImagesAvailable = 1
+
+                    start_time = time.time()
+                    self.NEON_DisplayLatestImage()
+                    end_time = time.time()
+                    print ("NEON Display Latest Image Elapsed Time: ", end_time - start_time)
+
+                gProcessClick = 0
+        except:
             gProcessClick = 0
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -899,10 +1000,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if os.path.exists(folder):
             self.edit_NEONSaveFilePath.setText(folder)
+            JsonEditor().update_json_entry("NEON_Image_Folder", folder)
         else:
             os.makedirs(folder)
 
-        GRIME_AI_Save_Utils().NEON_SaveFolderPath(folder)
+        #JES GRIME_AI_Save_Utils().NEON_SaveFolderPath(folder)
 
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -917,7 +1019,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             os.makedirs(folder)
 
-        GRIME_AI_Save_Utils().USGS_SaveFolderPath(folder)
+        #JES GRIME_AI_Save_Utils().USGS_SaveFolderPath(folder)
+
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -963,7 +1066,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if len(roiParameters.strROIName) > 0:
                 roiObj.setROIName(roiParameters.strROIName)
             else:
-                msgBox = GRIMe_QMessageBox('ROI Error', 'A name for the ROI is required!')
+                msgBox = GRIME_AI_QMessageBox('ROI Error', 'A name for the ROI is required!')
                 response = msgBox.displayMsgBox()
                 return
 
@@ -973,7 +1076,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if rectROI != None:
                 roiObj.setDisplayROI(rectROI)
             else:
-                msgBox = GRIMe_QMessageBox('ROI Error', 'Please draw the ROI on the image!')
+                msgBox = GRIME_AI_QMessageBox('ROI Error', 'Please draw the ROI on the image!')
                 response = msgBox.displayMsgBox()
                 return
 
@@ -990,7 +1093,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 #else:
                 #roiObj.setROIShape(ROIShape.ELLIPSE)
             except:
-                msgBox = GRIMe_QMessageBox('ROI Error',
+                msgBox = GRIME_AI_QMessageBox('ROI Error',
                                            'An unexpected error occurred calculating the ROI of the full resolution image!')
                 response = msgBox.displayMsgBox()
 
@@ -1374,23 +1477,158 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         imageStats.setLabel('bad')
         self.imageStatsList.append(imageStats)
 
-    # ======================1================================================================================================
+    # ======================1===============================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
-    def menubarCompositeSlices(self):
-        compositeSlices = GRIME_AI_CompositeSlices()
+    def menubar_RefreshNEON(self):
+        # INITIALIZE GUI CONTROLS
+        # frame.NEON_listboxSites.setCurrentRow(1)
 
-        global dailyImageList
+        # GET LIST OF ALL SITES ON NEON
+        # if frame.checkBoxNEONSites.isChecked():
+        myNEON_API = NEON_API()
+        siteList = myNEON_API.readFieldSiteTable()
+        # else:
+        # NEON_FormatProductTable(frame.tableProducts)
+
+        if len(siteList) == 0:
+            pass
+            # frame.radioButtonHardDriveImages.setChecked(True)
+            # frame.radioButtonHardDriveImages.setDisabled(False)
+        # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
+        else:
+            myList = []
+
+            for site in siteList:
+                strSiteName = site.siteID + ' - ' + site.siteName
+                myList.append(strSiteName)
+
+            self.NEON_listboxSites.addItems(myList)
+
+            # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
+            try:
+                self.NEON_listboxSites.setCurrentRow(2)
+                self.NEON_listboxSites.show()
+                self.NEON_SiteClicked(2)
+
+            except:
+                pass
+
+        self.USGS_InitProductTable()
+        self.USGS_FormatProductTable(self.table_USGS_Sites)
+
+        self.NEON_FormatProductTableHeader()
+
+        self.show()
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def menubarCompositeSlices(self):
+        global dailyImagesList
         global imageFileFolder
 
+        self.compositeSliceDlg = GRIME_CompositeSliceDlg()
+
+        self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
+        self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
+
+        imageFilename = dailyImagesList.getVisibleList()[0].fullPathAndFilename
+        self.compositeSliceDlg.loadImage(imageFilename)
+
+        self.compositeSliceDlg.label_Image.setDrawingMode(DrawingMode.SLICE)
+
+        self.compositeSliceDlg.show()
+
+
+    def generateCompositeSlices(self):
+        global imageFileFolder
         if not os.path.exists(imageFileFolder+'\compositeSlices'):
             os.makedirs(imageFileFolder+'\compositeSlices')
 
-        compositeSlices.create_composite_image(dailyImagesList.visibleList, imageFileFolder+'\compositeSlices\Composite_Image.png', "middle")
+        widthMultiplier, heightMultiplier, sliceCenter, sliceWidth = self.compositeSliceDlg.getMultipliers()
 
-    # ======================1================================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
+        actualSliceCenter = self.compositeSliceDlg.getSliceCenter() * widthMultiplier
+
+        compositeSlices = GRIME_AI_CompositeSlices(actualSliceCenter, sliceWidth)
+        compositeSlices.create_composite_image(dailyImagesList.visibleList, imageFileFolder+'\compositeSlices')
+
+        if self.compositeSliceDlg != None:
+            self.compositeSliceDlg.close()
+            self.compositeSliceDlg    = None
+
+
+    def closeCompositeSlices(self):
+        if self.compositeSliceDlg != None:
+            self.compositeSliceDlg.close()
+            self.compositeSliceDlg    = None
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def create_masks(self, coco_annotation_file, image_dir, output_dir):
+        # Load COCO annotations
+        coco = COCO(coco_annotation_file)
+
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Get all image ids
+        img_ids = coco.getImgIds()
+
+        for img_id in img_ids:
+            # Load image info
+            img_info = coco.loadImgs(img_id)[0]
+            img_path = os.path.join(image_dir, img_info['file_name'])
+
+            # Load image
+            image = cv2.imread(img_path)
+            height, width, _ = image.shape
+
+            # Create an empty mask
+            mask = np.zeros((height, width), dtype=np.uint8)
+
+            # Get annotation ids for the image
+            ann_ids = coco.getAnnIds(imgIds=img_id)
+            anns = coco.loadAnns(ann_ids)
+
+            for ann in anns:
+                # Get binary mask for the annotation
+                rle = coco.annToRLE(ann)
+                binary_mask = maskUtils.decode(rle)
+
+                # Combine binary mask with the main mask
+                mask = np.maximum(mask, binary_mask * 255)
+
+            # Save the mask
+            mask_path = os.path.join(output_dir, f"{img_info['file_name'].split('.')[0]}_mask.png")
+            cv2.imwrite(mask_path, mask)
+
+
+    def menubarExtractCOCOMasks(self):
+        self.COCOdlg = GRIME_AI_ExportCOCOMasksDlg(self)
+
+        self.COCOdlg.COCO_signal_ok.connect(self.accepted_COCODlg)
+        self.COCOdlg.COCO_signal_cancel.connect(self.rejected_COCODlg)
+
+        self.COCOdlg.show()
+
+
+    def accepted_COCODlg(self):
+        coco_annotation_file = self.COCOdlg.getAnnotationFile()
+        image_dir = self.COCOdlg.getAnnotationImagesFolder()
+        output_dir = os.path.join(image_dir, "masks")
+
+        self.create_masks(coco_annotation_file, image_dir, output_dir)
+
+    def rejected_COCODlg(self):
+        pass
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
     def menubarSaveSettings(self):
         utils = GRIME_AI_Save_Utils()
         utils.saveSettings()
@@ -1410,7 +1648,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     def toolbarButtonGRIME2(self):
         strMessage = 'Potential future home for GRIME2 Water Level/Stage measurement functionality.'
-        msgBox = GRIMe_QMessageBox('Water Level Measurement', strMessage, QMessageBox.Close)
+        msgBox = GRIME_AI_QMessageBox('Water Level Measurement', strMessage, QMessageBox.Close)
         response = msgBox.displayMsgBox()
 
 
@@ -1665,11 +1903,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def onMyToolBarFileFolder(self):
-        self.fileFolderDlg = GRIME_FileUtilitiesDlg(frame)
+        self.fileFolderDlg = GRIME_AI_FileUtilitiesDlg(frame)
 
-        global imageFileFolder
-        if len(imageFileFolder) > 0 and os.path.exists(imageFileFolder):
-            self.fileFolderDlg.setImageFolder(imageFileFolder)
+        self.fileFolderDlg.accepted.connect(self.closeFilefolderDlg)
+        self.fileFolderDlg.rejected.connect(self.closeFilefolderDlg)
 
         self.fileFolderDlg.show()
 
@@ -1679,6 +1916,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.imageNavigationDlg.reset()
         except:
             pass
+
+
+    # ------------------------------------------------------------------------------------------
+    def closeFilefolderDlg(self):
+            pass
+
 
     # ==================================================================================================================
     # ==================================================================================================================
@@ -1703,7 +1946,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.imageNavigationDlg.show()
             else:
                 strMessage = 'You must first fetch images to navigate and/or operate on.'
-                msgBox = GRIMe_QMessageBox('Image Navigation', strMessage, QMessageBox.Close)
+                msgBox = GRIME_AI_QMessageBox('Image Navigation', strMessage, QMessageBox.Close)
                 response = msgBox.displayMsgBox()
 
     # ==================================================================================================================
@@ -1845,7 +2088,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def segmentClicked(self):
         global g_modelSettings
+        g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
+        g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
+
+        if self.buildModelDlg == None:
+            self.buildModelDlg.close()
+            del self.buildModelDlg
+            self.buildModelDlg = None
+
         self.myDeepLearning(g_modelSettings)
+
 
     # ======================================================================================================================
     # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
@@ -1865,12 +2117,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
-    #def toolbarButtonDeepLearning(self):
+    def toolbarButtonDeepLearning(self):
     #    strMessage = 'This is for producing models for Deep Learning. This is experimental at this time.'
-    #    msgBox = GRIMe_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
+    #    msgBox = GRIME_AI_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
     #    response = msgBox.displayMsgBox()
 
-    #    self.myDeepLearning(g_modelSettings)
+        self.myDeepLearning(g_modelSettings)
 
     # ==================================================================================================================
     # ==================================================================================================================
@@ -1918,7 +2170,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # ------------------------------------------------------------------------------------------------------------------
     def generateMask(self):
-        #global imageFileFolder
         global currentImageFilename
 
         scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio,
@@ -1976,7 +2227,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Check for the existence of the files. If they exist, display overwrite option dialog box
             if os.path.isfile(mask_filename) or os.path.isfile(mask_filename):
                 strMessage = 'The mask and/or polygon file exist. Overwrite files?'
-                msgBox = GRIMe_QMessageBox('Save Mask Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+                msgBox = GRIME_AI_QMessageBox('Save Mask Files', strMessage, QMessageBox.Yes | QMessageBox.No)
                 response = msgBox.displayMsgBox()
 
                 if response == QMessageBox.No:
@@ -2616,7 +2867,7 @@ def processImage(self, myImage):
                 pix = myProcessImage.processLaplacian(img1)
 
             elif g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_X or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_Y or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_XY:
-                pix = myProcessImage.processSobel(img1, g_edgeMethodSettings.method)
+                pix = myProcessImage.processSobel(gray, g_edgeMethodSettings.getSobelKernel(), g_edgeMethodSettings.method)
 
             elif g_featureMethodSettings.method == featureMethodsClass.SIFT:
                 pix = myProcessImage.processSIFT(img1, gray)
@@ -2632,7 +2883,7 @@ def processImage(self, myImage):
 # ======================================================================================================================
 def toolbarButtonImageTriage(checkBox_FetchRecursive):
     strMessage = 'You are about to perform Image Triage. Would you like to continue?'
-    msgBox = GRIMe_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+    msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
     response = msgBox.displayMsgBox()
 
     if response == QMessageBox.Yes:
@@ -2641,7 +2892,7 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
 
         if len(folder) == 0:
             strMessage = 'ERROR! Please specify an image folder containing images to triage.'
-            msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
             response = msgBox.displayMsgBox()
         else:
             TriageDlg = GRIME_TriageOptionsDlg()
@@ -2652,7 +2903,7 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
 
                 if len(TriageDlg.getReferenceImageFilename()) == 0 and TriageDlg.getCorrectAlignment() == True:
                     strMessage = 'Please select reference image if you want to correct image alignment.'
-                    msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
                     response = msgBox.displayMsgBox()
                 else:
                     myTriage = GRIME_AI_ImageTriage()
@@ -2665,15 +2916,15 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
                                 TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
 
                     strMessage = 'Image triage is complete!'
-                    msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
                     response = msgBox.displayMsgBox()
             else:
                 strMessage = 'ABORT! You cancelled the triage operation.'
-                msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
                 response = msgBox.displayMsgBox()
     else:
         strMessage = 'ABORT! You cancelled the triage operation.'
-        msgBox = GRIMe_QMessageBox('Image Triage', strMessage)
+        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
         response = msgBox.displayMsgBox()
 
 
@@ -3223,7 +3474,7 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
         del progressBar
 
         strMessage = 'Data download is complete!'
-        msgBox = GRIMe_QMessageBox('Data Download', strMessage)
+        msgBox = GRIME_AI_QMessageBox('Data Download', strMessage)
         response = msgBox.displayMsgBox()
 
 
@@ -3264,29 +3515,30 @@ def downloadProductDataFiles(self, item):
     # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
-    downloadsFilePath = self.edit_NEONSaveFilePath.text()
-    GRIME_AI_Save_Utils().NEON_SaveFolderPath(downloadsFilePath)
+    NEON_download_file_path = self.edit_NEONSaveFilePath.text()
+    JsonEditor().update_json_entry("NEON_Image_Folder", NEON_download_file_path)
 
-    if len(downloadsFilePath) == 0:
+    if len(NEON_download_file_path) == 0:
         strMessage = 'A download folder has not been specified. Would you like to use the default GRIME-AI download folder?'
-        msgBox = GRIMe_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+        msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
         response = msgBox.displayMsgBox()
 
         if response == QMessageBox.Yes:
-            downloadsFilePath = os.path.expanduser('~')
-            downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
-            downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
-            if not os.path.exists(downloadsFilePath):
-                os.makedirs(downloadsFilePath)
-            downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')
-            if not os.path.exists(downloadsFilePath):
-                os.makedirs(downloadsFilePath)
+            NEON_download_file_path = os.path.expanduser('~')
+            NEON_download_file_path = os.path.join(NEON_download_file_path, 'Documents')
+            NEON_download_file_path = os.path.join(NEON_download_file_path, 'GRIMe-AI')
+            if not os.path.exists(NEON_download_file_path):
+                os.makedirs(NEON_download_file_path)
+            NEON_download_file_path = os.path.join(NEON_download_file_path, 'Downloads')
+            if not os.path.exists(NEON_download_file_path):
+                os.makedirs(NEON_download_file_path)
 
-            self.edit_NEONSaveFilePath.setText(downloadsFilePath)
+            self.edit_NEONSaveFilePath.setText(NEON_download_file_path)
+            JsonEditor().update_json_entry("NEON_Image_Folder", NEON_download_file_path)
     else:
         # MAKE SURE THE PATH EXISTS. IF IT DOES NOT, THEN CREATE IT.
-        if not os.path.exists(downloadsFilePath):
-            os.makedirs(downloadsFilePath)
+        if not os.path.exists(NEON_download_file_path):
+            os.makedirs(NEON_download_file_path)
 
     # --------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
@@ -3337,17 +3589,17 @@ def downloadProductDataFiles(self, item):
                         missingMonths.append(month)
 
                 if monthCount == 0:
-                    msgBox = GRIMe_QMessageBox('NEON Error!', 'Data is not available for some or all of the dates selected!')
+                    msgBox = GRIME_AI_QMessageBox('NEON Error!', 'Data is not available for some or all of the dates selected!')
                     response = msgBox.displayMsgBox()
                 elif (monthCount < len(dateRange)):
                     strMsg = '%d of %d months unavailable: %s' % (len(missingMonths), len(dateRange), missingMonths)
-                    msgBox = GRIMe_QMessageBox('Partial Download!', strMsg)
+                    msgBox = GRIME_AI_QMessageBox('Partial Download!', strMsg)
                     response = msgBox.displayMsgBox()
 
                 if monthCount > 0:
-                    nError = myNEON_API.FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
+                    nError = myNEON_API.FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, NEON_download_file_path)
         else:
-            msgBox = GRIMe_QMessageBox('NEON Error!', 'Product not available!')
+            msgBox = GRIME_AI_QMessageBox('NEON Error!', 'Product not available!')
             response = msgBox.displayMsgBox()
 
         # ----------------------------------------------------------------------------------------------------------
@@ -3636,21 +3888,15 @@ def test(img):
 # ======================================================================================================================
 if __name__ == '__main__':
 
+    #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
+    #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
+    print(os.environ.get('R_HOME'))
+
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
     frame = MainWindow()
 
     frame.move(app.desktop().screen().rect().center() - frame.rect().center())
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # DISPLAY SPLASH SCREEN
-    # ------------------------------------------------------------------------------------------------------------------
-    splash = GRIME_AI_SplashScreen(QPixmap('Splash_007.jpg'))
-    splash.show(frame)
-    splash = GRIME_AI_SplashScreen(QPixmap('GRIME-AI Logo.jpg'), 5)
-    splash.show(frame)
-    #time.sleep(5)
-    #splash.finish(frame)
 
     # ------------------------------------------------------------------------------------------------------------------
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
@@ -3662,40 +3908,7 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     GRIME_AI_Utils().createGRIMeFolders(full)
 
-    # INITIALIZE GUI CONTROLS
-    # frame.NEON_listboxSites.setCurrentRow(1)
-
-    # GET LIST OF ALL SITES ON NEON
-    #if frame.checkBoxNEONSites.isChecked():
-    myNEON_API = NEON_API()
-    siteList = myNEON_API.readFieldSiteTable()
-    #else:
-    #NEON_FormatProductTable(frame.tableProducts)
-
-    if len(siteList) == 0:
-        pass
-        #frame.radioButtonHardDriveImages.setChecked(True)
-        #frame.radioButtonHardDriveImages.setDisabled(False)
-    # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
-    else:
-        myList = []
-
-        for site in siteList:
-            strSiteName = site.siteID + ' - ' + site.siteName
-            myList.append(strSiteName)
-
-        frame.NEON_listboxSites.addItems(myList)
-
-        # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
-        try:
-            frame.NEON_listboxSites.setCurrentRow(2)
-            frame.NEON_listboxSites.show()
-            frame.NEON_SiteClicked(2)
-
-        except:
-            pass
-
-    frame.graphicsView.setVisible(False)
+    frame.graphicsView.setVisible(True)
 
     # ------------------------------------------------------------------------------------------------------------------
     # http://localhost:8888/notebooks/intro-seg.ipynb
@@ -3703,11 +3916,10 @@ if __name__ == '__main__':
     bStartupComplete = True
 
     # SHOW MAIN WINDOW
-    frame.show()
+    #frame.show()
 
     # Run the program
     sys.exit(app.exec())
-
 
 '''
     from torchvision import models
@@ -3917,7 +4129,7 @@ if __name__ == '__main__':
 
         if len(self.roiList) == 0:
             strError = "You must train at least one ROI before segmenting the image."
-            msgBox = GRIMe_QMessageBox('Color Segmentation Error', strError)
+            msgBox = GRIME_AI_QMessageBox('Color Segmentation Error', strError)
             response = msgBox.displayMsgBox()
             return
 

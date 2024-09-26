@@ -1,11 +1,12 @@
 import os
-from datetime import datetime
+import json
 
 import csv
 import cv2
 import numpy as np
 
 import pandas as pd
+from datetime import datetime
 
 import urllib.request
 from urllib.request import urlopen
@@ -15,7 +16,7 @@ from siteData import siteData
 
 from pathlib import Path
 
-from GRIME_QMessageBox import GRIMe_QMessageBox
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 
 # ======================================================================================================================
 #
@@ -162,68 +163,74 @@ class GRIME_AI_Utils:
         # key = cv2.waitKey(0)
 
 
-    # ======================================================================================================================
+    # ==================================================================================================================
     #
-    # ======================================================================================================================
+    # ==================================================================================================================
     def createGRIMeFolders(self, full):
+        # --------------------------------------------------------------------------------------------------------------
+        # CREATE A GRIME-AI FOLDER IN THE USER'S DOCUMENTS FOLDER
+        # --------------------------------------------------------------------------------------------------------------
         rootFolder = os.path.expanduser('~')
-        rootFolder = os.path.join(rootFolder, 'Documents')
-        rootFolder = os.path.join(rootFolder, 'GRIMe-AI')
+        rootFolder = os.path.join(rootFolder, 'Documents', 'GRIMe-AI')
         if not os.path.exists(rootFolder):
-            os.mkdir(rootFolder)
+            os.mkdirs(rootFolder)
 
-        # ----------------------------------------------------------------------------------------------------
-        # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
-        # IN THE USER'S DOCUMENT FOLDER
-        # ----------------------------------------------------------------------------------------------------
-        if full == 1:
-            videoFolder = os.path.join(rootFolder, 'Videos')
-            if not os.path.exists(videoFolder):
-                os.mkdir(videoFolder)
-
-            #JES self.EditVideoOutputFolder.setText(videoFolder)
-
-        # --------------------------------------------------
-        # CREATE SETTINGS FOLDERS IN USER'S DOCUMENTS FOLDER
+        # --------------------------------------------------------------------------------------------------------------
+        # CREATE A SETTINGS FOLDERS IN THE USER'S GRIME-AI FOLDER IN WHICH TO STORE THE USER'S PROGRAM SETTINGS
+        # --------------------------------------------------------------------------------------------------------------
         configFilePath = os.path.join(rootFolder, 'Settings')
         if not os.path.exists(configFilePath):
             os.mkdir(configFilePath)
 
-        # CHECK TO SEE IF THE CONFIGURATION FILE EXISTS. IF IT DOES NOT, THEN CREATE IT USING touch
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        # CHECK TO SEE IF THE GRIME-AI CONFIGURATION FILE EXISTS. IF IT DOES NOT, THEN CREATE IT USING touch
+        configFile = os.path.join(configFilePath, 'GRIMe-AI.json')
         if not os.path.isfile(configFile):
             configFileWithPath = Path(configFile)
             configFileWithPath.touch(exist_ok=True)
 
-        # --------------------------------------------------
-        # CREATE DOWNLOAD FOLDER IN USER'S DOCUMENTS FOLDER
-        downloadsFolder = os.path.join(rootFolder, 'Downloads')
-        if not os.path.exists(downloadsFolder):
-            os.mkdir(downloadsFolder)
+        # --------------------------------------------------------------------------------------------------------------
+        # CREATE DEFAULT FOLDERS INTO WHICH  DOWNLOADED DATA WILL BE SAVED FOR SUPPORTED PRODUCTS
+        # e.g., NEON, USGS, PBT (and create an OTHER folder into which a user can download data from other
+        # sources
+        # --------------------------------------------------------------------------------------------------------------
+        default_folders = ['Downloads/NEON/Images', 'Downloads/NEON/Data', 'Downloads/NEON/Videos', 'Downloads/NEON/EXIF', 'Downloads/NEON/MetaData', \
+                           'Downloads/USGS/Images', 'Downloads/USGS/Data', 'Downloads/USGS/Videos', 'Downloads/USGS/EXIF', \
+                           'Downloads/PBT/Images', 'Downloads/PBT/Data', 'Downloads/PBT/Videos', 'Downloads/PBT/EXIF', \
+                           'Downloads/OTHER/Images', 'Downloads/OTHER/Data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
+                           'Downloads/KOLA/Images', 'Downloads/KOLA/Data', 'Downloads/KOLA/Videos', 'Downloads/KOLA/EXIF']
 
-        #self.EditSaveImagesOutputFolder.setText(downloadsFolder)
+        for folder in default_folders:
+            make_these_folders = os.path.join(rootFolder, folder)
+            if not os.path.exists(make_these_folders):
+                os.makedirs(make_these_folders)
 
-        # --------------------------------------------------
-        # CREATE FOLDER IN USER'S DOCUMENTS FOLDER FOR DOWNLOADED IMAGES
-        downloadsFolder = os.path.join(downloadsFolder, 'Images')
-        if not os.path.exists(downloadsFolder):
-            os.mkdir(downloadsFolder)
+    # ****************************************************************************************
+    #
+    # ****************************************************************************************
+    def saveSettings(self, settings_folder):
+        # Collect texts from all QLineEdit widgets
+        settings = {
+            "camera_1_image_folder": self.ui.lineEdit_camera_1.text(),
+            "camera_2_image_folder": self.ui.lineEdit_camera_2.text(),
+            "camera_3_image_folder": self.ui.lineEdit_camera_3.text(),
+            "camera_4_image_folder": self.ui.lineEdit_camera_4.text(),
+        }
+        # Save to a JSON file
+        with open(settings_folder, 'w') as file:
+            json.dump(settings, file)
 
-        # --------------------------------------------------
-        # CREATE FOLDER IN USER'S DOCUMENTS FOLDER FOR DOWNLOADED IMAGES FROM THE USGS
-        downloadsFolder = os.path.join(downloadsFolder, 'USGS')
-        if not os.path.exists(downloadsFolder):
-            os.mkdir(downloadsFolder)
 
-        # --------------------------------------------------
-        # CREATE DOWNLOAD FOLDER IN USER'S DOCUMENTS FOLDER
-        EXIFFolder = os.path.join(rootFolder, 'EXIF')
-        if not os.path.exists(EXIFFolder):
-            os.mkdir(EXIFFolder)
+    def loadSettings(self, settings_folder):
+        try:
+            with open(settings_folder, 'r') as file:
+                settings = json.load(file)
 
-        #JES if full == 1:
-        #JES    self.EditEXIFOutputFolder.setText(EXIFFolder)
+                # Populate the QLineEdit widgets with saved values
+                self.ui.lineEdit_camera_1.setText(settings.get("camera_1_image_folder", ""))
+                self.image_folder_1 = settings.get("camera_1_image_folder", "")
 
+        except FileNotFoundError:
+            pass  # It's okay if the file doesn't exist yet
 
     # ======================================================================================================================
     #
@@ -314,7 +321,7 @@ class GRIME_AI_Utils:
                 if nRetryCount == 1:
                     strError = 'We failed to reach a server.\n' + 'Reason: [' + str(e.reason.args[0]) + '] ' + \
                                e.reason.args[1]
-                    msgBox = GRIMe_QMessageBox('NEON SITE Info URL Error', strError)
+                    msgBox = GRIME_AI_QMessageBox('NEON SITE Info URL Error', strError)
                     response = msgBox.displayMsgBox()
                 nErrorCode = -1
                 nRetryCount = nRetryCount - 1
@@ -343,8 +350,8 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     def getRangeOfDates(self, strStartYearMonth, strEndYearMonth):
         # GET A LIST OF THE MONTHS FOR THE YEARS BETWEEN THE START DATA AND END DATE
-        start_date = datetime.datetime.strptime(strStartYearMonth, "%Y-%m")
-        end_date = datetime.datetime.strptime(strEndYearMonth, "%Y-%m")
+        start_date = datetime.strptime(strStartYearMonth, "%Y-%m")
+        end_date = datetime.strptime(strEndYearMonth, "%Y-%m")
 
         # Difference between each date. M means one month
         date_list = pd.date_range(start_date, end_date, freq='MS')
