@@ -316,3 +316,7 @@ class QProgressWheel(QWidget):
                 dataBrush.setColorAt(1 - self.m_gradientData[i][0], self.m_gradientData[i][1])
             p.setBrush(QPalette.Highlight, dataBrush)
         self.setPalette(p)
+
+    def closeEvent(self, event):
+        self.deleteLater()  # Schedule the widget for deletion
+        event.accept()

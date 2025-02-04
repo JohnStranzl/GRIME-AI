@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 import csv
 import cv2
@@ -17,13 +18,14 @@ from siteData import siteData
 from pathlib import Path
 
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
+from GRIME_AI_Save_Utils import JsonEditor
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 class GRIME_AI_Utils:
 
-    def __init__(self):
+    def __init__(self, parent=None):
         self.className = "GRIME_AI_Utils"
         self.instance = 1
 
@@ -115,6 +117,17 @@ class GRIME_AI_Utils:
     def getImageCount(self, folder, extensions):
         imageCount = 0
 
+        for filename in os.listdir(folder):
+            ext = os.path.splitext(filename)[-1].lower()
+            if ext in extensions:
+                imageCount += 1
+
+        return imageCount
+
+
+    def getImageCount_walk(self, folder, extensions):
+        imageCount = 0
+
         for root, dirs, files in os.walk(folder):
             for file in files:
                 ext = os.path.splitext(file)[-1].lower()
@@ -123,11 +136,10 @@ class GRIME_AI_Utils:
 
         return imageCount
 
-
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getFileList(self, folder, extensions, bFetchRecursive):
+    def getFileList(self, folder='', extensions='jpg', bFetchRecursive=False):
 
         filenames = []
 
@@ -166,17 +178,19 @@ class GRIME_AI_Utils:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def createGRIMeFolders(self, full):
+    def create_GRIME_folders(self, full):
         # --------------------------------------------------------------------------------------------------------------
         # CREATE A GRIME-AI FOLDER IN THE USER'S DOCUMENTS FOLDER
+        # <user>/Documents/GRIME-AI
         # --------------------------------------------------------------------------------------------------------------
         rootFolder = os.path.expanduser('~')
         rootFolder = os.path.join(rootFolder, 'Documents', 'GRIMe-AI')
         if not os.path.exists(rootFolder):
-            os.mkdirs(rootFolder)
+            os.mkdir(rootFolder)
 
         # --------------------------------------------------------------------------------------------------------------
         # CREATE A SETTINGS FOLDERS IN THE USER'S GRIME-AI FOLDER IN WHICH TO STORE THE USER'S PROGRAM SETTINGS
+        # <user>/Documents/GRIME-AI/Settings
         # --------------------------------------------------------------------------------------------------------------
         configFilePath = os.path.join(rootFolder, 'Settings')
         if not os.path.exists(configFilePath):
@@ -189,20 +203,52 @@ class GRIME_AI_Utils:
             configFileWithPath.touch(exist_ok=True)
 
         # --------------------------------------------------------------------------------------------------------------
+        # CREATE A SCRATCHPAD FOLDER IN THE USER'S GRIME-AI FOLDER AS A WORKAROUND TO THE NEON API "PATH TOO LONG" ISSUE
+        # <user>/Documents/GRIME-AI/Settings
+        # --------------------------------------------------------------------------------------------------------------
+        scratchpadFilePath = os.path.join(rootFolder, 'Scratchpad')
+        if not os.path.exists(scratchpadFilePath):
+            os.mkdir(scratchpadFilePath)
+
+        JsonEditor().update_json_entry('Scratchpad_folder', os.path.normpath(scratchpadFilePath))
+
+        # --------------------------------------------------------------------------------------------------------------
         # CREATE DEFAULT FOLDERS INTO WHICH  DOWNLOADED DATA WILL BE SAVED FOR SUPPORTED PRODUCTS
         # e.g., NEON, USGS, PBT (and create an OTHER folder into which a user can download data from other
         # sources
         # --------------------------------------------------------------------------------------------------------------
-        default_folders = ['Downloads/NEON/Images', 'Downloads/NEON/Data', 'Downloads/NEON/Videos', 'Downloads/NEON/EXIF', 'Downloads/NEON/MetaData', \
-                           'Downloads/USGS/Images', 'Downloads/USGS/Data', 'Downloads/USGS/Videos', 'Downloads/USGS/EXIF', \
-                           'Downloads/PBT/Images', 'Downloads/PBT/Data', 'Downloads/PBT/Videos', 'Downloads/PBT/EXIF', \
-                           'Downloads/OTHER/Images', 'Downloads/OTHER/Data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
-                           'Downloads/KOLA/Images', 'Downloads/KOLA/Data', 'Downloads/KOLA/Videos', 'Downloads/KOLA/EXIF']
+        default_folders = ['Downloads/NEON',  'Downloads/NEON/Images',  'Downloads/NEON/Data',  'Downloads/NEON/Videos',  'Downloads/NEON/EXIF', 'Downloads/NEON/MetaData', \
+                           'Downloads/USGS',  'Downloads/USGS/Images',  'Downloads/USGS/Data',  'Downloads/USGS/Videos',  'Downloads/USGS/EXIF', \
+                           'Downloads/PBT',   'Downloads/PBT/Images',   'Downloads/PBT/Data',   'Downloads/PBT/Videos',   'Downloads/PBT/EXIF', \
+                           'Downloads/OTHER', 'Downloads/OTHER/Images', 'Downloads/OTHER/Data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
+                           'Downloads/KOLA',  'Downloads/KOLA/Images',  'Downloads/KOLA/Data',  'Downloads/KOLA/Videos',  'Downloads/KOLA/EXIF']
 
         for folder in default_folders:
             make_these_folders = os.path.join(rootFolder, folder)
             if not os.path.exists(make_these_folders):
                 os.makedirs(make_these_folders)
+
+            # SAVE THESE DEFAULT IMAGE FOLDER PATHS TO THE GRIME-AI CONFIGURATION FILE (GRIME-AI.json) ONLY IF THEY DON'T EXIST
+            # The regular expression pattern to find the word 'images' and extract the word between slashes
+            pattern = r'\/([^\/]+)\/Images\b'
+
+            # Using re.search to find the match
+            match = re.search(pattern, make_these_folders, re.IGNORECASE)
+
+            if match:
+                word_between_slashes = match.group(1)
+
+                entry_key = word_between_slashes + "_Image_Folder"
+
+                # FIRST TRY TO READ THE ENTRY KEY VALUE. IF IT IS EMPTY, SET IT TO THE DEFAULT IMAGE FOLDER PATH
+                if not JsonEditor().getValue(entry_key):
+                    JsonEditor().update_json_entry(entry_key, os.path.normpath(make_these_folders))
+
+                entry_key = word_between_slashes + "_Root_Folder"
+                if not JsonEditor().getValue(entry_key):
+                    parent_dir = os.path.dirname(make_these_folders)
+                    JsonEditor().update_json_entry(entry_key, os.path.normpath(parent_dir))
+
 
     # ****************************************************************************************
     #
@@ -231,6 +277,7 @@ class GRIME_AI_Utils:
 
         except FileNotFoundError:
             pass  # It's okay if the file doesn't exist yet
+
 
     # ======================================================================================================================
     #

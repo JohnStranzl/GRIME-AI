@@ -5,9 +5,9 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 import promptlib
 import datetime
+from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Save_Utils import JsonEditor
-
-import GRIME_AI_Utils
+from GRIME_Video import GRIME_Video
 
 class Datapaths():
 
@@ -25,17 +25,25 @@ class Datapaths():
 # ======================================================================================================================
 class GRIME_AI_FileUtilitiesDlg(QDialog):
 
+    # ------------------------------------------------------------------------------------------------------------------
     # SIGNALS
     # ------------------------------------------------------------------------------------------------------------------
     fetchImageList_Signal = pyqtSignal(str, int)
+    create_composite_slice_signal = pyqtSignal()
+    triage_images_signal = pyqtSignal(str)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # INIT
+    # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
         super(QDialog, self).__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        loadUi('QDialog_ExtractCOCOMasks.ui', self)
+        dirname = os.path.dirname(__file__)
+        ui_file_absolute = os.path.join(dirname, 'QDialog_FileUtilities.ui')
+        loadUi(ui_file_absolute, self)
 
         self.accepted.connect(self.closeFileFolderDlg)
         self.rejected.connect(self.closeFileFolderDlg)
@@ -44,65 +52,64 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
         self.fetchImageList_Signal.connect(parent.fetchImageList)
 
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        #self.lineEditHardDriveFolder.textChanged.connect(self.MSTVideoFolderChanged)
-        self.pushButtonBrowseVideoOutputFolder.clicked.connect(self.pushButtonBrowseVideoOutputFolderClicked)
-        self.pushButtonCreateVideo.clicked.connect(self.pushButtonCreateVideoClicked)
-        self.pushButtonCreateGIF.clicked.connect(self.pushButtonCreateGIFClicked)
+        # CREATE VIDEO OR GIF FROM INDIVIDUAL IMAGES
+        # ----------------------------------------------------------------------------------------------------
+        # CREATE A VIDEO
+        self.pushButton_CreateVideo.clicked.connect(self.pushButton_create_video_clicked)
+        self.pushButton_CreateVideo.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
-        self.pushButtonBrowseImageFolder.clicked.connect(self.pushButtonBrowseImageFolderClicked)
-        self.lineEditImageFolder.textChanged.connect(self.image_folder_changed)
 
-        #JES self.pushButtonBrowseSaveImagesOutputFolder.clicked.connect(self.pushButtonBrowseSaveImagesOutputFolderClicked)
-        self.pushButtonBrowseEXIFOutputFolder.clicked.connect(self.pushButtonBrowseEXIFOutputFolderClicked)
+        # CREATE A GIF *** NOTE!!! ADD A DIALOG BOX TO INPUT A DELAY BETWEEN IMAGES ***
+        self.pushButton_CreateGIF.clicked.connect(self.pushButtonCreateGIFClicked)
+        self.pushButton_CreateGIF.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_BrowseImageFolder.clicked.connect(self.pushButtonBrowseImageFolderClicked)
+        self.lineEdit_images_folder.textChanged.connect(self.image_folder_changed)
+
+        self.pushButton_triage_images.clicked.connect(self.pushButton_triage_images_clicked)
+        self.pushButton_triage_images.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_CreateEXIFFile.clicked.connect(self.MSTExtractFrames)
+        self.pushButton_CreateEXIFFile.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
 
         # VIDEO FUNCTIONS
-        # JES self.pushButtonFetchVideoFilenames.clicked.connect(self.MSTFetchVideoFilenames)
-        self.pushButtonExtractFrames.clicked.connect(self.MSTExtractFrames)
-        self.MSTlineEditFrameFolder.textChanged.connect(self.MSTFrameCountUpdate)
+        self.pushButton_ExtractFrames.clicked.connect(self.MSTExtractFrames)
+        self.pushButton_ExtractFrames.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
-        self.lineEditImageFolder.textChanged.connect(self.MSTVideoFolderChanged)
-
-        #
-        #JES self.checkBoxNEONSites.clicked.connect(self.checkboxNEONSitesClicked)
         self.pushButton_FetchImageList.clicked.connect(self.pushButtonFetchImageListClicked)
-
-        #JES self.pushButtonBrowseImageFolderClicked.setStyleSheet('QPushButton {background-color: steelblue;}')
-        #JES self.pushButtonBrowseEXIFOutputFolderClicked.setStyleSheet('QPushButton {background-color: steelblue;}')
-        #JES self.pushButtonCreateVideo.setStyleSheet('QPushButton {background-color: steelblue;}')
-        #JES self.pushButtonCreateGIF.setStyleSheet('QPushButton {background-color: steelblue;}')
-        #JES self.pushButtonCreateEXIFFile.setStyleSheet('QPushButton {background-color: steelblue;}')
+        self.pushButton_FetchImageList.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
         image_folder = JsonEditor().getValue("Local_Image_Folder")
         self.setImageFolderPath(image_folder)
 
+        self.buttonBox.setStyleSheet('QPushButton {background-color: lightblue; color: white;}')
+
+        self.pushButton_create_composite_slice.clicked.connect(self.pushButton_create_composite_slice_clicked)
+        self.pushButton_create_composite_slice.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
 
     def closeFileFolderDlg(self):
         # BEFORE CLOSING THE DIALOG BOX, SAVE THE FOLDERS TO THE SETTINGS FILE
-        image_folder = self.lineEditImageFolder.text()
+        image_folder = self.lineEdit_images_folder.text()
         JsonEditor().update_json_entry("Local_Image_Folder", image_folder)
 
 
     @pyqtSlot()
     def image_folder_changed(self):
         # LET THE MAIN APPLICATION KNOW THAT THE FOLDER PATH FOR THE IMAGES HAS CHANGED BY SENDING IT THE PATH
-        image_folder = self.lineEditImageFolder.text()
+        image_folder = self.lineEdit_images_folder.text()
         JsonEditor().update_json_entry("Local_Image_Folder", image_folder)
 
 
     def pushButtonFetchImageListClicked(self):
-        if len(self.lineEditImageFolder.text()) > 0:
-            self.fetchImageList_Signal.emit(self.lineEditImageFolder.text(), self.checkBox_FetchRecursive.isChecked())
+        if len(self.lineEdit_images_folder.text()) > 0:
+            self.fetchImageList_Signal.emit(self.lineEdit_images_folder.text(), self.checkBox_FetchRecursive.isChecked())
         else:
-            self.pushButtonBrowseImageFolderClicked()
-            self.fetchImageList_Signal.emit(self.lineEditImageFolder.text(), self.checkBox_FetchRecursive.isChecked())
+            self.pushButton_BrowseImageFolderClicked()
+            self.fetchImageList_Signal.emit(self.lineEdit_images_folder.text(), self.checkBox_FetchRecursive.isChecked())
 
     def checkboxNEONSitesClicked(self):
-        pass
-
-    def checkboxNEONSitesClicked(self):
-        pass
-
-    def MSTFrameCountUpdate(self):
         pass
 
     def MSTExtractFrames(self):
@@ -111,13 +118,20 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
     def pushButtonBrowseSaveImagesOutputFolderClicked(self):
         pass
 
-    def pushButtonCreateVideoClicked(self):
-        pass
-        #JES createVideo(self)
+    def pushButton_create_video_clicked(self):
+        myGRIMEAI_video = GRIME_Video()
+        myGRIMEAI_video.createVideo(self.lineEdit_images_folder.text())
 
     def pushButtonCreateGIFClicked(self):
-        pass
-        #JES createGIF(self, self.checkBox_FetchRecursive.isChecked())
+        myGRIMEAI_video = GRIME_Video()
+        myGRIMEAI_video.createGIF(self.lineEdit_images_folder.text())
+
+    def pushButton_create_composite_slice_clicked(self):
+        self.create_composite_slice_signal.emit()
+
+    def pushButton_triage_images_clicked(self):
+        self.triage_images_signal.emit(self.lineEdit_images_folder.text())
+
 
     # --------------------------------------------------
     # IMAGE INPUT FOLDER
@@ -127,7 +141,7 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
         folder = prompter.dir()
 
         if os.path.exists(folder):
-            self.lineEditImageFolder.setText(folder)
+            self.lineEdit_images_folder.setText(folder)
             #self.radioButtonHardDriveImages.setChecked(True)
             #self.checkBoxCreateEXIFFile.setEnabled(True)
 
@@ -138,63 +152,9 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
 
             #JES processLocalImage(self)
 
-    # --------------------------------------------------
-    # NEON/PHENOCAM IMAGE FOLDER
-    # --------------------------------------------------
-    def pushButtonBrowseSaveImagesOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditSaveImagesOutputFolder(prompter.dir())
-
-    # --------------------------------------------------
-    # OUTPUT FOLDERS
-    # --------------------------------------------------
-    def pushButtonBrowseVideoOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditVideoOutputFolder.setText(prompter.dir())
-
-    def pushButtonBrowseSaveImagesOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditSaveImagesOutputFolder.setText(prompter.dir())
-
-    def pushButtonBrowseEXIFOutputFolderClicked(self):
-        prompter = promptlib.Files()
-        folder = prompter.dir()
-
-        if os.path.exists(folder):
-            self.EditEXIFOutputFolder.setText(prompter.dir())
-
-    # --------------------------------------------------
-    # --------------------------------------------------
-    def MSTVideoFolderChanged(self):
-        #self.imageIndexSignal.emit(self.spinBoxImageIndex.value())
-        pass
-        '''
-        global gFrameCount
-
-        frameFolder = self.lineEditHardDriveFolder.text() + '/' + self.MSTlineEditFrameFolder.text()
-        nFrameCount = MSTGetFrameCount(self, frameFolder)
-
-        strFrameCount = 'Frame Count: ' + nFrameCount.__str__()
-        self.MSTFrameCount.setText(strFrameCount)
-
-        self.spinBoxDailyImage.setMinimum(1)
-        self.spinBoxDailyImage.setMaximum(nFrameCount)
-        self.spinBoxDailyImage.setValue(1)
-
-        gFrameCount = nFrameCount
-        '''
 
     def setImageFolderPath(self, image_folder):
-        self.lineEditImageFolder.setText(image_folder)
+        self.lineEdit_images_folder.setText(image_folder)
 
 
 # ======================================================================================================================
@@ -208,13 +168,14 @@ def getLocalFileDates(filePath, bFetchRecursive):
     startDate = datetime.date(2500, 12, 31)
     endDate   = datetime.date(1970, 1, 1)
 
-    files = GRIMe_Utils.getFileList(filePath, extensions, bFetchRecursive)
+    myGRIME_AI_Utils = GRIME_AI_Utils()
+    files = myGRIME_AI_Utils.getFileList(filePath, extensions, bFetchRecursive)
 
     for file in files:
         ext = os.path.splitext(file)[-1].lower()
 
         if ext in extensions:
-            fileDate, fileTime = GRIMe_Utils.extractDateFromFilename(file)
+            fileDate, fileTime = myGRIME_AI_Utils.extractDateFromFilename(file)
 
             # use the date in the filenames to determine the start and end acquisition dates for the images
             if fileDate < startDate:

@@ -216,7 +216,7 @@ class GRIME_AI_ImageTriage():
                     filepath = os.path.dirname(file)
                     tempFolder = os.path.join(filepath, "MovedImages")
                     if not os.path.exists(tempFolder):
-                        pass
+                        os.makedirs(tempFolder)
 
                     shutil.move(file, tempFolder)
 

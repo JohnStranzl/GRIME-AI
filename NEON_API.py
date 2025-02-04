@@ -14,7 +14,6 @@ import ssl
 import time
 
 from bs4 import BeautifulSoup
-from GRIME_AI_Utils import GRIME_AI_Utils
 
 # THIRD PARTY MODULES
 
@@ -24,6 +23,8 @@ from rpy2.robjects.packages import importr
 
 # GRIMe-AI MODULES
 from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_Utils import GRIME_AI_Utils
+from GRIME_AI_Save_Utils import JsonEditor
 
 from nitrateData import nitrateData
 
@@ -54,11 +55,14 @@ class  NEON_API:
     # ======================================================================================================================
     def FetchSiteInfoFromNEON(self, server, siteCode):
 
-        # Make request, using the sites endpoint
-        site_request = requests.get(server + 'sites/' + siteCode)
+        try:
+            # Make request, using the sites endpoint
+            site_request = requests.get(server + 'sites/' + siteCode)
 
-        # Convert to Python JSON object
-        site_json = site_request.json()
+            # Convert to Python JSON object
+            site_json = site_request.json()
+        except:
+            site_json = []
 
         return (site_json)
 
@@ -132,6 +136,16 @@ class  NEON_API:
             os.makedirs(downloadsFilePath)
 
         foldername = strProduct.split('.')[1].zfill(5) + ' -' + strProduct.split('.')[2].split(':')[1]
+
+        self.dest = downloadsFilePath + '\\' + foldername
+        if not os.path.exists(self.dest):
+            os.makedirs(self.dest)
+
+        #JES OVERRIDE DOWNLOAD PATH DUE TO WINDOWS FILE PATH LENGTH LIMITATION.
+
+        downloadsFilePath = JsonEditor().getValue("Scratchpad_folder")
+
+
         strProduct = 'DP1.' + strProduct.split('.')[1] + '.001'
 
         progressBar = QProgressWheel()
@@ -146,7 +160,7 @@ class  NEON_API:
 
 
         try:
-            downloadsFilePath =re.sub(r'\\', '/', downloadsFilePath)
+            downloadsFilePath = re.sub(r'\\', '/', downloadsFilePath)
             base.options(timeout=300)
             '''
             neon_zips = neonUtilities.zipsByProduct(dpID = strProduct, \
@@ -208,14 +222,14 @@ class  NEON_API:
             # LET'S REMOVE ONE LEVEL OF INDIRECTION AND MOVE THE FILES STACKED BY stackByTable TO THE ROOT PRODUCT FOLDER IN THE
             # DOWNLOAD DIRECTORY
             src = downloadsFilePath + '\\' + foldername + '\\stackedFiles'
-            self.dest = downloadsFilePath + '\\' + foldername
+            #JES self.dest = downloadsFilePath + '\\' + foldername
             if os.path.exists(src) and os.path.exists(self.dest):
                 filenames = os.listdir(src)
                 for filename in filenames:
                     shutil.move(os.path.join(src, filename), self.dest)
 
-                # NOW WE REMOVE THE EMPTY STACK FOLDER SINCE THE FILES HAVE BEEN MOVED
-                shutil.rmtree(src)
+                # NOW WE REMOVE THE EMPTY TEMPORARY DOWNLOAD FOLDER SINCE THE FILES HAVE BEEN MOVED
+                shutil.rmtree(os.path.join(downloadsFilePath, foldername))
 
             progressBar.setValue(100)
 

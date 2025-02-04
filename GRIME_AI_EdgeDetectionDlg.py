@@ -154,3 +154,7 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
         self.returnFeatureData.orbMaxFeatures = self.spinBoxOrbMaxFeaturesChanged().value()
         self.featureDetectionSignal.emit(self.returnFeatureData)
 
+    # ----------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------
+    def onCancel(self):
+        self.close()

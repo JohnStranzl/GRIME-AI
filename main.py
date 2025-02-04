@@ -26,15 +26,40 @@
 
 # import pycurl
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 import os
 os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 #os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
-
 import sys
+import shutil
 import re
+import json
+import random
+from pathlib import Path
+import iopath
 
+import numpy as np
+
+
+# ------------------------------------------------------------
+# PIL LIBRARIES AND IMPORTS
+# ------------------------------------------------------------
+from PIL import Image, ImageDraw
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+import warnings
+warnings.filterwarnings("ignore", message="numpy.dtype size changed")
+warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 import datetime
 from datetime import date
+#from datetime import datetime
 import time
 from time import sleep
 
@@ -42,22 +67,17 @@ import pandas as pd
 
 import math
 import csv
-import shutil
 
 import requests
 import urllib.request
 from configparser import ConfigParser
-from pathlib import Path
 from urllib.request import urlopen
 #import chromedriver_autoinstaller
 
 import promptlib
 
 import cv2
-import numpy as np
 
-from pycocotools.coco import COCO
-from pycocotools import mask as maskUtils
 
 # ------------------------------------------------------------
 # WHERE THE BITS MEET THE DIGITAL ROAD
@@ -73,13 +93,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 '''
 
-# import tensorflow as tf
-# import torch
-# print(torch.__version__)
-
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
@@ -88,13 +103,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBa
 
 from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -102,13 +113,14 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 import sobelData
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# POP-UP/MODELESS DIALOG BOXES
+# ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_ColorSegmentationDlg import GRIME_ColorSegmentationDlg
 from GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
 from GRIME_AI_ImageNavigationDlg import GRIME_ImageNavigationDlg
+from GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
 from GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
 from GRIME_AI_CompositeSliceDlg import GRIME_CompositeSliceDlg
 from GRIME_ProcessImage import GRIME_ProcessImage
@@ -122,21 +134,21 @@ from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 
 from GRIME_AI_Save_Utils import JsonEditor
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_Diagnostics import GRIMe_Diagnostics
 from GRIME_AI_ImageData import imageData
 from GRIMe_ImageStats import GRIMe_ImageStats
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_PhenoCam import GRIME_PhenoCam, dailyList
 from GRIME_ProductTable import GRIMe_ProductTable
 from GRIME_QLabel import DrawingMode
@@ -155,35 +167,46 @@ from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
 from colorSegmentationParams import colorSegmentationParamsClass
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# HYDRA (for SAM2)
+# ----------------------------------------------------------------------------------------------------------------------
+import hydra
+from hydra import initialize, compose, initialize_config_dir
+from omegaconf import OmegaConf, DictConfig
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from NEON_API import NEON_API
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from USGS_NIMS import USGS_NIMS
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from chrome_driver import *
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 
-# ------------------------------------------------------------
-#
-# ------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from exifData import EXIFData
 
 from playsound import playsound
 # import GRIME_KMeans
 # from webdriver_manager.core.utils import ChromeType
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 global full
 full = 1
 
@@ -198,6 +221,65 @@ elif full == 4:
 
 global bStartupComplete
 bStartupComplete = False
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# import tensorflow as tf
+try:
+    import torch
+    print(torch.__version__)
+
+    import torchvision.transforms as T
+    from torch.cuda.amp import GradScaler, autocast
+    from torch import nn
+    from torch.utils.data import DataLoader
+    from torch.nn.functional import binary_cross_entropy_with_logits
+
+    print("GRIME AI Deep Learning: PyTorch imported successfully.")
+except ImportError as e:
+    print("GRIME AI Deep Learning: Error importing PyTorch:", e)
+    # Remove the faulty package from sys.modules to prevent further issues
+    if 'torch' in sys.modules:
+        del sys.modules['torch']
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
+import sam2
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+if 0:
+    from hydra import initialize_config_module
+    from hydra.core.global_hydra import GlobalHydra
+
+    if not GlobalHydra.instance().is_initialized():
+        initialize_config_module("sam2", version_base="1.2")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+from pycocotools.coco import COCO
+from pycocotools import mask as maskUtils
+from pycocotools import mask as coco_mask
+
 
 # from tensorflow.python.client import device_lib as dev_lib
 
@@ -229,6 +311,16 @@ try:
 except:
     pass
 
+try:
+    import imageio
+except:
+    pass
+
+try:
+    import imageio_ffmpeg
+except:
+    pass
+
 # ------------------------------------------------------------
 # Get the base directory
 # ------------------------------------------------------------
@@ -242,9 +334,6 @@ if 0:
     # Locate the SSL certificate for requests
     os.environ['REQUESTS_CA_BUNDLE'] = os.path.join(basedir, 'requests', 'cacert.pem')
 
-# ------------------------------------------------------------
-# PIL LIBRARIES AND IMPORTS
-# ------------------------------------------------------------
 
 SITECODE = 'ARIK'
 DOMAINCODE = 'D10'
@@ -270,7 +359,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.8"
+SW_VERSION = "Ver.: 0.0.5.11d"
 
 class displayOptions():
     displayROIs = True
@@ -310,6 +399,45 @@ class Net(nn.Module):
         return x
 '''
 
+
+# ==================================================================================================================
+#
+# ==================================================================================================================
+class SAM2FullModel(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.image_encoder = model.forward_image
+        self._prepare_backbone_features = model._prepare_backbone_features
+        self.directly_add_no_mem_embed = model.directly_add_no_mem_embed
+        self.no_mem_embed = model.no_mem_embed
+        self.prompt_encoder = model.sam_prompt_encoder
+        self.mask_decoder = model.sam_mask_decoder
+        self._bb_feat_sizes = [(256, 256), (128, 128), (64, 64)]
+
+    def forward(self, image, point_coords, point_labels):
+        backbone_out = self.image_encoder(image)
+        _, vision_feats, _, _ = self._prepare_backbone_features(backbone_out)
+        if self.directly_add_no_mem_embed:
+            vision_feats[-1] = vision_feats[-1] + self.no_mem_embed
+        feats = [feat.permute(1, 2, 0).view(1, -1, *feat_size) for feat, feat_size in
+                 zip(vision_feats[::-1], self._bb_feat_sizes[::-1])][::-1]
+        features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
+        high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in features["high_res_feats"]]
+        sparse_embeddings, dense_embeddings = self.prompt_encoder(points=(point_coords, point_labels), boxes=None,
+                                                                  masks=None)
+        low_res_masks, iou_predictions, _, _ = self.mask_decoder(
+            image_embeddings=features["image_embed"][-1].unsqueeze(0),
+            image_pe=self.prompt_encoder.get_dense_pe(),
+            sparse_prompt_embeddings=sparse_embeddings,
+            dense_prompt_embeddings=dense_embeddings,
+            multimask_output=True,
+            repeat_image=point_coords.shape[0] > 1,
+            high_res_features=high_res_features,
+        )
+        out = {"low_res_masks": low_res_masks, "iou_predictions": iou_predictions}
+        return out
+
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -319,6 +447,7 @@ class MplCanvas(FigureCanvas):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
+
 
 # ======================================================================================================================
 #
@@ -410,6 +539,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setupUi(self)
 
+        # Set stylesheet for the tabs to change color when a tab is selected.
+        self.tabWidget.setStyleSheet("""
+            QTabBar::tab {
+                background-color: white;
+                color: black;
+            }
+            QTabBar::tab:selected {
+                background-color: steelblue;
+                color: white;
+            }
+        """)
+
+
         # ------------------------------------------------------------------------------------------------------------------
         # DISPLAY SPLASH SCREEN
         # ------------------------------------------------------------------------------------------------------------------
@@ -417,6 +559,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         splash.show(self)
         splash = GRIME_AI_SplashScreen(QPixmap('GRIME-AI Logo.jpg'), delay=5)
         splash.show(self)
+
+
+        # ------------------------------------------------------------------------------------------------------------------
+        # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
+        # ------------------------------------------------------------------------------------------------------------------
+        utils = GRIME_AI_Utils()
+        utils.create_GRIME_folders(full)
+
+        self.populate_controls()
+
+        self.loss_values = []
+        self.val_loss_values = []
+        self.epoch_list = []
+        self.scaler = GradScaler()
 
         # ----------------------------------------------------------------------------------------------------
         #
@@ -433,10 +589,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #JES folderPath = GRIME_AI_Save_Utils().USGS_getSaveFolderPath()
         #JES self.edit_USGSSaveFilePath.setText(folderPath)
 
+
         # ----------------------------------------------------------------------------------------------------
         #
         # ----------------------------------------------------------------------------------------------------
         self.colorSegmentationParams = colorSegmentationParamsClass()
+
 
         # ----------------------------------------------------------------------------------------------------
         # GET DATA, POPULATE WIDGETS, ETC.
@@ -449,6 +607,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.initROITable()
 
+
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         # JES - REVISIT DOUBLE CLICKING ON IMAGES
         self.NEON_labelLatestImage.mouseDoubleClickEvent = NEON_labelMouseDoubleClickEvent
@@ -458,10 +617,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.labelOriginalImage.installEventFilter(self)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-        self.pushButton_RetrieveNEONData.clicked.connect(self.RetrieveNEONDataClicked)
+        self.pushButton_RetrieveNEONData.clicked.connect(self.pushbutton_NEONDownloadClicked)
 
-        self.pushButtonBrowseSaveImages_USGS_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_USGS_DownloadFolderClicked)
-        self.pushButtonBrowseSaveImages_NEON_DownloadFolder.clicked.connect(self.pushButtonBrowseSaveImages_NEON_DownloadFolderClicked)
+        self.pushButton_USGS_BrowseImageFolder.clicked.connect(self.pushButton_USGS_BrowseImageFolder_Clicked)
+        self.pushButton_NEON_BrowseImageFolder.clicked.connect(self.pushButton_NEON_BrowseImageFolder_Clicked)
 
         #JES self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
         #JES self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
@@ -537,7 +696,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #x = 1
 
+        print("Create toolbar...")
         self.createToolBar()
+        print("Toolbar create...")
 
         # ------------------------------------------------------------------------------------------------------------------
         # MENU
@@ -547,27 +708,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # SET THE BACKGROUND COLORS OF SPECIFIC BUTTONS
         # ------------------------------------------------------------------------------------------------------------------
         self.pushButton_RetrieveNEONData.setStyleSheet('QPushButton {background-color: steelblue;}')
-        self.pushButtonBrowseSaveImages_NEON_DownloadFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+        self.pushButton_NEON_BrowseImageFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
 
         self.pushButton_USGSDownload.setStyleSheet('QPushButton {background-color: steelblue;}')
-        self.pushButtonBrowseSaveImages_USGS_DownloadFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
+        self.pushButton_USGS_BrowseImageFolder.setStyleSheet('QPushButton {background-color: steelblue;}')
 
         # INITIALIZE GUI CONTROLS
         # frame.NEON_listboxSites.setCurrentRow(1)
 
         # GET LIST OF ALL SITES ON NEON
         # if frame.checkBoxNEONSites.isChecked():
+        print("Download NEON Field Site Table from NEON website...")
         myNEON_API = NEON_API()
         siteList = myNEON_API.readFieldSiteTable()
-        # else:
-        # NEON_FormatProductTable(frame.tableProducts)
 
         if len(siteList) == 0:
+            print("NEON Field Site Table from NEON website FAILED...")
             pass
             # frame.radioButtonHardDriveImages.setChecked(True)
             # frame.radioButtonHardDriveImages.setDisabled(False)
         # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
+            print("Populate NEON Products tab on GUI...")
             myList = []
 
             for site in siteList:
@@ -585,6 +747,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 pass
 
         self.show()
+
+
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def populate_controls(self):
+
+        # NEON CONTROLS
+        NEON_download_file_path = JsonEditor().getValue("NEON_Root_Folder")
+        self.edit_NEONSaveFilePath.setText(NEON_download_file_path)
+
+        # USGS CONTROLS
+        USGS_download_file_path = JsonEditor().getValue("USGS_Root_Folder")
+        self.edit_USGSSaveFilePath.setText(USGS_download_file_path)
 
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -652,76 +828,90 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.addToolBar(toolbar)
         toolbar.setIconSize(QtCore.QSize(48, 48))
 
+        parent_path = Path(__file__).parent
+        print("Toolbar Initialization: Parent path of executable: ", parent_path)
+
         #--- COLOR SEGMENTATION
-        icon_path = str(Path(__file__).parent / "icons/FileFolder_1.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/FileFolder_1.png"))
         button_action = QAction(QIcon(icon_path), "Folder Operations", self)
         button_action.setStatusTip("Select input and output folder locations")
         button_action.triggered.connect(self.onMyToolBarFileFolder)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: File folder icon path: ", icon_path)
 
         #--- IMAGE TRIAGE
-        icon_path = str(Path(__file__).parent / "icons/Triage_2.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/Triage_2.png"))
         button_action = QAction(QIcon(icon_path), "Image Triage", self)
         button_action.setStatusTip("Move images that are of poor quality")
         button_action.triggered.connect(toolbarButtonImageTriage)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Triage icon path: ", icon_path)
 
         #--- MASK EDITOR
-        icon_path = str(Path(__file__).parent / "icons/ImageNav_3.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/ImageNav_3.png"))
         button_action = QAction(QIcon(icon_path), "Image Navigation", self)
         button_action.setStatusTip("Navigate (scroll) through images")
         button_action.triggered.connect(self.onMyToolBarImageNavigation)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Image Navigation icon path: ", icon_path)
 
         #--- IMAGE NAVIGATION
-        icon_path = str(Path(__file__).parent / "icons/Mask.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/Mask.png"))
         button_action = QAction(QIcon(icon_path), "Create Masks", self)
         button_action.setStatusTip("Draw polygons to create image masks")
         button_action.triggered.connect(self.onMyToolBarCreateMask)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Create Masks icon path: ", icon_path)
 
         #--- COLOR SEGMENTATION
-        icon_path = str(Path(__file__).parent / "icons/ColorWheel_4.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/ColorWheel_4.png"))
         button_action = QAction(QIcon(icon_path), "Color Segmentation", self)
         button_action.setStatusTip("Create ROIs to segment regions by color")
         button_action.triggered.connect(self.onMyToolBarColorSegmentation)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Color Segmentation icon path: ", icon_path)
 
         #--- EDGE FILTERS
-        icon_path = str(Path(__file__).parent / "icons/EdgeFilters_2.png")
+        icon_path = os.path.normpath(os.path.normpath(str(parent_path / "icons/EdgeFilters_2.png")))
         button_action = QAction(QIcon(icon_path), "Edge and Feature Detection", self)
         button_action.setStatusTip("Edge Detection Filters")
         button_action.triggered.connect(self.toolbarButtonEdgeDetection)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Edge and Feature Detection icon path: ", icon_path)
 
         #--- SETTINGS
-        icon_path = str(Path(__file__).parent / "icons/Settings_1.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/Settings_1.png"))
+        icon_path = os.path.normpath(icon_path)
         button_action = QAction(QIcon(icon_path), "Settings", self)
         button_action.setStatusTip("Change options and settings")
         button_action.triggered.connect(self.onMyToolBarSettings)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Settings icon path: ", icon_path)
 
         #--- DEEP LEARNING
-        icon_path = str(Path(__file__).parent / "icons/Green Brain Icon.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/Green Brain Icon.png"))
         button_action = QAction(QIcon(icon_path), "Deep Learning", self)
         button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
         #button_action.triggered.connect(self.toolbarButtonDeepLearning)
         button_action.triggered.connect(self.onMyToolBarBuildModel)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Deep Learning (brain) icon path: ", icon_path)
 
         #--- GRIME2
-        icon_path = str(Path(__file__).parent / "icons/grime2_StopSign.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/grime2_StopSign.png"))
         button_action = QAction(QIcon(icon_path), "GRIME2", self)
         button_action.setStatusTip("GRIME2 - Water Level Measurement")
         button_action.triggered.connect(self.toolbarButtonGRIME2)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: GRIME2 icon path: ", icon_path)
 
         #--- HELP
-        icon_path = str(Path(__file__).parent / "icons/Help_2.png")
+        icon_path = os.path.normpath(str(parent_path / "icons/Help_2.png"))
         button_action = QAction(QIcon(icon_path), "Help", self)
         button_action.setStatusTip("Help and Release Notes")
         button_action.triggered.connect(self.toolbarButtonReleaseNotes)
         toolbar.addAction(button_action)
+        print("Toolbar Initialization: Help icon path: ", icon_path)
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -734,6 +924,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global gProcessClick
         global gWebImageCount
 
+        print("NEON Site selected...")
         try:
             # gProcessClick is checked to see if another process is already handling a click event (gProcessClick == 0).
             # If not, it sets gProcessClick to 1 to prevent concurrent clicks.
@@ -753,7 +944,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
                 print("Updating site products...")
-                time.sleep(1.0)
+                time.sleep(2.0)
 
                 start_time = time.time()
                 self.NEON_updateSiteProducts(item)
@@ -763,7 +954,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
                 print("Download latest image...")
-                time.sleep(1.0)
+                time.sleep(2.0)
 
                 start_time = time.time()
                 nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
@@ -796,7 +987,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     # DOWNLOAD NEON PRODUCT FILES
     # ------------------------------------------------------------------------------------------------------------------
-    def RetrieveNEONDataClicked(self, item):
+    def pushbutton_NEONDownloadClicked(self, item):
         downloadProductDataFiles(self, item)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -994,23 +1185,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def pushButtonBrowseSaveImages_NEON_DownloadFolderClicked(self, item):
+    def pushButton_NEON_BrowseImageFolder_Clicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
 
         if os.path.exists(folder):
             self.edit_NEONSaveFilePath.setText(folder)
-            JsonEditor().update_json_entry("NEON_Image_Folder", folder)
         else:
             os.makedirs(folder)
 
-        #JES GRIME_AI_Save_Utils().NEON_SaveFolderPath(folder)
-
+        JsonEditor().update_json_entry("NEON_Image_Folder", folder)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def pushButtonBrowseSaveImages_USGS_DownloadFolderClicked(self, item):
+    def pushButton_USGS_BrowseImageFolder_Clicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
 
@@ -1019,7 +1208,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             os.makedirs(folder)
 
-        #JES GRIME_AI_Save_Utils().USGS_SaveFolderPath(folder)
+        JsonEditor().update_json_entry("USGS_Root_Folder", folder)
 
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -1066,7 +1255,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if len(roiParameters.strROIName) > 0:
                 roiObj.setROIName(roiParameters.strROIName)
             else:
-                msgBox = GRIME_AI_QMessageBox('ROI Error', 'A name for the ROI is required!')
+                msgBox = GRIME_AI_QMessageBox('ROI Error', 'A name for the ROI is required!', buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
                 return
 
@@ -1076,7 +1265,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if rectROI != None:
                 roiObj.setDisplayROI(rectROI)
             else:
-                msgBox = GRIME_AI_QMessageBox('ROI Error', 'Please draw the ROI on the image!')
+                msgBox = GRIME_AI_QMessageBox('ROI Error', 'Please draw the ROI on the image!', buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
                 return
 
@@ -1094,7 +1283,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 #roiObj.setROIShape(ROIShape.ELLIPSE)
             except:
                 msgBox = GRIME_AI_QMessageBox('ROI Error',
-                                           'An unexpected error occurred calculating the ROI of the full resolution image!')
+                                           'An unexpected error occurred calculating the ROI of the full resolution image!', buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
 
                 return
@@ -1407,6 +1596,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ==================================================================================================================
     def pushButton_USGSDownloadClicked(self):
+
+        # VERIFY THAT THE FOLDER HAS BEEN SPECIFIED
+        USGS_download_file_path = self.edit_USGSSaveFilePath.text()
+        JsonEditor().update_json_entry("USGS_Root_Folder", USGS_download_file_path)
+
+        if len(USGS_download_file_path) == 0:
+            strMessage = 'A download folder has not been specified. Would you like to use the last GRIME-AI USGS download folder used?'
+            msgBox = GRIME_AI_QMessageBox('USGS Root Download Folder', strMessage, QMessageBox.Yes | QMessageBox.No)
+            response = msgBox.displayMsgBox()
+
+            if response == QMessageBox.Yes:
+                #USGS_download_file_path = os.path.expanduser('~')
+                #USGS_download_file_path = os.path.join(USGS_download_file_path, 'Documents')
+                #USGS_download_file_path = os.path.join(USGS_download_file_path, 'GRIMe-AI')
+
+                USGS_download_file_path = JsonEditor().getValue("USGS_Root_Folder")
+
+                if not os.path.exists(USGS_download_file_path):
+                    os.makedirs(USGS_download_file_path)
+                #NEON_download_file_path = os.path.join(USGS_download_file_path, 'Downloads')
+                #if not os.path.exists(USGS_download_file_path):
+                #    os.makedirs(USGS_download_file_path)
+
+                self.edit_USGSSaveFilePath.setText(USGS_download_file_path)
+                JsonEditor().update_json_entry("USGS_Root_Folder", USGS_download_file_path)
+        else:
+            # MAKE SURE THE PATH EXISTS. IF IT DOES NOT, THEN CREATE IT.
+            if not os.path.exists(USGS_download_file_path):
+                os.makedirs(USGS_download_file_path)
+
         currentRow = self.USGS_listboxSites.currentRow()
 
         if currentRow >= 0:
@@ -1430,11 +1649,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             nwisID = self.myNIMS.get_nwisID()
 
-            downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
+            #downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
+            downloadsFilePath = self.edit_USGSSaveFilePath.text()
             if not os.path.exists(downloadsFilePath):
                 os.makedirs(downloadsFilePath)
 
-            self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=downloadsFilePath, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            saveFolder = os.path.join(downloadsFilePath, "Images")
+            if not os.path.exists(saveFolder):
+                os.makedirs(saveFolder)
+            self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+
+            saveFolder = os.path.join(downloadsFilePath, "Data")
+            if not os.path.exists(saveFolder):
+                os.makedirs(saveFolder)
+            self.myNIMS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
 
             #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
 
@@ -1514,9 +1742,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except:
                 pass
 
+        print("Initialize USGS product table...")
         self.USGS_InitProductTable()
         self.USGS_FormatProductTable(self.table_USGS_Sites)
-
         self.NEON_FormatProductTableHeader()
 
         self.show()
@@ -1529,20 +1757,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global dailyImagesList
         global imageFileFolder
 
-        self.compositeSliceDlg = GRIME_CompositeSliceDlg()
+        if len(dailyImagesList.getVisibleList()) == 0:
+            strMessage = 'You must first create a list of images to operate on. Use the FETCH files feature of GRIME AI.'
+            msgBox = GRIME_AI_QMessageBox('Composite Slice Error', strMessage, QMessageBox.Close)
+            response = msgBox.displayMsgBox()
+        else:
+            imageFilename = dailyImagesList.getVisibleList()[0]
+            self.compositeSliceDlg = GRIME_CompositeSliceDlg()
 
-        self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
-        self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
+            self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
+            self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
 
-        imageFilename = dailyImagesList.getVisibleList()[0].fullPathAndFilename
-        self.compositeSliceDlg.loadImage(imageFilename)
+            imageFilename = dailyImagesList.getVisibleList()[0].fullPathAndFilename
+            self.compositeSliceDlg.loadImage(imageFilename)
 
-        self.compositeSliceDlg.label_Image.setDrawingMode(DrawingMode.SLICE)
+            self.compositeSliceDlg.label_Image.setDrawingMode(DrawingMode.SLICE)
 
-        self.compositeSliceDlg.show()
+            self.compositeSliceDlg.show()
 
 
     def generateCompositeSlices(self):
+        print("Generating composite slices image(s)...")
+
         global imageFileFolder
         if not os.path.exists(imageFileFolder+'\compositeSlices'):
             os.makedirs(imageFileFolder+'\compositeSlices')
@@ -1554,11 +1790,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         compositeSlices = GRIME_AI_CompositeSlices(actualSliceCenter, sliceWidth)
         compositeSlices.create_composite_image(dailyImagesList.visibleList, imageFileFolder+'\compositeSlices')
 
-        if self.compositeSliceDlg != None:
-            self.compositeSliceDlg.close()
-            self.compositeSliceDlg    = None
-
-
     def closeCompositeSlices(self):
         if self.compositeSliceDlg != None:
             self.compositeSliceDlg.close()
@@ -1569,6 +1800,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     # ==================================================================================================================
     def create_masks(self, coco_annotation_file, image_dir, output_dir):
+        print("Extract masks from COCO file...")
+
         # Load COCO annotations
         coco = COCO(coco_annotation_file)
 
@@ -1905,6 +2138,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def onMyToolBarFileFolder(self):
         self.fileFolderDlg = GRIME_AI_FileUtilitiesDlg(frame)
 
+        self.fileFolderDlg.create_composite_slice_signal.connect(self.menubarCompositeSlices)
+        self.fileFolderDlg.triage_images_signal.connect(toolbarButtonImageTriage_1)
+
         self.fileFolderDlg.accepted.connect(self.closeFilefolderDlg)
         self.fileFolderDlg.rejected.connect(self.closeFilefolderDlg)
 
@@ -1974,22 +2210,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #@pyqtSlot()
     def onMyToolBarColorSegmentation(self):
-        if self.maskEditorDlg == None:
-            self.labelOriginalImage.setDrawingMode(DrawingMode.COLOR_SEGMENTATION)
+        if self.colorSegmentationDlg == None:
+            if self.maskEditorDlg == None:
+                self.labelOriginalImage.setDrawingMode(DrawingMode.COLOR_SEGMENTATION)
 
-            self.colorSegmentationDlg = GRIME_ColorSegmentationDlg()
+                self.colorSegmentationDlg = GRIME_ColorSegmentationDlg()
 
-            self.colorSegmentationDlg.colorSegmentation_Signal.connect(self.colorSegmentation)
-            self.colorSegmentationDlg.addROI_Signal.connect(self.trainROI)
-            self.colorSegmentationDlg.deleteAllROI_Signal.connect(self.deleteAllROI)
-            self.colorSegmentationDlg.close_signal.connect(self.closeColorSegmentationDlg)
-            self.colorSegmentationDlg.buildFeatureFile_Signal.connect(self.buildFeatureFile)
-            self.colorSegmentationDlg.universalTestButton_Signal.connect(self.universalTestButton)
+                self.colorSegmentationDlg.colorSegmentation_Signal.connect(self.colorSegmentation)
+                self.colorSegmentationDlg.addROI_Signal.connect(self.trainROI)
+                self.colorSegmentationDlg.deleteAllROI_Signal.connect(self.deleteAllROI)
+                self.colorSegmentationDlg.buildFeatureFile_Signal.connect(self.buildFeatureFile)
+                self.colorSegmentationDlg.universalTestButton_Signal.connect(self.universalTestButton)
 
-            self.colorSegmentationDlg.accepted.connect(self.closeColorSegmentationDlg)
-            self.colorSegmentationDlg.rejected.connect(self.closeColorSegmentationDlg)
+                self.colorSegmentationDlg.close_signal.connect(self.closeColorSegmentationDlg)
+                self.colorSegmentationDlg.accepted.connect(self.closeColorSegmentationDlg)
+                self.colorSegmentationDlg.rejected.connect(self.closeColorSegmentationDlg)
 
-            self.colorSegmentationDlg.show()
+                self.colorSegmentationDlg.show()
+            else:
+                strMessage = 'Please close the Mask Editor toolbox if you want to use the Mask Editor toolbox.\nThis will be resolved in a future design change.'
+                msgBox = GRIME_AI_QMessageBox('Tool Conflict', strMessage, QMessageBox.Yes | QMessageBox.No)
+                response = msgBox.displayMsgBox()
+
 
     # ==================================================================================================================
     #
@@ -2003,6 +2245,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.colorSegmentationDlg = None
 
         self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
+
 
     # ==================================================================================================================
     #
@@ -2046,6 +2289,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
                 currentImage = QPixmap(tempCurrentImage)
 
+
     # ==================================================================================================================
     # ==================================================================================================================
     # IMAGE MASK FUNCTIONALITY
@@ -2056,10 +2300,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.buildModelDlg == None:
             self.buildModelDlg = GRIME_AI_buildModelDlg()
 
-            self.buildModelDlg.close_signal.connect(self.buildModelDialogClose)
-            self.buildModelDlg.saveModelMasks_Signal.connect(self.saveModelMasksChanged)
-            self.buildModelDlg.saveOriginalModelImage_Signal.connect(self.saveOriginalModelImageChanged)
-            self.buildModelDlg.segment_Signal.connect(self.segmentClicked)
+            self.buildModelDlg.rejected.connect(self.buildModelDialogClose)
+
+            self.buildModelDlg.save_model_masks_signal.connect(self.saveModelMasksChanged)
+            self.buildModelDlg.save_original_model_image_signal.connect(self.saveOriginalModelImageChanged)
+            self.buildModelDlg.segment_image_signal.connect(self.segment_image_clicked)
+            self.buildModelDlg.tune_model_signal.connect(self.tune_model_clicked)
 
             self.buildModelDlg.show()
 
@@ -2067,61 +2313,809 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
             g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
 
+
     # ------------------------------------------------------------------------------------------------------------------
     def buildModelDialogClose(self):
         global g_modelSettings
         g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
         g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
 
-        self.buildModelDlg.close()
+        # self.buildModelDlg.close()
 
         del self.buildModelDlg
         self.buildModelDlg = None
 
+
+    # ------------------------------------------------------------------------------------------------------------------
     def saveModelMasksChanged(self, bSave):
         global g_modelSettings
         g_modelSettings.saveModelMasks = bSave
 
+
+    # ------------------------------------------------------------------------------------------------------------------
     def saveOriginalModelImageChanged(self, bSave):
         global g_modelSettings
         g_modelSettings.saveOriginalModelImage = bSave
 
-    def segmentClicked(self):
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def tune_model_clicked(self):
+
         global g_modelSettings
         g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
         g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
+        g_modelSettings.model_file = self.buildModelDlg.get_selected_model_path_and_filename()
 
         if self.buildModelDlg == None:
             self.buildModelDlg.close()
             del self.buildModelDlg
             self.buildModelDlg = None
 
-        self.myDeepLearning(g_modelSettings)
+        if g_modelSettings.model_file:
+            self.myDeepLearning(g_modelSettings)
+
+        self.GRIME_AI_tune_sam2_model()
 
 
-    # ======================================================================================================================
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def segment_image_clicked(self):
+
+        global progress_bar_closed
+
+        def on_progress_bar_closed(obj):
+            global progress_bar_closed
+            progress_bar_closed = True
+
+        progressBar = QProgressWheel()
+        progressBar.destroyed.connect(on_progress_bar_closed)
+        progress_bar_closed = False
+        progressBar.show()
+
+        if 0:
+            # Clear the global Hydra instance if it's already initialized
+            if hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
+                hydra.core.global_hydra.GlobalHydra.instance().clear()
+
+            config_dir = "./sam2/sam2/configs/sam2.1"   # RELATIVE PATH
+            # CONVERT TO ABSOLUTE PATH, IF NEEDED
+            if 0:
+                dirname = os.path.dirname(__file__)
+                config_dir = os.path.join(dirname, config_dir)
+                config_dir = os.path.normpath(config_dir)
+
+            with initialize(config_path=config_dir):
+                cfg = compose(config_name="sam2.1_hiera_l.yaml")
+                print(OmegaConf.to_yaml(cfg))
+
+        #JES - INVESTIGATE - WHY DOES IT ONLY WORK WITH AN ABSOLUTE FILE PATH???
+        dirname = os.path.dirname(__file__)
+        model_cfg = os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1\\sam2.1_hiera_l.yaml")
+        model_cfg = os.path.normpath(model_cfg)
+        print(model_cfg)
+
+        sam2_checkpoint = os.path.join(dirname, "sam2\\checkpoints\\sam2.1_hiera_large.pt")
+        sam2_checkpoint = os.path.normpath(sam2_checkpoint)
+        print(sam2_checkpoint)
+
+        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(DEVICE)
+
+        sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE, mode='eval')
+
+        predictor = SAM2ImagePredictor(sam2_model)
+
+        # from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+        # CHECKPOINT_PATH = '..\\..\\models\\sam_vit_h_4b8939.pth'
+        # MODEL_TYPE = "vit_h"
+        # sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH)
+        # sam.to(device=DEVICE)
+        # predictor = SAM2ImagePredictor(sam)
+
+        input_point = np.array([[619, 396]])
+        input_label = np.array([1])
+
+        model_filename = self.buildModelDlg.get_selected_model_path_and_filename()
+        predictor.model.load_state_dict(torch.load(model_filename, map_location=torch.device(DEVICE)))
+
+        if 0:
+            predictor.model.load_state_dict(torch.load(".\\models\\model_20 (DK Grand Island)-002.torch"))
+
+        if 0:
+            folder = self.buildModelDlg.get_images_folder()
+            images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+            for image in images:
+                image = Image.open(f"{folder}\\{image}").convert("RGB")
+                plt.figure(figsize=(10, 10))
+                plt.imshow(image)
+                show_points(input_point, input_label, plt.gca())
+                plt.axis('on')
+                plt.show()
+
+        folder = self.buildModelDlg.get_segmentation_images_folder()
+        images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+
+        progressBar.setRange(0, len(images) + 1)
+
+        for image_index, image in enumerate(images):
+            if progress_bar_closed is False:
+                progressBar.setWindowTitle(image)
+                progressBar.setValue(image_index)
+
+                predictor.set_image(np.array(Image.open(f"{folder}\\{image}").convert("RGB")))
+
+                masks, scores, logits = predictor.predict(
+                    point_coords=input_point,
+                    point_labels=input_label,
+                    multimask_output=True,
+                )
+                sorted_ind = np.argsort(scores)[::-1]
+                masks = masks[sorted_ind]
+                scores = scores[sorted_ind]
+                logits = logits[sorted_ind]
+
+                img = cv2.imread(f"{folder}\\{image}", cv2.COLOR_BGR2RGB)
+                masked_images, masks_only = self.show_masks(img, masks, scores, borders=True)
+
+                for mask_index, composite_mask_and_image in enumerate(masked_images):
+                    filename_only = Path(f"{folder}\\{image}").stem
+
+                    output_folder = f"{folder}\\mask_overlays"
+                    os.makedirs(output_folder, exist_ok=True)
+
+                    filename = f"{filename_only}_mask_overlay_{mask_index}.jpg"
+                    output_file = os.path.join(output_folder, filename)
+                    cv2.imwrite(output_file, np.array(cv2.cvtColor(composite_mask_and_image, cv2.COLOR_RGB2BGR)))
+
+                    # SAVE EACH MASK AS A SEPARATE FILE IF SELECTED
+                    if self.buildModelDlg.getSaveModelMasks():
+                        mask_filename = f"{filename_only}_mask_only_{mask_index}.jpg"
+                        output_file = os.path.join(output_folder, mask_filename)
+                        cv2.imwrite(output_file, np.array(cv2.cvtColor(masks_only[mask_index], cv2.COLOR_RGB2BGR)))
+
+            else:
+                strMessage = 'You have cancelled the image segmentation currently in-progress. Not all images have been segmented.'
+                msgBox = GRIME_AI_QMessageBox('Image Segmentation Terminated', strMessage, QMessageBox.Close)
+                response = msgBox.displayMsgBox()
+                break
+
+        # close the progressBar only if the user did not close it (i.e., terminated image segmentation)
+        if progress_bar_closed is False:
+            progressBar.close()
+        del progressBar
+
+
+    def show_masks(self, image, masks, scores, point_coords=None, box_coords=None, input_labels=None, borders=True):
+        """
+        Display masks on an image with optional points and boxes.
+
+        Args:
+            image (ndarray): The image on which to display the masks.
+            masks (list of ndarray): A list of masks to display.
+            scores (list of float): A list of scores corresponding to each mask.
+            point_coords (list of tuple, optional): Coordinates of points to display. Defaults to None.
+            box_coords (list of tuple, optional): Coordinates of boxes to display. Defaults to None.
+            input_labels (list of int, optional): Labels for the points. Required if point_coords is provided. Defaults to None.
+            borders (bool, optional): Whether to display borders around masks. Defaults to True.
+
+        Raises:
+            AssertionError: If point_coords is provided without input_labels.
+
+        """
+        masked_images = []
+        masks_only = []
+
+        for i, (mask, score) in enumerate(zip(masks, scores)):
+            #JES plt.figure(figsize=(10, 10))
+            #JES plt.imshow(image)
+            #JES mask_image = self.show_mask(mask, plt.gca(), borders=borders)
+            mask_image = self.show_mask(mask, borders=borders)
+
+            if point_coords is not None:
+                assert input_labels is not None
+                show_points(point_coords, input_labels, plt.gca())
+
+            if box_coords is not None:
+                # boxes
+                show_box(box_coords, plt.gca())
+
+            #JES if len(scores) > 1:
+            #JES     plt.title(f"Mask {i + 1}, Score: {score:.3f}", fontsize=18)
+            #JES plt.axis('off')
+            #JES plt.show()
+
+            # Overlay the mask on the original image
+            # Ensure the mask has an alpha channel
+            import cv2
+            # Resize the mask to match the size of the original image
+            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
+            color = np.array([30, 144, 255, 0.6])
+            h, w = mask.shape[-2:]
+            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+            mask_np = np.array(mask_image)
+            mask_np = mask_np.astype(int)
+            mask_cv2 = mask_np
+            mask_cv2 = mask_cv2.astype(np.float32)
+            masks_only.append(mask_cv2)
+
+            image_np = np.array(image)
+            image_cv2 = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGRA)
+            image_cv2 = image_cv2.astype(np.float32)
+
+            combined = cv2.addWeighted(image_cv2, 1, mask_cv2, 0.5, 0)
+
+            masked_images.append(combined)
+
+        return masked_images, masks_only
+
+
+    """
+    Module for displaying masks on images.
+
+    This module provides a function to display a mask on an image with optional random coloring
+    and border drawing.
+
+    Functions:
+        show_mask(mask, ax, random_color=False, borders=True): Displays a mask on an image.
+
+    Example:
+        fig, ax = plt.subplots()
+        mask = np.array([[0, 1], [1, 0]])
+        show_mask(mask, ax, random_color=True, borders=True)
+
+    Author:
+        Your Name
+
+    Date:
+        YYYY-MM-DD
+    """
+
+    #JES def show_mask(self, mask, ax, random_color=False, borders=True):
+    def show_mask(self, mask, random_color=False, borders=True):
+
+        """
+        Displays a mask on an image.
+
+        Args:
+            mask (np.ndarray): The mask to be displayed.
+            ax (matplotlib.axes.Axes): The axes on which to display the mask.
+            random_color (bool, optional): If True, use a random color for the mask. Defaults to False.
+            borders (bool, optional): If True, draw borders around the mask. Defaults to True.
+
+        Returns:
+            None
+
+        """
+        if random_color:
+            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+        else:
+            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
+
+        h, w = mask.shape[-2:]
+        mask = mask.astype(np.uint8)
+        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+
+        if borders:
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+            # Try to smooth contours
+            contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
+            mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2)
+
+        return mask_image
+
+
+    """
+    Module for displaying points on a plot.
+
+    This module provides a function to display positive and negative points on a plot
+    with different colors and markers.
+
+    Functions:
+        show_points(coords, labels, ax, marker_size=375): Displays positive and negative points on a plot.
+
+    Example:
+        fig, ax = plt.subplots()
+        coords = np.array([[1, 2], [3, 4], [5, 6]])
+        labels = np.array([1, 0, 1])
+        show_points(coords, labels, ax)
+
+    Author:
+        Your Name
+
+    Date:
+        YYYY-MM-DD
+    """
+
+    def show_points(self, coords, labels, ax, marker_size=375):
+        """
+        Displays positive and negative points on a plot.
+
+        Args:
+            coords (np.ndarray): Array of coordinates for the points.
+            labels (np.ndarray): Array of labels for the points (1 for positive, 0 for negative).
+            ax (matplotlib.axes.Axes): The axes on which to display the points.
+            marker_size (int, optional): Size of the markers. Defaults to 375.
+
+        Returns:
+            None
+
+        """
+        pos_points = coords[labels == 1]
+        neg_points = coords[labels == 0]
+        ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white',
+                   linewidth=1.25)
+        ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white',
+                   linewidth=1.25)
+
+
+    # ==================================================================================================================
     # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
     # https://pytorch.org/tutorials/beginner/blitz/neural_networks_tutorial.html
     # https://www.cs.toronto.edu/~kriz/cifar.html
-    # ======================================================================================================================
-    def myDeepLearning(self, modelSettings):
+    # ==================================================================================================================
+    #JES def myDeepLearning(self, modelSettings):
 
+        '''
+        # THIS IS THE OLD CODE THAT HAS BEEN ENCAPULATED INTO A CLASS. THE NEW CODE NEEDS TO BE ENAPSULATED INTO THIS
+        # CLASS A.S.A.P!
         #self.tuneSAM()
         DL = GRIME_AI_DeepLearning()
         DL.SAM_001(modelSettings, dailyImagesList)
         #self.SAM_002()
+        '''
 
-        return
+
+    def GRIME_AI_tune_sam2_model(self):
+        training_images_folder = [os.path.normpath(self.buildModelDlg.get_training_images_folder())]
+
+        annotation_file = [self.buildModelDlg.get_annotation_filename()]
+
+        all_images, all_annotations = self.load_images_and_annotations(training_images_folder, annotation_file)
+
+        train_images, val_images, test_images, annotations = self.split_dataset(all_images, all_annotations)
+
+        input_point = np.array([[1254, 934]])
+        input_label = np.array([1])
+
+        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(DEVICE)
+
+        sam2_checkpoint = "CheckPoints\\sam2.1_hiera_large.pt"
+        model_cfg = "configs\\sam2.1\\sam2.1_hiera_l.yaml"
+
+        sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE)
+        predictor = SAM2ImagePredictor(sam2_model)
+        predictor.model.sam_mask_decoder.train(True)  # enable training of mask decoder
+        predictor.model.sam_prompt_encoder.train(True)  # enable training of prompt encoder
+
+        model = SAM2FullModel(predictor.model)
+
+        model.to(DEVICE)
+
+        optimizer = torch.optim.AdamW(predictor.model.parameters(), lr=0.0001, weight_decay=0.001)
+
+        now = datetime.now()
+        print(now)
+        self.GRIME_AI_train_sam(sam2_model, predictor, train_images, annotations, optimizer, val_images, annotations, input_point, input_label,
+                  epochs=30, modelSettings=g_modelSettings)
+        now = datetime.now()
+        print(now)
+
+        now = datetime.now()
+        formatted_time = now.strftime('%d%m_%H%M')
+        plt.plot(self.epoch_list, self.loss_values, marker='*')
+        plt.title('Epoch vs loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('loss')
+        plt.savefig("EpochVsLoss_{}.png".format(formatted_time))
+
+        predictor.model.load_state_dict(torch.load("model_20.torch"))
+
+        num_classes = 2
+        all_true_labels = []
+        all_predicted_labels = []
+
+        coco_data = {
+            "images": [],
+            "annotations": [],
+            "categories": []
+        }
+
+        categories = [
+            {"id": 1, "name": "object"}
+        ]
+        coco_data["categories"].extend(categories)
+
+        image_id = 0
+        annotation_id = 0
+
+        output_dir = Path("output_annotations")
+        output_dir.mkdir(exist_ok=True)
+
+        for idx, image_file in enumerate(test_images):
+
+            image = np.array(Image.open(image_file).convert("RGB"))
+
+            height, width = image.shape[:2]
+            image_info = {
+                "file_name": os.path.basename(image_file),
+                "height": height,
+                "width": width,
+                "id": image_id
+            }
+            coco_data["images"].append(image_info)
+            predictor.set_image(image)
+            masks, scores, _ = predictor.predict(multimask_output=False)
+
+            if masks.size > 0:
+                mask = masks[np.argmax(scores)]
+                mask_tensor = torch.tensor(mask, dtype=torch.uint8)
+
+                true_mask = load_true_mask(image_file, annotations)
+
+                true_labels = true_mask.flatten()
+                predicted_labels = mask_tensor.flatten()
+
+                all_true_labels.extend(true_labels)
+                all_predicted_labels.extend(predicted_labels)
+
+                pos = np.where(mask)
+                xmin = int(np.min(pos[1]))
+                xmax = int(np.max(pos[1]))
+                ymin = int(np.min(pos[0]))
+                ymax = int(np.max(pos[0]))
+                bbox = [xmin, ymin, xmax - xmin, ymax - ymin]
+
+                segmentation = mask.ravel().tolist()
+
+                annotation = {
+                    "id": annotation_id,
+                    "image_id": image_id,
+                    "category_id": 1,
+                    "segmentation": [segmentation],
+                    "area": int(np.sum(mask)),
+                    "bbox": bbox,
+                    "iscrowd": 0
+                }
+                coco_data["annotations"].append(annotation)
+
+                annotation_id += 1
+
+            image_id += 1
+
+        output_file = output_dir / "annotations_coco_format8.json"
+        with open(output_file, "w") as f:
+            json.dump(coco_data, f, indent=4)
+
+        print(f"COCO annotations saved to {output_file}")
+
+    def GRIME_AI_train_sam(self, sam2_model, predictor, train_images, annotations, optimizer, val_images, val_annotations,
+                  input_point, input_label, epochs=20, modelSettings=g_modelSettings):
+        """
+        Train the SAM model using the provided training images and annotations.
+
+        Args:
+            predictor (SAM2ImagePredictor): The predictor object for the SAM model.
+            train_images (list of str): List of file paths to the training images.
+            annotations (dict): A dictionary containing image and annotation data.
+            optimizer (torch.optim.Optimizer): The optimizer for training the model.
+            val_images (list of str, optional): List of file paths to the validation images. Defaults to None.
+            val_annotations (dict, optional): A dictionary containing validation image and annotation data. Defaults to None.
+            input_point (list of tuple): List of input points for mask prediction.
+            input_label (list of int): List of labels corresponding to the input points.
+            epochs (int, optional): Number of training epochs. Defaults to 20.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If an image file is not found in the annotations.
+
+        """
+        ECHO = 0
+        epochs = 50
+
+        sam2_model.train()
+        predictor = SAM2ImagePredictor(sam2_model)
+
+        for epoch in range(epochs):
+            self.epoch_list.append(epoch + 1)
+            epoch_loss = 0.0
+            if ECHO:
+                print(f"Epoch {epoch + 1}/{epochs}")
+
+            np.random.shuffle(train_images)
+            loss_fn = nn.BCEWithLogitsLoss()
+
+            for idx, image_file in enumerate(train_images):
+                image = np.array(Image.open(image_file).convert("RGB"))
+                true_mask = self.load_true_mask(image_file, annotations)
+
+                if true_mask is None:
+                    print(f"No annotation found for image {image_file}, skipping.")
+                    continue
+
+                predictor.set_image(image)
+
+                # Prepare prompts for mask prediction
+                mask_input, unnorm_coords, labels, unnorm_box = predictor._prep_prompts(input_point, input_label,
+                                                                                        box=None, mask_logits=None,
+                                                                                        normalize_coords=True)
+                sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(
+                    points=(unnorm_coords, labels),
+                    boxes=None,
+                    masks=None
+                )
+
+                # Mask decoder prediction
+                batched_mode = unnorm_coords.shape[0] > 1  # multi-object prediction
+                high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in
+                                     predictor._features["high_res_feats"]]
+                low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
+                    image_embeddings=predictor._features["image_embed"][-1].unsqueeze(0),
+                    image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_embeddings,
+                    dense_prompt_embeddings=dense_embeddings,
+                    multimask_output=True,
+                    repeat_image=batched_mode,
+                    high_res_features=high_res_features,
+                )
+                prd_masks = predictor._transforms.postprocess_masks(low_res_masks,
+                                                                    predictor._orig_hw[-1])  # Upscale masks
+
+                # Loss calculations
+                gt_mask = torch.tensor(true_mask.astype(np.float32)).cuda().unsqueeze(0)
+                prd_mask = torch.sigmoid(prd_masks[:, 0]).unsqueeze(0)
+
+                try:
+                    # Segmentation Loss
+                    seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log(
+                        (1 - prd_mask) + 0.00001)).mean()
+
+                    # Score Loss (IOU)
+                    inter = (gt_mask * (prd_mask > 0.5)).sum(1).sum(1)
+                    iou = inter / (gt_mask.sum(1).sum(1) + (prd_mask > 0.5).sum(1).sum(1) - inter)
+                    score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
+
+                    # Combine losses
+                    loss = seg_loss + score_loss * 0.05
+
+                    # Backpropagation with mixed precision
+                    optimizer.zero_grad()
+                    with autocast():
+                        self.scaler.scale(loss).backward()
+                        self.scaler.step(optimizer)
+                        self.scaler.update()
+
+                    epoch_loss += loss.detach().item()
+                    if ECHO:
+                        print(f"Image {idx + 1}/{len(train_images)} processed. Loss: {loss.item()}")
+                except:
+                    print("Something is wrong with the tensors!")
+
+            # Average epoch loss
+            avg_epoch_loss = epoch_loss / len(train_images)
+            self.loss_values.append(avg_epoch_loss)
+
+            if ECHO:
+                print(f"Epoch {epoch + 1} Training Loss: {avg_epoch_loss}")
+
+            # Validation step
+            if val_images is not None and val_annotations is not None:
+                val_loss = 0.0
+                with torch.no_grad():
+                    for val_idx, val_image_file in enumerate(val_images):
+                        val_image = np.array(Image.open(val_image_file).convert("RGB"))
+                        val_true_mask = self.load_true_mask(val_image_file, val_annotations)
+
+                        if val_true_mask is None:
+                            if ECHO:
+                                print(f"No annotation found for validation image {val_image_file}, skipping.")
+                            continue
+
+                        predictor.set_image(val_image)
+                        masks, scores, _ = predictor.predict(point_coords=input_point, point_labels=input_label,
+                                                             multimask_output=False)
+
+                        if masks.size > 0:
+                            best_mask = masks[np.argmax(scores)]
+                            # best_mask_tensor = torch.tensor(best_mask, dtype=torch.float32, attn_implementation="flash_attention_2").unsqueeze(0).to("cuda")
+                            # val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32, attn_implementation="flash_attention_2").unsqueeze(0).to("cuda")Salt Lake City, Utah
+                            best_mask_tensor = torch.tensor(best_mask, dtype=torch.float32).unsqueeze(0).to("cpu")
+                            val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32).unsqueeze(0).to(
+                                "cpu")
+
+                            val_loss += loss_fn(best_mask_tensor, val_true_mask_tensor).item()
+
+                avg_val_loss = val_loss / len(val_images)
+                if ECHO:
+                    print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss}")
+        torch.save(predictor.model.state_dict(), "model_20.torch")
+
+
+    """
+    Module for loading images and annotations.
+
+    This module provides a function to load images and their corresponding annotations
+    from specified folders and annotation files.
+
+    Functions:
+        load_images_and_annotations(folders, annotation_files): Loads images and annotations from the given folders and annotation files.
+
+    Example:
+        folders = ['path/to/folder1', 'path/to/folder2']
+        annotation_files = ['path/to/annotations1.json', 'path/to/annotations2.json']
+        images, annotations = load_images_and_annotations(folders, annotation_files)
+
+    Author:
+        Your Name
+
+    Date:
+        YYYY-MM-DD
+    """
+    def load_images_and_annotations(self, folders, annotation_files):
+        """
+        Loads images and annotations from the given folders and annotation files.
+
+        Args:
+            folders (list): List of folder paths containing images.
+            annotation_files (list): List of paths to annotation files.
+
+        Returns:
+            tuple: A tuple containing:
+                - all_images (list): List of paths to all images.
+                - all_annotations (dict): Dictionary containing 'images' and 'annotations' lists.
+
+        """
+
+        if 0:
+            all_images = []
+            all_annotations = {'images': [], 'annotations': []}
+
+            for folder, annotation_file in zip(folders, annotation_files):
+                images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+                all_images.extend([(os.path.join(folder, img)) for img in images])
+
+                with open(annotation_file, 'r') as f:
+                    annotations = json.load(f)
+
+                all_annotations['images'].extend(annotations['images'])
+                all_annotations['annotations'].extend(annotations['annotations'])
+        else:
+            all_images = []
+            all_annotations = {'images': [], 'annotations': []}
+
+            for folder, annotation_file in zip(folders, annotation_files):
+                water_category_id = None
+                images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+                all_images.extend([(os.path.join(folder, img)) for img in images])
+
+                with open(annotation_file, 'r') as f:
+                    annotations = json.load(f)
+
+                # Retrieve 'water' category ID if not already found
+                if water_category_id is None:
+                    for category in annotations.get('categories', []):
+                        if category['name'] == 'water':
+                            water_category_id = category['id']
+                            break
+
+                if water_category_id is None:
+                    raise ValueError("The 'water' category is not found in the categories list.")
+
+                # Filter annotations for 'water' category
+                water_annotations = [
+                    ann for ann in annotations['annotations']
+                    if ann['category_id'] == water_category_id
+                ]
+
+                # Add filtered annotations and images
+                all_annotations['images'].extend(annotations['images'])
+                all_annotations['annotations'].extend(water_annotations)
+
+                return all_images, all_annotations
+
+        return all_images, all_annotations
+
+    """
+    Module: dataset_splitter
+
+    This module provides a function to split a dataset of images and annotations into
+    training, validation, and test sets.
+
+    Functions:
+        split_dataset(all_images, annotations, train_split=0.7, val_split=0.15, test_split=0.15)
+            Splits the dataset into training, validation, and test sets based on the given split ratios.
+
+    Example:
+        all_images = ['image1.jpg', 'image2.jpg', 'image3.jpg', ...]
+        annotations = {'images': [...], 'annotations': [...]}
+        train_images, val_images, test_images, annotations = split_dataset(all_images, annotations)
+
+    Author: Your Name
+    Date: YYYY-MM-DD
+    """
+
+    def split_dataset(self, all_images, annotations, train_split=0.7, val_split=0.15, test_split=0.15):
+        """
+        Splits the dataset into training, validation, and test sets.
+
+        Args:
+            all_images (list): List of all image paths.
+            annotations (dict): Dictionary containing image and annotation data.
+            train_split (float): Proportion of the dataset to include in the training set.
+            val_split (float): Proportion of the dataset to include in the validation set.
+            test_split (float): Proportion of the dataset to include in the test set.
+
+        Returns:
+            tuple: A tuple containing:
+                - train_images (list): List of training image paths.
+                - val_images (list): List of validation image paths.
+                - test_images (list): List of test image paths.
+                - annotations (dict): Dictionary containing image and annotation data.
+
+        """
+        random.shuffle(all_images)
+
+        num_images = len(all_images)
+        train_size = int(train_split * num_images)
+        val_size = int(val_split * num_images)
+
+        train_images = all_images[:train_size]
+        val_images = all_images[train_size:train_size + val_size]
+        test_images = all_images[train_size + val_size:]
+
+        print(
+            f"Train: {len(train_images)} images, Validation: {len(val_images)} images, Test: {len(test_images)} images")
+        return train_images, val_images, test_images, annotations
+
+
+    def load_true_mask(self, image_file, annotations):
+        """
+        Load the true mask for a given image file from annotations.
+
+        Args:
+            image_file (str): The path to the image file.
+            annotations (dict): A dictionary containing image and annotation data.
+
+        Returns:
+            ndarray: The mask for the image as a float32 numpy array. Returns None if no annotation is found.
+
+        Raises:
+            ValueError: If the image file is not found in the annotations.
+
+        """
+        # Find corresponding annotation for the image
+        file_name_only = os.path.basename(image_file)
+        image_info = next((img for img in annotations['images'] if img['file_name'] == file_name_only), None)
+        print(image_info)
+
+        if image_info is None:
+            raise ValueError(f"Image file {image_file} not found in annotations.")
+
+        image_id = image_info['id']
+
+        annotation = next((ann for ann in annotations['annotations'] if ann['image_id'] == image_id), None)
+        if annotation is None:
+            return None
+
+        height = image_info['height']
+        width = image_info['width']
+
+        segmentation = annotation['segmentation']
+        rle = coco_mask.frPyObjects(segmentation, height, width)
+        mask = coco_mask.decode(rle)
+        return mask.astype(np.float32)
 
 
     # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonDeepLearning(self):
-    #    strMessage = 'This is for producing models for Deep Learning. This is experimental at this time.'
-    #    msgBox = GRIME_AI_QMessageBox('Deep Learning', strMessage, QMessageBox.Close)
-    #    response = msgBox.displayMsgBox()
-
         self.myDeepLearning(g_modelSettings)
 
     # ==================================================================================================================
@@ -2131,33 +3125,42 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def onMyToolBarCreateMask(self):
 
-        if self.colorSegmentationDlg == None:
-            self.labelOriginalImage.setDrawingMode(DrawingMode.MASK)
+        if self.maskEditorDlg == None:
+            if self.colorSegmentationDlg == None:
+                self.labelOriginalImage.setDrawingMode(DrawingMode.MASK)
 
-            self.maskEditorDlg = GRIME_AI_MaskEditorDlg()
+                self.maskEditorDlg = GRIME_AI_MaskEditorDlg()
 
-            self.maskEditorDlg.addMask_Signal.connect(self.addMask)
-            self.maskEditorDlg.generateMask_Signal.connect(self.generateMask)
-            self.maskEditorDlg.drawingColorChange_Signal.connect(self.changePolygonColor)
-            self.maskEditorDlg.reset_Signal.connect(self.resetMask)
-            self.maskEditorDlg.polygonFill_Signal.connect(self.fillPolygonChanged)
+                self.maskEditorDlg.addMask_Signal.connect(self.addMask)
+                self.maskEditorDlg.generateMask_Signal.connect(self.generateMask)
+                self.maskEditorDlg.drawingColorChange_Signal.connect(self.changePolygonColor)
+                self.maskEditorDlg.reset_Signal.connect(self.resetMask)
+                self.maskEditorDlg.polygonFill_Signal.connect(self.fillPolygonChanged)
 
-            self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
+                self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
+                self.maskEditorDlg.close_signal.connect(self.maskDialogClose)
+                self.maskEditorDlg.accepted.connect(self.maskDialogClose)
+                self.maskEditorDlg.rejected.connect(self.maskDialogClose)
 
-            self.maskEditorDlg.show()
+                self.maskEditorDlg.show()
+            else:
+                strMessage = 'Please close the Color Segmentatoin toolbox if you want to use the Mask Editor toolbox.\nThis will be resolved in a future design change.'
+                msgBox = GRIME_AI_QMessageBox('Tool Conflict', strMessage, QMessageBox.Yes | QMessageBox.No)
+                response = msgBox.displayMsgBox(on_top=True)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    def fillPolygonChanged(self, bFill):
-        self.labelOriginalImage.enablePolygonFill(bFill)
 
     # ------------------------------------------------------------------------------------------------------------------
     def maskDialogClose(self):
-        if self.maskEditorDlg == None:
+        if self.maskEditorDlg != None:
             self.maskEditorDlg.close()
             del self.maskEditorDlg
             self.maskEditorDlg = None
 
         self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def fillPolygonChanged(self, bFill):
+        self.labelOriginalImage.enablePolygonFill(bFill)
 
     # ------------------------------------------------------------------------------------------------------------------
     def resetMask(self):
@@ -2489,7 +3492,7 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     # THE SOFTWARE IS NOW DESIGNED TO REQUIRE THE IMAGES TO BE DOWNLOADED FIRST FOR A VARIETY OF REASONS
     # bSaveImages = True
     bSaveImages = False     #JES - Is this flag needed any longer?
-    imageOutputFolder = self.fileFolderDlg.lineEditImageFolder.text()
+    imageOutputFolder = self.fileFolderDlg.lineEdit_images_folder.text()
 
     # if self.checkBoxSaveImages.isChecked():
     #    bSaveImages = True
@@ -2515,8 +3518,6 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     progressBar.show()
 
     # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    imageIndex = 0
-
     files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
 
     # traverse all files in folder that meet the criteria for retrieval
@@ -2529,11 +3530,10 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     #    and also add the file's EXIF data to a CSV EXIF log file if the option is selected by the user. Last but
     #    not least, if the user selects the option to copy the image to a separate folder, then copy the file to
     #    the folder specified by the user
-    for file in files:
+    for image_index, file in enumerate(files):
         progressBar.setWindowTitle(file)
-        progressBar.setValue(imageIndex)
+        progressBar.setValue(image_index)
         progressBar.repaint()
-        imageIndex += 1
 
         ext = os.path.splitext(file)[-1].lower()
 
@@ -2618,34 +3618,32 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def processLocalImage(self, nImageIndex=0):
+def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
     global currentImage
-    global imageFileFolder
 
 
     myGRIMe_Color = GRIME_AI_Color()
 
-    if os.path.exists(imageFileFolder):
-        # videoFilePath = Path(frameFolder)
-        ## JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
-        # videoFileList = [str(pp) for pp in videoFilePath.glob("*.jpg")]
+    # videoFilePath = Path(frameFolder)
+    ## JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
+    # videoFileList = [str(pp) for pp in videoFilePath.glob("*.jpg")]
 
-        global dailyImagesList
-        videoFileList = dailyImagesList.getVisibleList()
+    global dailyImagesList
+    videoFileList = dailyImagesList.getVisibleList()
 
-        if len(videoFileList) > 0:
-            if nImageIndex > gFrameCount:
-                nImageIndex = gFrameCount
+    if len(videoFileList) > 0:
+        if nImageIndex > gFrameCount:
+            nImageIndex = gFrameCount
 
-            inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
+        inputFrame = videoFileList[nImageIndex - 1].fullPathAndFilename  # zero based index
 
-            if os.path.isfile(inputFrame):
-                global currentImageFilename
-                currentImageFilename = inputFrame
-                numpyImage = myGRIMe_Color.loadColorImage(inputFrame)
+        if os.path.isfile(inputFrame):
+            global currentImageFilename
+            currentImageFilename = inputFrame
+            numpyImage = myGRIMe_Color.loadColorImage(inputFrame)
 
-                tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
-                currentImage = QPixmap(tempCurrentImage)
+            tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
+            currentImage = QPixmap(tempCurrentImage)
 
     # ==================================================================================================================
     # DISPLAY IMAGE FROM NEON SITE
@@ -2881,18 +3879,24 @@ def processImage(self, myImage):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def toolbarButtonImageTriage(checkBox_FetchRecursive):
+def toolbarButtonImageTriage_1(folder_path):
+    toolbarButtonImageTriage(folder_path, False)
+
+def toolbarButtonImageTriage(folder_path=[], checkBox_FetchRecursive=False):
     strMessage = 'You are about to perform Image Triage. Would you like to continue?'
     msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
     response = msgBox.displayMsgBox()
 
     if response == QMessageBox.Yes:
-        prompter = promptlib.Files()
-        folder = prompter.dir()
+        if folder_path == []:
+            prompter = promptlib.Files()
+            folder = prompter.dir()
+        else:
+            folder = folder_path
 
         if len(folder) == 0:
             strMessage = 'ERROR! Please specify an image folder containing images to triage.'
-            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
             response = msgBox.displayMsgBox()
         else:
             TriageDlg = GRIME_TriageOptionsDlg()
@@ -2903,7 +3907,7 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
 
                 if len(TriageDlg.getReferenceImageFilename()) == 0 and TriageDlg.getCorrectAlignment() == True:
                     strMessage = 'Please select reference image if you want to correct image alignment.'
-                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
                     response = msgBox.displayMsgBox()
                 else:
                     myTriage = GRIME_AI_ImageTriage()
@@ -2916,15 +3920,15 @@ def toolbarButtonImageTriage(checkBox_FetchRecursive):
                                 TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
 
                     strMessage = 'Image triage is complete!'
-                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
                     response = msgBox.displayMsgBox()
             else:
                 strMessage = 'ABORT! You cancelled the triage operation.'
-                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
     else:
         strMessage = 'ABORT! You cancelled the triage operation.'
-        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
         response = msgBox.displayMsgBox()
 
 
@@ -3394,7 +4398,7 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time):
+def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
     global SITECODE
     global DOMAINCODE
     global gWebImageCount
@@ -3459,7 +4463,6 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
             filename = image.fullPathAndFilename.split('/')[-1]
 
-            downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
             if not os.path.exists(downloadsFilePath):
                 os.makedirs(downloadsFilePath)
             completeFilename = os.path.join(downloadsFilePath, filename)
@@ -3473,9 +4476,11 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
         progressBar.close()
         del progressBar
 
-        strMessage = 'Data download is complete!'
-        msgBox = GRIME_AI_QMessageBox('Data Download', strMessage)
-        response = msgBox.displayMsgBox()
+        #jes LET THE CALLING FUNCTION BE RESPONSIBLE FOR REPORTING DOWNLOAD COMPLETION.
+        #jes MODIFY THIS IN A FUTURE RELEASE TO RETURN A PASS/FAIL MESSAGE TO THE FUNCTION THAT INVOKED THIS FUNCTION.
+        #jes strMessage = 'Data download is complete!'
+        #jes msgBox = GRIME_AI_QMessageBox('Data Download', strMessage)
+        #jes response = msgBox.displayMsgBox()
 
 
 # ======================================================================================================================
@@ -3506,6 +4511,7 @@ def downloadProductDataFiles(self, item):
     global dailyImagesList
     global currentImageIndex
 
+    missing_data_message = ""
     nitrateList = []
     nError = 0;
 
@@ -3516,29 +4522,29 @@ def downloadProductDataFiles(self, item):
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
     NEON_download_file_path = self.edit_NEONSaveFilePath.text()
-    JsonEditor().update_json_entry("NEON_Image_Folder", NEON_download_file_path)
+    JsonEditor().update_json_entry("NEON_Root_Folder", NEON_download_file_path)
 
     if len(NEON_download_file_path) == 0:
-        strMessage = 'A download folder has not been specified. Would you like to use the default GRIME-AI download folder?'
-        msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+        strMessage = 'A download folder has not been specified. Would you like to use the last GRIME-AI NEON download folder?'
+        msgBox = GRIME_AI_QMessageBox('NEON Root Download Folder', strMessage, QMessageBox.Yes | QMessageBox.No)
         response = msgBox.displayMsgBox()
 
         if response == QMessageBox.Yes:
-            NEON_download_file_path = os.path.expanduser('~')
-            NEON_download_file_path = os.path.join(NEON_download_file_path, 'Documents')
-            NEON_download_file_path = os.path.join(NEON_download_file_path, 'GRIMe-AI')
-            if not os.path.exists(NEON_download_file_path):
-                os.makedirs(NEON_download_file_path)
-            NEON_download_file_path = os.path.join(NEON_download_file_path, 'Downloads')
-            if not os.path.exists(NEON_download_file_path):
-                os.makedirs(NEON_download_file_path)
+            #NEON_download_file_path = os.path.expanduser('~')
+            #NEON_download_file_path = os.path.join(NEON_download_file_path, 'Documents')
+            #NEON_download_file_path = os.path.join(NEON_download_file_path, 'GRIMe-AI')
 
+            NEON_download_file_path = JsonEditor().getValue("NEON_Root_Folder")
+
+            if not os.path.exists(NEON_download_file_path):
+                os.makedirs(NEON_download_file_path)
             self.edit_NEONSaveFilePath.setText(NEON_download_file_path)
-            JsonEditor().update_json_entry("NEON_Image_Folder", NEON_download_file_path)
+            JsonEditor().update_json_entry("NEON_Root_Folder", NEON_download_file_path)
     else:
         # MAKE SURE THE PATH EXISTS. IF IT DOES NOT, THEN CREATE IT.
         if not os.path.exists(NEON_download_file_path):
             os.makedirs(NEON_download_file_path)
+
 
     # --------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
@@ -3562,9 +4568,13 @@ def downloadProductDataFiles(self, item):
             # PHENOCAM IMAGES
             # ----------------------------------------------------------------------------------------------------------
             if nProductID == 20002:
-                DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time)
+                downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
+                if not os.path.exists(downloadsFilePath):
+                    os.makedirs(downloadsFilePath)
 
-                processLocalImage(self)
+                DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath)
+
+                processLocalImage(self, imageFileFolder=downloadsFilePath)
 
             # ALL OTHER NEON DATA
             # ----------------------------------------------------------------------------------------------------------
@@ -3589,18 +4599,25 @@ def downloadProductDataFiles(self, item):
                         missingMonths.append(month)
 
                 if monthCount == 0:
-                    msgBox = GRIME_AI_QMessageBox('NEON Error!', 'Data is not available for some or all of the dates selected!')
-                    response = msgBox.displayMsgBox()
+                    missing_data_message = missing_data_message + 'NEON Error!  ' + strProductIDCell + 'Data is not available for some or all of the dates selected!\n'
                 elif (monthCount < len(dateRange)):
                     strMsg = '%d of %d months unavailable: %s' % (len(missingMonths), len(dateRange), missingMonths)
-                    msgBox = GRIME_AI_QMessageBox('Partial Download!', strMsg)
-                    response = msgBox.displayMsgBox()
+                    missing_data_message = missing_data_message + 'Partial Download!\n   ' + strProductIDCell + strMsg + '\n'
 
                 if monthCount > 0:
-                    nError = myNEON_API.FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, NEON_download_file_path)
+                    downloadsFilePath = os.path.join(NEON_download_file_path, 'Data')
+                    if not os.path.exists(downloadsFilePath):
+                        os.makedirs(downloadsFilePath)
+
+                    nError = myNEON_API.FetchData(SITECODE, strProductIDCell, strStartYearMonth, strEndYearMonth, downloadsFilePath)
         else:
-            msgBox = GRIME_AI_QMessageBox('NEON Error!', 'Product not available!')
-            response = msgBox.displayMsgBox()
+            missing_data_message = missing_data_message + 'NEON Error!\n  ' + strProductIDCell + 'Product not available!' + '\n'
+
+    if missing_data_message != "":
+        msgBox = GRIME_AI_QMessageBox('Download Error!', missing_data_message, buttons=QMessageBox.Close)
+    else:
+        msgBox = GRIME_AI_QMessageBox('Download Complete!', 'Download Complete!', buttons=QMessageBox.Close)
+    response = msgBox.displayMsgBox()
 
         # ----------------------------------------------------------------------------------------------------------
         # NITRATE DATA
@@ -3689,16 +4706,17 @@ def labelEdgeImageDoubleClickEvent(self):
 def NEON_labelOriginalImageDoubleClickEvent(self):
     global currentImage
 
-    img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+    if currentImage != []:
+        img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
 
-    self.setMouseTracking(False)
+        self.setMouseTracking(False)
 
-    cv2.imshow('Original', img)
+        cv2.imshow('Original', img)
 
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-    self.setMouseTracking(True)
+        self.setMouseTracking(True)
 
 
 # ======================================================================================================================
@@ -3776,17 +4794,18 @@ def findAvailableMonths(item):
     global SITECODE
 
     PRODUCTCODE = item
+    monthList = {}
 
     # RETRIEVE INFORMATION FROM THE NEON WEBSITE FOR THE PARTICULAR SITE
     site_json = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
-    # EXTRACT THE AVAILABLE MONTH AND THE URL FOR THE DATA FOR EACH AVAILABLE MONTH
-    monthList = {}
-    for product in site_json['data']['dataProducts']:
-        if (product['dataProductCode'] == PRODUCTCODE):
-            monthList['availableMonths'] = product['availableMonths']
-            monthList['availableDataUrls'] = product['availableDataUrls']
-            break
+    if site_json is not []:
+        # EXTRACT THE AVAILABLE MONTH AND THE URL FOR THE DATA FOR EACH AVAILABLE MONTH
+        for product in site_json['data']['dataProducts']:
+            if (product['dataProductCode'] == PRODUCTCODE):
+                monthList['availableMonths'] = product['availableMonths']
+                monthList['availableDataUrls'] = product['availableDataUrls']
+                break
 
     return (monthList)
 
@@ -3886,7 +4905,15 @@ def test(img):
 # ======================================================================================================================
 #
 # ======================================================================================================================
+#jes @hydra.main(config_path=None, config_name=None, version_base=None)
+#jes def main(cfg: DictConfig):
 if __name__ == '__main__':
+    if 0:
+        if hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
+            hydra.core.global_hydra.GlobalHydra.instance().clear()
+        else:
+            hydra.initialize(config_path=None)
+
 
     #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
     #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
@@ -3903,11 +4930,6 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     app.processEvents()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
-    # ------------------------------------------------------------------------------------------------------------------
-    GRIME_AI_Utils().createGRIMeFolders(full)
-
     frame.graphicsView.setVisible(True)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -3920,6 +4942,7 @@ if __name__ == '__main__':
 
     # Run the program
     sys.exit(app.exec())
+
 
 '''
     from torchvision import models
@@ -4229,10 +5252,10 @@ for epoch in range(num_epochs):
 
         with torch.no_grad():
             val_loss_dict = model(images, targets)
+# Save the trained model
     
     # Print training and validation losses
     print(f'Epoch [{epoch}/{num_epochs}], Training Loss: {losses.item()}, Validation Loss: {sum(val_loss_dict.values()).item()}')
 
-# Save the trained model
 torch.save(model.state_dict(), 'trained_model.pth')
 '''

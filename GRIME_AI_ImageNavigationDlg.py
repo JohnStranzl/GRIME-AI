@@ -38,8 +38,8 @@ class GRIME_ImageNavigationDlg(QDialog):
         self.spinBoxImageIndex.editingFinished.connect(self.spinBoxChanged)
         self.spinBoxImageIndex.valueChanged.connect(self.spinBoxChanged)
 
-        self.pushButtonPlay.setStyleSheet('QPushButton {background-color: steelblue;}')
-        self.pushButtonStop.setStyleSheet('QPushButton {background-color: steelblue;}')
+        self.pushButtonPlay.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButtonStop.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
     # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------

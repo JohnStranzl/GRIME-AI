@@ -1,10 +1,21 @@
-import torch
-import torchvision
-from torchvision.models.detection import MaskRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
-from torchvision.transforms import transforms
-from torch.utils.data import DataLoader
-from torchvision.datasets import CocoDetection
+import sys
+
+try:
+    import torch
+
+    import torchvision
+    from torchvision.models.detection import MaskRCNN
+    from torchvision.models.detection.rpn import AnchorGenerator
+    from torchvision.transforms import transforms
+    from torch.utils.data import DataLoader
+    from torchvision.datasets import CocoDetection
+    print("COCO Test: PyTorch imported successfully.")
+except ImportError as e:
+    print("COCO Test: Error importing PyTorch:", e)
+    # Remove the faulty package from sys.modules to prevent further issues
+    if 'torch' in sys.modules:
+        del sys.modules['torch']
+
 
 # Define transformations for data augmentation
 transform = transforms.Compose([

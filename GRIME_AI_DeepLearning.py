@@ -1,17 +1,24 @@
-from ultralytics import SAM
 import os
+import sys
 import cv2
 import supervision as sv
-import torch
+
+try:
+    import torch
+
+    print("GRIME AI Deep Learning: PyTorch imported successfully.")
+except ImportError as e:
+    print("GRIME AI Deep Learning: Error importing PyTorch:", e)
+    # Remove the faulty package from sys.modules to prevent further issues
+    if 'torch' in sys.modules:
+        del sys.modules['torch']
+
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 from GRIME_QProgressWheel import QProgressWheel
 import shutil
-from constants import modelSettingsClass
-
-import matplotlib.pyplot as plt
 
 
-class GRIME_AI_DeepLearning():
+class GRIME_AI_DeepLearning:
 
     # ======================================================================================================================
     #
@@ -27,7 +34,10 @@ class GRIME_AI_DeepLearning():
 
         # ====================================================================================================
         DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        CHECKPOINT_PATH = 'sam_vit_h_4b8939.pth'
+        #CHECKPOINT_PATH = 'sam_vit_h_4b8939.pth'
+        #CHECKPOINT_PATH = 'sam_model.pth'
+
+        CHECKPOINT_PATH = modelSettings.model_file
         MODEL_TYPE = "vit_h"
         sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH)
         sam.to(device=DEVICE)
@@ -87,10 +97,7 @@ class GRIME_AI_DeepLearning():
     # ======================================================================================================================
     def SAM_002(self, modelSettings, dailyImagesList):
         from ultralytics import SAM
-        import cv2
         import supervision as sv
-        import torch
-        from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
         import matplotlib.pyplot as plt
 
         # ====================================================================================================

@@ -33,13 +33,14 @@ class GRIME_CompositeSliceDlg(QDialog):
         self.label_Image.setSliceWidth(self.sliceWidth)
 
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        #self.imageIndexSignal.connect(parent.getImageIndex )
-
+        #JES - WHY DID I SAVE THIS? self.imageIndexSignal.connect(parent.getImageIndex )
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         self.horizontalSlider.valueChanged.connect(self.valuechange)
         self.spinBox_Width.valueChanged.connect(self.spinBox_WidthChanged)
 
         self.pushButton_Generate.clicked.connect(self.pushButton_Generate_Clicked)
+        self.pushButton_Generate.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
         self.pushButton_Cancel.clicked.connect(self.pushButton_Cancel_Clicked)
 
     # ----------------------------------------------------------------------------------------------------

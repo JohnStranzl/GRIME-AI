@@ -1,15 +1,27 @@
 import os
 import cv2
-import imageio
-
-from GRIME_AI_Utils import GRIMe_Utils
-from GRIME_AI_Color import GRIMe_Color
-from GRIME_QProgressWheel import QProgressWheel
 import datetime
 
-class GRIMe_Video:
+# VIDEO CREATION PACKAGES
+# ----------------------------------------------------------------------------------------------------------------------
+import imageio
+
+#jes from moviepy.editor import ImageSequenceClip
+
+#jes This line only if using PIL instead of imageio
+#jes from PIL import Image
+
+
+# GRIME-AI Classes
+# ----------------------------------------------------------------------------------------------------------------------
+from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_Utils import GRIME_AI_Utils
+from GRIME_AI_Color import GRIME_AI_Color
+
+
+class GRIME_Video:
     def __init__(self):
-        self.className = "GRIMe_Video"
+        self.className = "GRIME_Video"
 
     # ======================================================================================================================
     #
@@ -18,7 +30,7 @@ class GRIMe_Video:
 
         out = None
 
-        myGRIMe_Color = GRIMe_Color()
+        myGRIMe_Color = GRIME_AI_Color()
 
         filePath = os.path.join(rootFolder, "Videos")
         if not os.path.exists(filePath):
@@ -27,9 +39,10 @@ class GRIMe_Video:
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')
 
-        imageCount = GRIMe_Utils.getImageCount(rootFolder, extensions)
+        myGRIMEAI_utils = GRIME_AI_Utils()
+        imageCount = myGRIMEAI_utils.getImageCount(rootFolder, extensions)
 
-        progressBar = QProgressWheel(0, imageCount + 1)
+        progressBar = QProgressWheel(0, imageCount)
         progressBar.show()
 
         for imageIndex, file in enumerate(os.listdir(rootFolder)):
@@ -51,6 +64,7 @@ class GRIMe_Video:
 
         out.release()
 
+        progressBar.close()
         del progressBar
 
 
@@ -66,31 +80,47 @@ class GRIMe_Video:
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')
 
-        imageCount = GRIMe_Utils.getImageCount(rootFolder, extensions)
+        myGRIMEAI_utils = GRIME_AI_Utils()
+        imageCount = myGRIMEAI_utils.getImageCount(rootFolder, extensions)
 
-        progressBar = QProgressWheel(0, imageCount + 1)
+        progressBar = QProgressWheel(0, 0)
         progressBar.show()
 
         filenames = []
 
         # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-        files = GRIMe_Utils.getFileList(filePath, extensions, bFetchRecursive)
+        files = myGRIMEAI_utils.getFileList(rootFolder, extensions)
 
+        # APPEND THE SOURCE FOLDER PATH AND THE FILENAME
         for imageIndex, file in enumerate(files):
-            ext = os.path.splitext(file)[-1].lower()
-
-            if ext in extensions:
-                progressBar.setValue(imageIndex)
-
+            if os.path.splitext(file)[-1].lower() in extensions:
                 filenames.append(os.path.join(filePath, file))
 
         images = []
         gifFile = 'Original_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.gif'
-        for filename in filenames:
-            images.append(imageio.imread(filename))
+
+        progressBar.setRange(0, len(filenames)-1)
+
+        for file_index, filename in enumerate(filenames):
+            progressBar.setValue(file_index)
+
+            images.append(imageio.v3.imread(filename))
+
+            #jes This line only if using PIL instead of imageio
+            #jes images.append(Image.open(filename))
+
+            #jes This line only if using moviepy instead of imageio
+            #jes images.append(os.path.join(rootFolder, filename))  # Changed line
 
         gifFile = os.path.join(filePath, gifFile)
-        imageio.mimsave(gifFile, images, duration=0.25)
+        imageio.v3.imwrite(gifFile, images, duration=0.25)
 
+        #jes This line only if using PIL instead of imageio
+        #jes images[0].save(gifFile, save_all=True, append_images=images[1:], duration=250, loop=0)
+
+        #jes This line only if using PIL instead of imageio
+        #jes clip = ImageSequenceClip(images, fps=4)
+        #jes clip.write_gif(gifFile)  # Changed line
+
+        progressBar.close()
         del progressBar
-

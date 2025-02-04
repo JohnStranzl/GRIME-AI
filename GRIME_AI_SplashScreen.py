@@ -29,7 +29,7 @@ class GRIME_AI_SplashScreen(QSplashScreen):
 
         if len(strVersion) > 0:
             # CREATE A QPAINTER INSTANCE AND PASS IN THE QPIXMAP TO BEGIN PAINTING ONTO IT
-            painter = QPainter(pixmap)
+            painter = QPainter(self.pixmap)
 
             # SELECT FONT AND FONT COLOR
             painter.setFont(QFont('Arial', 8))
