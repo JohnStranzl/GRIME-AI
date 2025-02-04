@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.5.8"
+#define MyAppVersion "0.0.5.11d"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -27,7 +27,7 @@ DisableProgramGroupPage=yes
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_5_8 Setup
+OutputBaseFilename=GRIME-AI 0_0_5_11d Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
@@ -44,13 +44,31 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[Dirs]
+Name: "{app}\models"
+
 [Files]
+;
+; GRIME-AI application
 Source: "C:\Users\johns\pycharmprojects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+;
+; 3rd party installers
 Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
-Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
+;
+; machine learning files
+Source: "C:\Users\johns\pycharmprojects\neonAI\sam2\*.*"; DestDir: "{app}\sam2"
+;Source: "C:\Users\johns\pycharmprojects\neonAI\sam2.1\checkpoints\*.*"; DestDir: "{app}\sam2.1\checkpoints"
+;Source: "C:\Users\johns\pycharmprojects\neonAI\models\sam_vit_h_4b8939.pth"; DestDir: "{app}\models"
+;
+; user interface files
 Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+;
+; documentation
+Source: "C:\Users\johns\pycharmprojects\neonAI\Documentation\GRIME-AI_v0059_v2.pdf"; DestDir: "{app}\Documentation"
+;
+; miscellaneous
 ; Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -67,6 +85,7 @@ Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "R_HOME"; Value
 ; cmd line: r.exe -e "install.packages('neonUtilities', repos='https://cran.rstudio.com/')"
 Filename: "{commonpf64}\R\R-4.4.1\bin\x64\r.exe"; Parameters: "-e ""install.packages('neonUtilities', repos='https://cran.rstudio.com/')"""
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{cmd}"; Parameters: "/C pip install torch torchvision"; WorkingDir: "{app}";
 
 [Code]
 procedure RunOtherInstaller;
