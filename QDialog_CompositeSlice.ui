@@ -57,11 +57,19 @@
   <widget class="QLabel" name="label">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>40</x>
      <y>8</y>
-     <width>55</width>
+     <width>56</width>
      <height>16</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>9</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+    </font>
    </property>
    <property name="text">
     <string>Position</string>
@@ -70,11 +78,17 @@
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>224</x>
+     <x>208</x>
      <y>63</y>
-     <width>55</width>
-     <height>16</height>
+     <width>71</width>
+     <height>20</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>10</pointsize>
+    </font>
    </property>
    <property name="text">
     <string>Narrower</string>
@@ -84,10 +98,16 @@
    <property name="geometry">
     <rect>
      <x>360</x>
-     <y>64</y>
-     <width>41</width>
-     <height>16</height>
+     <y>62</y>
+     <width>51</width>
+     <height>20</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>10</pointsize>
+    </font>
    </property>
    <property name="text">
     <string>Wider</string>
@@ -118,11 +138,17 @@
    </property>
    <property name="geometry">
     <rect>
-     <x>70</x>
+     <x>100</x>
      <y>6</y>
      <width>61</width>
      <height>21</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>9</pointsize>
+    </font>
    </property>
    <property name="readOnly">
     <bool>true</bool>
@@ -136,6 +162,14 @@
      <width>80</width>
      <height>25</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>10</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+    </font>
    </property>
    <property name="text">
     <string>Generate</string>

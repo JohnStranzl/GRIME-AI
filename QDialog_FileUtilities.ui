@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1033</width>
-    <height>503</height>
+    <width>1030</width>
+    <height>400</height>
    </rect>
   </property>
   <property name="font">
@@ -17,16 +17,71 @@
    </font>
   </property>
   <property name="windowTitle">
-   <string>Image Utilities</string>
+   <string>Data Exploration</string>
   </property>
+  <widget class="Line" name="line_2">
+   <property name="geometry">
+    <rect>
+     <x>19</x>
+     <y>200</y>
+     <width>1001</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>0</width>
+     <height>0</height>
+    </size>
+   </property>
+   <property name="font">
+    <font>
+     <family>Arial</family>
+     <pointsize>6</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 127);</string>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Plain</enum>
+   </property>
+   <property name="lineWidth">
+    <number>3</number>
+   </property>
+   <property name="midLineWidth">
+    <number>0</number>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+  </widget>
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>880</x>
-     <y>390</y>
-     <width>80</width>
-     <height>40</height>
+     <x>475</x>
+     <y>345</y>
+     <width>79</width>
+     <height>41</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <family>Calibri</family>
+     <pointsize>12</pointsize>
+     <weight>75</weight>
+     <bold>true</bold>
+     <kerning>true</kerning>
+    </font>
+   </property>
+   <property name="autoFillBackground">
+    <bool>false</bool>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color: rgb(85, 255, 255);
+color: rgb(0, 0, 0);</string>
    </property>
    <property name="orientation">
     <enum>Qt::Horizontal</enum>
@@ -35,487 +90,354 @@
     <set>QDialogButtonBox::Close</set>
    </property>
   </widget>
-  <widget class="Line" name="line_2">
+  <widget class="QGroupBox" name="groupBox">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>291</y>
-     <width>971</width>
-     <height>21</height>
+     <x>20</x>
+     <y>230</y>
+     <width>1001</width>
+     <height>101</height>
     </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>0</width>
-     <height>0</height>
-    </size>
    </property>
    <property name="font">
     <font>
      <family>Arial</family>
-     <pointsize>6</pointsize>
+     <pointsize>9</pointsize>
      <weight>75</weight>
      <bold>true</bold>
     </font>
    </property>
-   <property name="frameShadow">
-    <enum>QFrame::Plain</enum>
+   <property name="styleSheet">
+    <string notr="true"/>
    </property>
-   <property name="lineWidth">
-    <number>3</number>
+   <property name="title">
+    <string>Extract Video Frames</string>
    </property>
-   <property name="midLineWidth">
-    <number>0</number>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
+   <widget class="QPushButton" name="pushButton_ExtractFrames">
+    <property name="geometry">
+     <rect>
+      <x>890</x>
+      <y>50</y>
+      <width>101</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>7</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="autoFillBackground">
+     <bool>false</bool>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: rgb(0, 0, 0);
+background-color: rgb(255, 255, 255);</string>
+    </property>
+    <property name="text">
+     <string>Extract Frames</string>
+    </property>
+   </widget>
+   <widget class="QListWidget" name="MSTlistWidgetVideoFiles">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>50</y>
+      <width>871</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="styleSheet">
+     <string notr="true"/>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_14">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>30</y>
+      <width>180</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="styleSheet">
+     <string notr="true"/>
+    </property>
+    <property name="text">
+     <string>Video File</string>
+    </property>
+   </widget>
   </widget>
-  <widget class="QLineEdit" name="lineEditImageFolder">
+  <widget class="QGroupBox" name="groupBox_2">
    <property name="geometry">
     <rect>
-     <x>40</x>
-     <y>51</y>
-     <width>710</width>
-     <height>30</height>
+     <x>20</x>
+     <y>20</y>
+     <width>1001</width>
+     <height>161</height>
     </rect>
    </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>10</pointsize>
-     <weight>50</weight>
-     <bold>false</bold>
-     <underline>false</underline>
-    </font>
-   </property>
-  </widget>
-  <widget class="QCheckBox" name="checkBox_FetchRecursive">
-   <property name="geometry">
-    <rect>
-     <x>852</x>
-     <y>27</y>
-     <width>121</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="toolTip">
-    <string>Check this box if you want to include in the search all folders beneath the folder provided.</string>
-   </property>
-   <property name="text">
-    <string>Fetch Recursive</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonFetchVideoFilenames">
-   <property name="geometry">
-    <rect>
-     <x>460</x>
-     <y>327</y>
-     <width>160</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="autoFillBackground">
-    <bool>false</bool>
-   </property>
-   <property name="text">
-    <string>Fetch Video Filenames</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonBrowseVideoOutputFolder">
-   <property name="geometry">
-    <rect>
-     <x>753</x>
-     <y>167</y>
-     <width>80</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Browse</string>
-   </property>
-  </widget>
-  <widget class="QLineEdit" name="EditVideoOutputFolder">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>162</y>
-     <width>710</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>10</pointsize>
-     <weight>50</weight>
-     <bold>false</bold>
-     <underline>false</underline>
-    </font>
-   </property>
-   <property name="toolTip">
-    <string>This field is pre-populated and cannot be changed at this time.</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_14">
-   <property name="geometry">
-    <rect>
-     <x>43</x>
-     <y>370</y>
-     <width>180</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Video Files</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonCreateGIF">
-   <property name="geometry">
-    <rect>
-     <x>860</x>
-     <y>178</y>
-     <width>130</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>75</weight>
-     <italic>false</italic>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="toolTip">
-    <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
-   </property>
-   <property name="text">
-    <string>Create GIF</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonExtractFrames">
-   <property name="geometry">
-    <rect>
-     <x>460</x>
-     <y>450</y>
-     <width>160</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="autoFillBackground">
-    <bool>false</bool>
-   </property>
-   <property name="text">
-    <string>Extract Frames</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonBrowseImageFolder">
-   <property name="geometry">
-    <rect>
-     <x>753</x>
-     <y>56</y>
-     <width>80</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>50</weight>
-     <bold>false</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Browse</string>
-   </property>
-  </widget>
-  <widget class="QListWidget" name="listWidgetVideoFilesFolder">
-   <property name="geometry">
-    <rect>
-     <x>39</x>
-     <y>327</y>
-     <width>400</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-    </font>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_15">
-   <property name="geometry">
-    <rect>
-     <x>41</x>
-     <y>430</y>
-     <width>180</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Output Subfolder</string>
-   </property>
-   <property name="textFormat">
-    <enum>Qt::RichText</enum>
-   </property>
-  </widget>
-  <widget class="QLineEdit" name="EditEXIFOutputFolder">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>241</y>
-     <width>710</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>10</pointsize>
-     <weight>50</weight>
-     <bold>false</bold>
-     <underline>false</underline>
-    </font>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_9">
-   <property name="geometry">
-    <rect>
-     <x>43</x>
-     <y>218</y>
-     <width>180</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>EXIF Output Folder</string>
-   </property>
-  </widget>
-  <widget class="QListWidget" name="MSTlistWidgetVideoFiles">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>390</y>
-     <width>400</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-    </font>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_FetchImageList">
-   <property name="geometry">
-    <rect>
-     <x>850</x>
-     <y>50</y>
-     <width>130</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>75</weight>
-     <italic>false</italic>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="toolTip">
-    <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
-   </property>
-   <property name="text">
-    <string>Fetch Image List</string>
-   </property>
-  </widget>
-  <widget class="Line" name="line">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>101</y>
-     <width>971</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>0</width>
-     <height>0</height>
-    </size>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="frameShadow">
-    <enum>QFrame::Plain</enum>
-   </property>
-   <property name="lineWidth">
-    <number>3</number>
-   </property>
-   <property name="midLineWidth">
-    <number>0</number>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_10">
-   <property name="geometry">
-    <rect>
-     <x>43</x>
-     <y>30</y>
-     <width>180</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Image Folder</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonCreateEXIFFile">
-   <property name="geometry">
-    <rect>
-     <x>860</x>
-     <y>240</y>
-     <width>130</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="toolTip">
-    <string>This feature is only available with images saved on your computer.</string>
-   </property>
-   <property name="text">
-    <string>Extract EXIF Info</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonCreateVideo">
-   <property name="geometry">
-    <rect>
-     <x>860</x>
-     <y>154</y>
-     <width>130</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>6</pointsize>
-     <weight>75</weight>
-     <italic>false</italic>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="toolTip">
-    <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
-   </property>
-   <property name="text">
-    <string>Create Video</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButtonBrowseEXIFOutputFolder">
-   <property name="geometry">
-    <rect>
-     <x>753</x>
-     <y>246</y>
-     <width>80</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Browse</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="label_8">
-   <property name="geometry">
-    <rect>
-     <x>43</x>
-     <y>139</y>
-     <width>180</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>Images for Video</string>
-   </property>
-  </widget>
-  <widget class="QLineEdit" name="MSTlineEditFrameFolder">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>450</y>
-     <width>400</width>
-     <height>30</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Arial</family>
-     <pointsize>8</pointsize>
-    </font>
-   </property>
+   <property name="title">
+    <string>GroupBox</string>
+   </property>
+   <widget class="QPushButton" name="pushButton_BrowseImageFolder">
+    <property name="geometry">
+     <rect>
+      <x>900</x>
+      <y>51</y>
+      <width>90</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>7</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Browse</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_10">
+    <property name="geometry">
+     <rect>
+      <x>23</x>
+      <y>27</y>
+      <width>180</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Images Folder</string>
+    </property>
+   </widget>
+   <widget class="QLineEdit" name="lineEdit_images_folder">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>49</y>
+      <width>871</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>10</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+      <underline>false</underline>
+     </font>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_CreateEXIFFile">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>770</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>This feature is only available with images saved on your computer.</string>
+    </property>
+    <property name="text">
+     <string>Extract EXIF Info</string>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="checkBox_FetchRecursive">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>92</y>
+      <width>121</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>6</pointsize>
+      <weight>75</weight>
+      <italic>true</italic>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>Check this box if you want to include in the search all folders beneath the folder provided.</string>
+    </property>
+    <property name="text">
+     <string>Fetch Recursive</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_FetchImageList">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <italic>false</italic>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
+    </property>
+    <property name="text">
+     <string>Fetch Image List</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_CreateGIF">
+    <property name="geometry">
+     <rect>
+      <x>170</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <italic>false</italic>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
+    </property>
+    <property name="text">
+     <string>Create GIF</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_CreateVideo">
+    <property name="geometry">
+     <rect>
+      <x>320</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <italic>false</italic>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>Check this box to create a video from the images clicked through or when the play button is clicked.</string>
+    </property>
+    <property name="text">
+     <string>Create Video</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_create_composite_slice">
+    <property name="geometry">
+     <rect>
+      <x>470</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>This feature is only available with images saved on your computer.</string>
+    </property>
+    <property name="text">
+     <string>Composite Slice</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_triage_images">
+    <property name="enabled">
+     <bool>true</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>620</x>
+      <y>115</y>
+      <width>130</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>8</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="toolTip">
+     <string>This feature is only available with images saved on your computer.</string>
+    </property>
+    <property name="text">
+     <string>Image Triage</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>

@@ -48,10 +48,10 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>2</number>
     </property>
     <property name="tabsClosable">
-     <bool>true</bool>
+     <bool>false</bool>
     </property>
     <widget class="QWidget" name="tab_NEONSites">
      <attribute name="title">
@@ -348,7 +348,7 @@
         <string/>
        </property>
       </widget>
-      <widget class="QPushButton" name="pushButtonBrowseSaveImages_NEON_DownloadFolder">
+      <widget class="QPushButton" name="pushButton_NEON_BrowseImageFolder">
        <property name="geometry">
         <rect>
          <x>1060</x>
@@ -666,7 +666,7 @@
         <string>This field is pre-populated and cannot be changed at this time.</string>
        </property>
       </widget>
-      <widget class="QPushButton" name="pushButtonBrowseSaveImages_USGS_DownloadFolder">
+      <widget class="QPushButton" name="pushButton_USGS_BrowseImageFolder">
        <property name="geometry">
         <rect>
          <x>1060</x>
@@ -1064,7 +1064,7 @@
   <tabstop>NEON_listboxSiteProducts</tabstop>
   <tabstop>NEON_tableProducts</tabstop>
   <tabstop>edit_NEONSaveFilePath</tabstop>
-  <tabstop>pushButtonBrowseSaveImages_NEON_DownloadFolder</tabstop>
+  <tabstop>pushButton_NEON_BrowseImageFolder</tabstop>
   <tabstop>pushButton_RetrieveNEONData</tabstop>
   <tabstop>checkBox_UniqueDates</tabstop>
   <tabstop>USGS_listboxSites</tabstop>
@@ -1072,7 +1072,7 @@
   <tabstop>table_USGS_Sites</tabstop>
   <tabstop>pushButton_USGSDownload</tabstop>
   <tabstop>edit_USGSSaveFilePath</tabstop>
-  <tabstop>pushButtonBrowseSaveImages_USGS_DownloadFolder</tabstop>
+  <tabstop>pushButton_USGS_BrowseImageFolder</tabstop>
   <tabstop>tabWidget</tabstop>
   <tabstop>graphicsView</tabstop>
  </tabstops>
