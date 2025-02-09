@@ -359,7 +359,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.11d"
+SW_VERSION = "Ver.: 0.0.5.11e"
 
 class displayOptions():
     displayROIs = True
@@ -638,7 +638,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_ReleaseNotes.triggered.connect(self.toolbarButtonReleaseNotes)
         self.action_CompositeSlices.triggered.connect(self.menubarCompositeSlices)
         self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
-        self.action_TriageImages.triggered.connect(toolbarButtonImageTriage)
+        self.action_TriageImages.triggered.connect(self.toolbarButtonImageTriage_2)
 
         self.action_RefreshNEON.triggered.connect(self.menubar_RefreshNEON)
 
@@ -833,7 +833,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         #--- COLOR SEGMENTATION
         icon_path = os.path.normpath(str(parent_path / "icons/FileFolder_1.png"))
-        button_action = QAction(QIcon(icon_path), "Folder Operations", self)
+        button_action = QAction(QIcon(icon_path), "Data Exploration", self)
         button_action.setStatusTip("Select input and output folder locations")
         button_action.triggered.connect(self.onMyToolBarFileFolder)
         toolbar.addAction(button_action)
@@ -843,7 +843,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         icon_path = os.path.normpath(str(parent_path / "icons/Triage_2.png"))
         button_action = QAction(QIcon(icon_path), "Image Triage", self)
         button_action.setStatusTip("Move images that are of poor quality")
-        button_action.triggered.connect(toolbarButtonImageTriage)
+        button_action.triggered.connect(self.toolbarButtonImageTriage)
         toolbar.addAction(button_action)
         print("Toolbar Initialization: Triage icon path: ", icon_path)
 
@@ -1795,6 +1795,63 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.compositeSliceDlg.close()
             self.compositeSliceDlg    = None
 
+    # ======================================================================================================================
+    #
+    # ======================================================================================================================
+    def toolbarButtonImageTriage_1(self, folder_path=""):
+        self.toolbarButtonImageTriage(folder_path, False)
+
+    def toolbarButtonImageTriage_2(self):
+        self.toolbarButtonImageTriage()
+
+    def toolbarButtonImageTriage(self, folder_path="", checkBox_FetchRecursive=False):
+        strMessage = 'You are about to perform Image Triage. Would you like to continue?'
+        msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
+        response = msgBox.displayMsgBox()
+
+        if response == QMessageBox.Yes:
+            if folder_path == "":
+                prompter = promptlib.Files()
+                folder = prompter.dir()
+            else:
+                folder = folder_path
+
+            if len(folder) == 0:
+                strMessage = 'ERROR! Please specify an image folder containing images to triage.'
+                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
+                response = msgBox.displayMsgBox()
+            else:
+                TriageDlg = GRIME_TriageOptionsDlg()
+
+                response = TriageDlg.exec_()
+
+                if response == 1:
+
+                    if len(TriageDlg.getReferenceImageFilename()) == 0 and TriageDlg.getCorrectAlignment() == True:
+                        strMessage = 'Please select reference image if you want to correct image alignment.'
+                        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
+                        response = msgBox.displayMsgBox()
+                    else:
+                        myTriage = GRIME_AI_ImageTriage()
+                        myTriage.cleanImages(folder, \
+                                             False, \
+                                             TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
+                                             TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
+                                             TriageDlg.getCreateReport(), TriageDlg.getMoveImages(), \
+                                             TriageDlg.getCorrectAlignment(), TriageDlg.getSavePolylines(),
+                                             TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
+
+                        strMessage = 'Image triage is complete!'
+                        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
+                        response = msgBox.displayMsgBox()
+                else:
+                    strMessage = 'ABORT! You cancelled the triage operation.'
+                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
+                    response = msgBox.displayMsgBox()
+        else:
+            strMessage = 'ABORT! You cancelled the triage operation.'
+            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
+            response = msgBox.displayMsgBox()
 
     # ==================================================================================================================
     # ==================================================================================================================
@@ -2139,7 +2196,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.fileFolderDlg = GRIME_AI_FileUtilitiesDlg(frame)
 
         self.fileFolderDlg.create_composite_slice_signal.connect(self.menubarCompositeSlices)
-        self.fileFolderDlg.triage_images_signal.connect(toolbarButtonImageTriage_1)
+        self.fileFolderDlg.triage_images_signal.connect(self.toolbarButtonImageTriage_1)
 
         self.fileFolderDlg.accepted.connect(self.closeFilefolderDlg)
         self.fileFolderDlg.rejected.connect(self.closeFilefolderDlg)
@@ -3876,60 +3933,6 @@ def processImage(self, myImage):
     return pix
 
 
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def toolbarButtonImageTriage_1(folder_path):
-    toolbarButtonImageTriage(folder_path, False)
-
-def toolbarButtonImageTriage(folder_path=[], checkBox_FetchRecursive=False):
-    strMessage = 'You are about to perform Image Triage. Would you like to continue?'
-    msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
-    response = msgBox.displayMsgBox()
-
-    if response == QMessageBox.Yes:
-        if folder_path == []:
-            prompter = promptlib.Files()
-            folder = prompter.dir()
-        else:
-            folder = folder_path
-
-        if len(folder) == 0:
-            strMessage = 'ERROR! Please specify an image folder containing images to triage.'
-            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
-            response = msgBox.displayMsgBox()
-        else:
-            TriageDlg = GRIME_TriageOptionsDlg()
-
-            response = TriageDlg.exec_()
-
-            if response == 1:
-
-                if len(TriageDlg.getReferenceImageFilename()) == 0 and TriageDlg.getCorrectAlignment() == True:
-                    strMessage = 'Please select reference image if you want to correct image alignment.'
-                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
-                    response = msgBox.displayMsgBox()
-                else:
-                    myTriage = GRIME_AI_ImageTriage()
-                    myTriage.cleanImages(folder, \
-                                False, \
-                                TriageDlg.getBlurThreshold(), TriageDlg.getShiftSize(), \
-                                TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
-                                TriageDlg.getCreateReport(), TriageDlg.getMoveImages(), \
-                                TriageDlg.getCorrectAlignment(), TriageDlg.getSavePolylines(),
-                                TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
-
-                    strMessage = 'Image triage is complete!'
-                    msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
-                    response = msgBox.displayMsgBox()
-            else:
-                strMessage = 'ABORT! You cancelled the triage operation.'
-                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
-                response = msgBox.displayMsgBox()
-    else:
-        strMessage = 'ABORT! You cancelled the triage operation.'
-        msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
-        response = msgBox.displayMsgBox()
 
 
 # ======================================================================================================================
