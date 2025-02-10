@@ -283,8 +283,6 @@ class USGS_NIMS:
             progressBar.close()
             del progressBar
 
-            self.fetchStageAndDischarge(nwisID, siteName, startDate, endDate, startTime, endTime, saveFolder)
-
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # FETCH STAGE AND DISCHARGE
             # https://waterservices.usgs.gov/test-tools/

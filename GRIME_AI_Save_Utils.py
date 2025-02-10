@@ -232,6 +232,7 @@ class JsonEditor():
         else:
             print(f"Key '{key}' already exists in the JSON file.")
 
+
     def getValue(self, key):
         json_file = os.path.join(GRIME_AI_Save_Utils().getSettingsFolder(), 'GRIMe-AI.json')
 
