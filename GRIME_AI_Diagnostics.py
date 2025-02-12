@@ -4,9 +4,9 @@ import numpy as np
 from matplotlib import colors
 
 
-class GRIMe_Diagnostics:
+class GRIME_AI_Diagnostics:
     def __init__(self):
-        self.className = "GRIMe_Diagnostics"
+        self.className = "GRIME_AI_Diagnostics"
 
     # ======================================================================================================================
     #

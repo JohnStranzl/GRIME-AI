@@ -3,12 +3,12 @@ import datetime
 import cv2
 import numpy as np
 
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
-from GRIME_AI_roiData import GRIME_roiData
+from GRIME_AI_roiData import GRIME_AI_roiData
 
 
 # ======================================================================================================================
@@ -344,7 +344,7 @@ class GRIME_AI_Feature_Export:
 
             nClusters = roiObj.getNumColorClusters()
 
-            rgb = GRIME_roiData().extractROI(roiObj.getImageROI(), img)
+            rgb = GRIME_AI_roiData().extractROI(roiObj.getImageROI(), img)
 
             # CONVERT THE IMAGE FROM BGR TO RGB AND HSV
             try:

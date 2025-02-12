@@ -5,7 +5,7 @@ import ssl
 
 import re
 
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 
 from bs4 import BeautifulSoup
 
@@ -17,7 +17,7 @@ bChromeDriverLoaded = False
 global driver
 driver = None
 
-class GRIME_PhenoCam():
+class GRIME_AI_PhenoCam():
 
     def __init__(self):
         self.phenoCamURL = 'https://phenocam.nau.edu'
@@ -208,7 +208,7 @@ class GRIME_PhenoCam():
 
             PhenocamURL = PhenocamURL.replace('ARIK', siteCode); PhenocamURL = PhenocamURL.replace('D10', domainCode)
 
-            tmpList = GRIME_PhenoCam().getVisibleImages(PhenocamURL, start_time, end_time)
+            tmpList = GRIME_AI_PhenoCam().getVisibleImages(PhenocamURL, start_time, end_time)
 
             imageList.setVisibleList(tmpList.getVisibleList())
 
@@ -220,7 +220,7 @@ class GRIME_PhenoCam():
         del progressBar
 
         try:
-            GRIME_PhenoCam.closeChromeDriver()
+            GRIME_AI_PhenoCam.closeChromeDriver()
         except:
             pass
 

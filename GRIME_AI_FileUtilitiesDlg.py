@@ -7,7 +7,7 @@ import promptlib
 import datetime
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Save_Utils import JsonEditor
-from GRIME_Video import GRIME_Video
+from GRIME_AI_Video import GRIME_AI_Video
 
 class Datapaths():
 
@@ -119,11 +119,11 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
         pass
 
     def pushButton_create_video_clicked(self):
-        myGRIMEAI_video = GRIME_Video()
+        myGRIMEAI_video = GRIME_AI_Video()
         myGRIMEAI_video.createVideo(self.lineEdit_images_folder.text())
 
     def pushButtonCreateGIFClicked(self):
-        myGRIMEAI_video = GRIME_Video()
+        myGRIMEAI_video = GRIME_AI_Video()
         myGRIMEAI_video.createGIF(self.lineEdit_images_folder.text())
 
     def pushButton_create_composite_slice_clicked(self):

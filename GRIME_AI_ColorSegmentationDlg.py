@@ -19,7 +19,7 @@ class roiParameters():
 # ======================================================================================================================
 #
 # ======================================================================================================================
-class GRIME_ColorSegmentationDlg(QDialog):
+class GRIME_AI_ColorSegmentationDlg(QDialog):
 
     # SIGNALS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     colorSegmentation_Signal = pyqtSignal(int)
@@ -74,7 +74,7 @@ class GRIME_ColorSegmentationDlg(QDialog):
     # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------
     def closeEvent(self, event):
-        super(GRIME_ColorSegmentationDlg, self).closeEvent(event)
+        super(GRIME_AI_ColorSegmentationDlg, self).closeEvent(event)
         self.close_signal.emit()
 
     def closeClicked(self):

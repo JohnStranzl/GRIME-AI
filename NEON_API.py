@@ -22,7 +22,7 @@ import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
 
 # GRIMe-AI MODULES
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Save_Utils import JsonEditor
 

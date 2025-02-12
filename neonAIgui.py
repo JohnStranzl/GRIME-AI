@@ -124,7 +124,7 @@ class Ui_MainWindow(object):
         self.tabWidget.addTab(self.tab_NEONSites, "")
         self.tab_SiteProducts = QtWidgets.QWidget()
         self.tab_SiteProducts.setObjectName("tab_SiteProducts")
-        self.NEON_tableProducts = GRIME_QTableWidget(self.tab_SiteProducts)
+        self.NEON_tableProducts = GRIME_AI_QTableWidget(self.tab_SiteProducts)
         self.NEON_tableProducts.setGeometry(QtCore.QRect(20, 50, 1300, 593))
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -220,7 +220,7 @@ class Ui_MainWindow(object):
         self.tabWidget.addTab(self.tab_2, "")
         self.tab = QtWidgets.QWidget()
         self.tab.setObjectName("tab")
-        self.table_USGS_Sites = GRIME_QTableWidget(self.tab)
+        self.table_USGS_Sites = GRIME_AI_QTableWidget(self.tab)
         self.table_USGS_Sites.setGeometry(QtCore.QRect(20, 50, 1300, 525))
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -372,7 +372,7 @@ class Ui_MainWindow(object):
         self.tabWidget.addTab(self.tab_GoogleMaps, "")
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1440, 20))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 1440, 25))
         self.menubar.setObjectName("menubar")
         self.menuFile = QtWidgets.QMenu(self.menubar)
         self.menuFile.setObjectName("menuFile")
@@ -423,7 +423,7 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menu_About.menuAction())
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(2)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
         MainWindow.setTabOrder(self.tableWidget_ROIList, self.NEON_listboxSites)
         MainWindow.setTabOrder(self.NEON_listboxSites, self.NEON_listboxSiteInfo)
@@ -490,5 +490,5 @@ class Ui_MainWindow(object):
         self.action_TriageImages.setText(_translate("MainWindow", "Triage Images"))
         self.action_RefreshNEON.setText(_translate("MainWindow", "Refresh NEON"))
         self.action_ExtractCOCOMasks.setText(_translate("MainWindow", "Extract COCO Masks"))
+from GRIME_AI_QTableWidget import GRIME_AI_QTableWidget
 from GRIME_QLabel import GRIME_QLabel
-from GRIME_QTableWidget import GRIME_QTableWidget

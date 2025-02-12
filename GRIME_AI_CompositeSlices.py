@@ -3,7 +3,7 @@ import datetime
 import math
 from PIL import Image
 
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 
 class GRIME_AI_CompositeSlices():
     def __init__(self, sliceCenter, sliceWidth):

@@ -48,7 +48,7 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>2</number>
+     <number>0</number>
     </property>
     <property name="tabsClosable">
      <bool>false</bool>
@@ -225,7 +225,7 @@
      <attribute name="title">
       <string>NEON Download Manager</string>
      </attribute>
-     <widget class="GRIME_QTableWidget" name="NEON_tableProducts">
+     <widget class="GRIME_AI_QTableWidget" name="NEON_tableProducts">
       <property name="geometry">
        <rect>
         <x>20</x>
@@ -514,7 +514,7 @@
      <attribute name="title">
       <string>USGS Download Manager</string>
      </attribute>
-     <widget class="GRIME_QTableWidget" name="table_USGS_Sites">
+     <widget class="GRIME_AI_QTableWidget" name="table_USGS_Sites">
       <property name="geometry">
        <rect>
         <x>20</x>
@@ -957,7 +957,7 @@
      <x>0</x>
      <y>0</y>
      <width>1440</width>
-     <height>20</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -1052,9 +1052,9 @@
    <header location="global">GRIME_QLabel</header>
   </customwidget>
   <customwidget>
-   <class>GRIME_QTableWidget</class>
+   <class>GRIME_AI_QTableWidget</class>
    <extends>QTableWidget</extends>
-   <header location="global">GRIME_QTableWidget</header>
+   <header location="global">GRIME_AI_QTableWidget</header>
   </customwidget>
  </customwidgets>
  <tabstops>

@@ -9,7 +9,7 @@ import cv2
 # ======================================================================================================================
 #
 # ======================================================================================================================
-class GRIME_CompositeSliceDlg(QDialog):
+class GRIME_AI_CompositeSliceDlg(QDialog):
 
     compositeSliceCancelSignal = pyqtSignal()
     compositeSliceGenerateSignal = pyqtSignal()
@@ -82,7 +82,7 @@ class GRIME_CompositeSliceDlg(QDialog):
 
 
     def closeEvent(self, event):
-        super(GRIME_CompositeSliceDlg, self).closeEvent(event)
+        super(GRIME_AI_CompositeSliceDlg, self).closeEvent(event)
 
 
     def getSliceCenter(self):

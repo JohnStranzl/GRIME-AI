@@ -14,7 +14,7 @@ except ImportError as e:
         del sys.modules['torch']
 
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 import shutil
 
 

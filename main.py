@@ -117,15 +117,15 @@ import sobelData
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI_ColorSegmentationDlg import GRIME_ColorSegmentationDlg
+from GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
 from GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_AI_ImageNavigationDlg import GRIME_ImageNavigationDlg
+from GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
 from GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
 from GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
-from GRIME_AI_CompositeSliceDlg import GRIME_CompositeSliceDlg
-from GRIME_ProcessImage import GRIME_ProcessImage
-from GRIME_AI_ReleaseNotesDlg import GRIME_ReleaseNotesDlg
-from GRIME_TriageOptionsDlg import GRIME_TriageOptionsDlg
+from GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
+from GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
+from GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
+from GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
@@ -142,20 +142,20 @@ from GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI_Diagnostics import GRIMe_Diagnostics
+from GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI_ImageData import imageData
-from GRIMe_ImageStats import GRIMe_ImageStats
+from GRIME_AI_ImageStats import GRIME_AI_ImageStats
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI_PhenoCam import GRIME_PhenoCam, dailyList
-from GRIME_ProductTable import GRIMe_ProductTable
+from GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
+from GRIME_AI_ProductTable import GRIME_AI_ProductTable
 from GRIME_QLabel import DrawingMode
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_AI_roiData import GRIME_roiData, ROIShape
+from GRIME_AI_roiData import GRIME_AI_roiData, ROIShape
 
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
@@ -796,9 +796,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if len(self.roiList) > 0:
                 # DIAGNOSTICS
                 if self.checkBoxColorDiagnostics.checkState():
-                    GRIMe_Diagnostics.RGB3DPlot(rgb)
-                    GRIMe_Diagnostics.plotHSVChannelsGray(hsv)
-                    GRIMe_Diagnostics.plotHSVChannelsColor(hsv)
+                    GRIME_AI_Diagnostics.RGB3DPlot(rgb)
+                    GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
+                    GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
 
                 # segment colors
                 rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
@@ -1249,7 +1249,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             myGRIME_Color = GRIME_AI_Color()
 
             # CREATE AN ROI OBJECT
-            roiObj = GRIME_roiData()
+            roiObj = GRIME_AI_roiData()
 
             # POPULATE ROI OBJECT WITH ROI INFORMATION
             if len(roiParameters.strROIName) > 0:
@@ -1688,7 +1688,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def pushButtonTrainGoodTriggered(self):
         blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
-        imageStats = GRIMe_ImageStats()
+        imageStats = GRIME_AI_ImageStats()
         imageStats.setBlurValue(blur)
         imageStats.setBrightnessValue(intensity)
         imageStats.setLabel('good')
@@ -1699,7 +1699,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def pushButtonTrainBadTriggered(self):
         blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
-        imageStats = GRIMe_ImageStats()
+        imageStats = GRIME_AI_ImageStats()
         imageStats.setBlurValue(blur)
         imageStats.setBrightnessValue(intensity)
         imageStats.setLabel('bad')
@@ -1763,7 +1763,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             response = msgBox.displayMsgBox()
         else:
             imageFilename = dailyImagesList.getVisibleList()[0]
-            self.compositeSliceDlg = GRIME_CompositeSliceDlg()
+            self.compositeSliceDlg = GRIME_AI_CompositeSliceDlg()
 
             self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
             self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
@@ -1821,7 +1821,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
             else:
-                TriageDlg = GRIME_TriageOptionsDlg()
+                TriageDlg = GRIME_AI_TriageOptionsDlg()
 
                 response = TriageDlg.exec_()
 
@@ -1928,7 +1928,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonReleaseNotes(self):
-        releaseNotesDlg = GRIME_ReleaseNotesDlg(frame)
+        releaseNotesDlg = GRIME_AI_ReleaseNotesDlg(frame)
 
         releaseNotesDlg.show()
 
@@ -2226,7 +2226,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             global currentImageCount
 
             if gFrameCount > 0:
-                self.imageNavigationDlg = GRIME_ImageNavigationDlg(frame)
+                self.imageNavigationDlg = GRIME_AI_ImageNavigationDlg(frame)
                 self.imageNavigationDlg.imageIndexSignal.connect(self.getImageIndex)
 
                 self.imageNavigationDlg.accepted.connect(self.closeNavigationDlg)
@@ -2271,7 +2271,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.maskEditorDlg == None:
                 self.labelOriginalImage.setDrawingMode(DrawingMode.COLOR_SEGMENTATION)
 
-                self.colorSegmentationDlg = GRIME_ColorSegmentationDlg()
+                self.colorSegmentationDlg = GRIME_AI_ColorSegmentationDlg()
 
                 self.colorSegmentationDlg.colorSegmentation_Signal.connect(self.colorSegmentation)
                 self.colorSegmentationDlg.addROI_Signal.connect(self.trainROI)
@@ -3913,7 +3913,7 @@ def processImage(self, myImage):
         # EDGE DETECTION METHODS
         if len(gray) != 0:
 
-            myProcessImage = GRIME_ProcessImage()
+            myProcessImage = GRIME_AI_ProcessImage()
 
             if g_edgeMethodSettings.method == edgeMethodsClass.CANNY:
                 pix = myProcessImage.processCanny(img1, gray, g_edgeMethodSettings)
@@ -4308,7 +4308,7 @@ def NEON_updateProductTable(self, item):
         nYear = 1970
         nMonth = 1
         nDay = 1
-        #nYear, nMonth, nDay = GRIME_PhenoCam().getStartDate()
+        #nYear, nMonth, nDay = GRIME_AI_PhenoCam().getStartDate()
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
@@ -4318,7 +4318,7 @@ def NEON_updateProductTable(self, item):
         nYear = 1970
         nMonth = 1
         nDay = 1
-        #nYear, nMonth, nDay = GRIME_PhenoCam().getEndDate()
+        #nYear, nMonth, nDay = GRIME_AI_PhenoCam().getEndDate()
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDisabled(True)
@@ -4327,12 +4327,12 @@ def NEON_updateProductTable(self, item):
         # --------------------
         # SET THE CALENDAR START AND END DATE THE SAME USING THE DATE FOR THE LAST DAY FOR WHICH DATA IS AVAILABLE
         # --------------------
-        nYear, nMonth, nDay = GRIME_PhenoCam().getEndDate()
+        nYear, nMonth, nDay = GRIME_AI_PhenoCam().getEndDate()
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         #JES - SET FOR TODAY'S DATE. USER'S MAY NOT WANT TO GO BACK MANY YEARS.
-        #nYear, nMonth, nDay = GRIME_PhenoCam.getStartDate()
+        #nYear, nMonth, nDay = GRIME_AI_PhenoCam.getStartDate()
         #date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         #date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
@@ -4383,7 +4383,7 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
     strProductIDCell = tableWidget.item(nRow, 0).text().upper()
 
     # FETCH DATE THAT CHANGED FOR THE SPECIFIC ROW
-    start_date, start_time, end_date, end_time = GRIMe_ProductTable().fetchTableDates(tableWidget, nRow)
+    start_date, start_time, end_date, end_time = GRIME_AI_ProductTable().fetchTableDates(tableWidget, nRow)
 
     if bUniqueDates == False:
         for i in range(tableWidget.rowCount()):
@@ -4393,7 +4393,7 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
         tableWidget.cellWidget(nRow, 4).setDate(start_date)
         tableWidget.cellWidget(nRow, 5).setDate(end_date)
 
-    #imageCount = GRIME_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
+    #imageCount = GRIME_AI_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
 
     #tableWidget.setItem(nRow, 2, QTableWidgetItem(str(imageCount)))
 
@@ -4438,7 +4438,7 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
             dailyURLvisible = dailyURLvisible.replace('ARIK', SITECODE)
             dailyURLvisible = dailyURLvisible.replace('D10', DOMAINCODE)
 
-            phenoCam = GRIME_PhenoCam()
+            phenoCam = GRIME_AI_PhenoCam()
             tmpList = phenoCam.getVisibleImages(dailyURLvisible, start_time, end_time)
 
             dailyImagesList.setVisibleList(tmpList.getVisibleList())
@@ -4490,19 +4490,19 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 #
 # ======================================================================================================================
 def downloadPBTImageFiles(self):
-    GRIMe_ProductTableObj = GRIMe_ProductTable()
-    GRIMe_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
+    GRIME_AI_ProductTableObj = GRIME_AI_ProductTable()
+    GRIME_AI_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
 
-    start_date = GRIMe_ProductTableObj.getStartDate()
-    strStartDate = GRIMe_ProductTableObj.getStartDate()
+    start_date = GRIME_AI_ProductTableObj.getStartDate()
+    strStartDate = GRIME_AI_ProductTableObj.getStartDate()
 
-    end_date = GRIMe_ProductTableObj.getEndDate()
-    strEndDate = GRIMe_ProductTableObj.getEndDate()
+    end_date = GRIME_AI_ProductTableObj.getEndDate()
+    strEndDate = GRIME_AI_ProductTableObj.getEndDate()
 
-    startTime = GRIMe_ProductTableObj.getStartTime()
-    endTime = GRIMe_ProductTableObj.getEndTime()
+    startTime = GRIME_AI_ProductTableObj.getStartTime()
+    endTime = GRIME_AI_ProductTableObj.getEndTime()
 
-    delta = GRIMe_ProductTableObj.getDelta()
+    delta = GRIME_AI_ProductTableObj.getDelta()
 
     start_date += datetime.timedelta(days=1)
 
@@ -4555,8 +4555,8 @@ def downloadProductDataFiles(self, item):
     rowRange = range(self.NEON_tableProducts.rowCount())
 
     for nRow in rowRange:
-        GRIMe_ProductTableObj = GRIMe_ProductTable()
-        start_date, start_time, end_date, end_time = GRIMe_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
+        GRIME_AI_ProductTableObj = GRIME_AI_ProductTable()
+        start_date, start_time, end_date, end_time = GRIME_AI_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
 
         # EXTRACT THE PRODUCT ID
         prodIDCol = 0
@@ -5178,9 +5178,9 @@ if __name__ == '__main__':
             if len(self.roiList) > 0:
                 # DIAGNOSTICS
                 if self.checkBoxColorDiagnostics.checkState():
-                    GRIMe_Diagnostics.RGB3DPlot(rgb)
-                    GRIMe_Diagnostics.plotHSVChannelsGray(hsv)
-                    GRIMe_Diagnostics.plotHSVChannelsColor(hsv)
+                    GRIME_AI_Diagnostics.RGB3DPlot(rgb)
+                    GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
+                    GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
 
                 # segment colors
                 rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)

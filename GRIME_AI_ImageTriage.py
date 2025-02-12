@@ -6,7 +6,7 @@ import numpy as np
 
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Color import GRIME_AI_Color
-from GRIME_QProgressWheel import QProgressWheel
+from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from datetime import datetime
 
