@@ -19,6 +19,9 @@ class GRIME_AI_CompositeSlices():
         self.sliceWidth = sliceWidth
 
 
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
     def crop_side(self, image, height):
         """
         Crops a specified side of an image based on the slice center and slice width attributes of the class.
@@ -49,6 +52,9 @@ class GRIME_AI_CompositeSlices():
         return image.crop((left, top, right, bottom))
 
 
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
     def create_composite_image(self, imageList, output_path):
         """
         Creates a composite image from a list of images by extracting a region of interest (ROI) from each image and
@@ -57,7 +63,6 @@ class GRIME_AI_CompositeSlices():
         Args:
             imageList (list): A list of image files. Each element in the list is an object with a `fullPathAndFilename` attribute.
             output_path (str): The path where the composite image will be saved.
-            side (str): The side of the image from which the ROI will be extracted.
 
         Returns:
             None
@@ -87,29 +92,25 @@ class GRIME_AI_CompositeSlices():
         output_height = first_image.height
         output_width = first_image.width
 
-        # DETERMINE THE NUMBER OF COMPOSITE IMAGES NEEDED, OF THE DESIRED WIDTH, FOR THE SLICE WIDTH CHOSEN
-        # ----------------------------------------------------------------------------------------------------
-        maxWidth = 2048
-        number_of_composite_images_required = math.ceil((imageCount * self.sliceWidth * 2) / maxWidth)
-        number_of_slices_per_image = math.floor(maxWidth // (self.sliceWidth * 2))
+        # CALCULATE THE MAX IMAGE WIDTH REQUIRED FOR ALL THE SLICES IF WE WERE TO GENERATE A SINGLE IMAGE
+        strip_width = self.sliceWidth * 2
+        print(f"Slice Width: {strip_width}")
 
-        if imageCount < number_of_slices_per_image:
-            number_of_slices_per_image = imageCount
+        maxWidthRequired = imageCount * strip_width
+        print(f"MAX Width Required: {maxWidthRequired}")
 
-        adjusted_max_width = number_of_slices_per_image * self.sliceWidth * 2
+        numImages, imageWidths, filesPerImage = self.check_image_width(maxWidthRequired, strip_width, option=1)
 
-        # EXTRACT AN ROI OF A SPECIFIC WIDTH FOR THE HEIGHT OF THE IMAGE
-        composite_image = Image.new('RGB', (adjusted_max_width, output_height))
+        composite_image = Image.new('RGB', (imageWidths[0], output_height))
 
-        prevCompIndex = 0
         total_slices = len(imageList)
         slice_count = 0
+        current_image_index = 0
+
         for i, image_file in enumerate(imageList):
             progressBar.setWindowTitle(image_file.fullPathAndFilename)
             progressBar.setValue(i)
             progressBar.repaint()
-
-            compIndex = i // number_of_slices_per_image
 
             # OPEN AN IMAGE AND EXTRACT OUT A SLICE (i.e., THE ROI SELECTED BY THE END-USER)
             # ----------------------------------------------------------------------------------------------------
@@ -117,28 +118,69 @@ class GRIME_AI_CompositeSlices():
             image = Image.open(image_file.fullPathAndFilename)
             # extract the ROI
             cropped_image = self.crop_side(image, output_height)
-            # insert the extracted ROI into the composite image after the previously inserted slice)
-            composite_image.paste(cropped_image, ((i % number_of_slices_per_image) * self.sliceWidth * 2, 0))
-            slice_count = slice_count + 1
+            # insert the extracted ROI into the composite image after the previously inserted slice
+            composite_image.paste(cropped_image, ((i % filesPerImage[current_image_index]) * strip_width, 0))
+            slice_count += 1
 
-            if slice_count == number_of_slices_per_image:
+            if slice_count == filesPerImage[current_image_index]:
                 # Save the composite image
-                compFilename = f"{outputFilename}{'-'}{compIndex}{'.jpg'}"
+                compFilename = f"{outputFilename}{'-'}{current_image_index}{'.jpg'}"
                 composite_image.save(compFilename)
 
-                total_slices = total_slices - number_of_slices_per_image
+                total_slices -= filesPerImage[current_image_index]
+                current_image_index += 1
 
-                if (total_slices < number_of_slices_per_image):
-                    number_of_slices_per_image = total_slices
-
-                # create a new image buffer
-                adjusted_max_width = number_of_slices_per_image * self.sliceWidth * 2
-                composite_image = Image.new('RGB', (adjusted_max_width, output_height))
-
-                slice_count = 0
+                if current_image_index < len(imageWidths):
+                    adjusted_max_width = imageWidths[current_image_index]
+                    composite_image = Image.new('RGB', (adjusted_max_width, output_height))
+                    slice_count = 0
 
         # clean-up before exiting function
         # 1. close and delete the progress bar
         # 2. close the EXIF log file, if opened
         progressBar.close()
         del progressBar
+
+
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def check_image_width(self, width, strip_width, option=1):
+        MAX_WIDTH = 65535
+
+        if width > MAX_WIDTH:
+            num_images = width // MAX_WIDTH
+            remaining_width = width % MAX_WIDTH
+            if remaining_width > 0:
+                num_images += 1
+
+            if option == 1:
+                if remaining_width > 0:
+                    image_widths = [MAX_WIDTH] * (num_images - 1) + [remaining_width]
+                else:
+                    image_widths = [MAX_WIDTH] * num_images
+
+                # Adjust widths to be multiples of strip_width
+                image_widths = [((w // strip_width) * strip_width) for w in image_widths]
+                if remaining_width % strip_width != 0:
+                    image_widths[-1] += strip_width - (image_widths[-1] % strip_width)
+            elif option == 2:
+                equal_width = width // num_images
+                remainders = width % num_images
+                image_widths = [equal_width] * num_images
+
+                for i in range(remainders):
+                    image_widths[i] += 1
+
+                # Adjust widths to be multiples of strip_width
+                image_widths = [((w // strip_width) * strip_width) for w in image_widths]
+                for i in range(remainders):
+                    if image_widths[i] % strip_width != 0:
+                        image_widths[i] += strip_width - (image_widths[i] % strip_width)
+
+            num_strips_per_image = [w // strip_width for w in image_widths]
+
+            return num_images, image_widths, num_strips_per_image  # Return number of images, image widths, and number of strips per image
+        else:
+            return 1, [width], [width // strip_width]  # Return 1 image with the given width and number of strips if within limit
+
