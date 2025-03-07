@@ -32,6 +32,7 @@ import os
 os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 #os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
 import sys
+import argparse
 import shutil
 import re
 import json
@@ -349,7 +350,7 @@ gWebImagesAvailable = 0
 gFrameCount = 0
 gProcessClick = 0
 currentImageFilename = ""
-frame = 0
+frame = []
 # Define the maximum number of gray levels
 gray_level = 16
 
@@ -359,7 +360,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.11e"
+SW_VERSION = "Ver.: 0.0.5.11f"
 
 class displayOptions():
     displayROIs = True
@@ -1928,6 +1929,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonReleaseNotes(self):
+        global frame
         releaseNotesDlg = GRIME_AI_ReleaseNotesDlg(frame)
 
         releaseNotesDlg.show()
@@ -1946,6 +1948,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonEdgeDetection(self):
+        global frame
         self.edgeDetectionDlg = GRIME_AI_EdgeDetectionDlg(frame)
 
         self.edgeDetectionDlg.edgeDetectionSignal.connect(self.edgeDetectionMethod)
@@ -2193,6 +2196,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # ======================================================================================================================
     def onMyToolBarFileFolder(self):
+        global frame
         self.fileFolderDlg = GRIME_AI_FileUtilitiesDlg(frame)
 
         self.fileFolderDlg.create_composite_slice_signal.connect(self.menubarCompositeSlices)
@@ -4905,12 +4909,9 @@ def test(img):
     return [asm, con, eng, idm]
 
 
-# ======================================================================================================================
-#
-# ======================================================================================================================
-#jes @hydra.main(config_path=None, config_name=None, version_base=None)
-#jes def main(cfg: DictConfig):
-if __name__ == '__main__':
+def run_gui():
+    global frame
+
     if 0:
         if hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
             hydra.core.global_hydra.GlobalHydra.instance().clear()
@@ -4940,11 +4941,80 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------------------------------------------
     bStartupComplete = True
 
+    # Run the program
+    sys.exit(app.exec())
+
+def my_main():
+    # Main parser
+    parser = argparse.ArgumentParser(description='CLI for GRIME AI')
+
+    # Subparsers
+    subparsers = parser.add_subparsers(dest='command')
+
+    # Triage parser
+    triage_parser = subparsers.add_parser('triage', help='Perform Image Triage')
+    triage_parser.add_argument("-m", "--min", type=float, required=False, default=60.0, help="Minimum brightness (default: 60.0).")
+    triage_parser.add_argument("-x", "--max", type=float, required=False, default=180.0, help="Maximum brightness (default: 180.0).")
+    triage_parser.add_argument("-f", "--folder", type=str, required=True, help="A folder must be specified.")
+
+    # Slice parser
+    slice_parser = subparsers.add_parser('slice', help='Perform Image Slicing')
+    slice_parser.add_argument("-s", "--start", type=int, required=False, default=0, help="Start index for slicing.")
+    slice_parser.add_argument("-e", "--end", type=int, required=False, default=20, help="End index for slicing.")
+    slice_parser.add_argument("-f", "--folder", type=str, required=True, help="A folder must be specified.")
+
+    args = parser.parse_args()
+
+    # Check if no arguments were provided
+    if len(sys.argv) == 1:
+        run_gui()
+    else:
+        run_cli(args)
+
     # SHOW MAIN WINDOW
     #frame.show()
 
-    # Run the program
-    sys.exit(app.exec())
+def run_cli(args):
+    if args.command == 'triage':
+        create_report = True
+        move_images = True
+        fetch_recursive = False
+        blur_threshold = 17.50
+        shift_size = 60
+        #min_val = 65.0
+        #max_val = 180.0
+        correct_alignment = False
+        save_poly_lines = False
+        reference_image_filename = ""
+        rotation_threshold = 0.15
+
+        print(args.command)
+
+        print("These are the Triage parameters:", args.folder, args.min, args.max)
+        myTriage = GRIME_AI_ImageTriage()
+        myTriage.cleanImages(args.folder, \
+                             fetch_recursive, \
+                             blur_threshold, shift_size, \
+                             args.min, args.max, \
+                             create_report, move_images, \
+                             correct_alignment, save_poly_lines,
+                             reference_image_filename, rotation_threshold)
+
+        strMessage = 'Image triage is complete!'
+        print(strMessage)
+    elif args.command == 'slice':
+        print("Call the composite slice function.")
+
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
+#jes @hydra.main(config_path=None, config_name=None, version_base=None)
+#jes def main(cfg: DictConfig):
+if __name__ == '__main__':
+
+    my_main()
+
 
 
 '''

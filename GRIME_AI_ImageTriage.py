@@ -69,7 +69,7 @@ class GRIME_AI_ImageTriage():
     #
     # ==================================================================================================================
     def cleanImages(self, folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport,
-                    bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold):
+                    bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold, no_gui=True):
 
         badImageCount = 0
         rotationAngle = 0.0
@@ -91,8 +91,9 @@ class GRIME_AI_ImageTriage():
         # of images will help determine whether or not there is enough disk space to accommodate storing the images.
         imageCount = GRIME_AI_Utils().getImageCount(folder, extensions)
 
-        progressBar = QProgressWheel(0, imageCount + 1)
-        progressBar.show()
+        if no_gui == False:
+            progressBar = QProgressWheel(0, imageCount + 1)
+            progressBar.show()
 
         imageIndex = 0
 
@@ -120,9 +121,10 @@ class GRIME_AI_ImageTriage():
             refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)
 
         for file in files:
-            progressBar.setWindowTitle(file)
-            progressBar.setValue(imageIndex)
-            progressBar.repaint()
+            if no_gui == False:
+                progressBar.setWindowTitle(file)
+                progressBar.setValue(imageIndex)
+                progressBar.repaint()
             imageIndex += 1
 
             ext = os.path.splitext(file)[-1].lower()
@@ -179,10 +181,10 @@ class GRIME_AI_ImageTriage():
                 # ----------------------------------------------------------------------------------------------------
                 # CHECK TO SEE IF THE OVERALL IMAGE IS TOO DARK OR TOO BRIGHT
                 # ----------------------------------------------------------------------------------------------------
-                if intensity < brightnessMin:
+                if float(intensity) < float(brightnessMin):
                     strIntensity = "Too Dark"
                     bMove = True
-                elif intensity > brightnessMAX:
+                elif float(intensity) > float(brightnessMAX):
                     strIntensity = "Too Light"
                     bMove = True
 
@@ -244,8 +246,10 @@ class GRIME_AI_ImageTriage():
 
         if badImageCount == 0:
             strMessage = 'No bad images found.'
-            msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
-            response = msgBox.displayMsgBox()
+            print(strMessage)
+            if no_gui == False:
+                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+                response = msgBox.displayMsgBox()
 
         # ----------------------------------------------------------------------------------------------------
         # clean-up before exiting function
@@ -254,51 +258,50 @@ class GRIME_AI_ImageTriage():
         # ----------------------------------------------------------------------------------------------------
         if bCreateReport:
             csvFile.close()
-        progressBar.close()
-        del progressBar
+
+        if no_gui == False:
+            progressBar.close()
+            del progressBar
+
 
     # ======================================================================================================================
     #
     # ======================================================================================================================
     def checkImageShift(self, refImage, image):
-            # Convert images to grayscale
-            refImageGray = cv2.cvtColor(refImage, cv2.COLOR_BGR2GRAY)
-            imageGray = image
+        # Convert images to grayscale
+        refImageGray = cv2.cvtColor(refImage, cv2.COLOR_BGR2GRAY)
+        imageGray = image
 
-            # Compute the keypoints and descriptors
-            orb = cv2.ORB_create()
+        # Compute the keypoints and descriptors
+        orb = cv2.ORB_create()
 
-            # Find keypoints and descriptors.
-            # The first arg is the image, second arg is the mask (which is not required in this case).
-            keypoints1, descriptors1 = orb.detectAndCompute(refImageGray, None)
-            keypoints2, descriptors2 = orb.detectAndCompute(imageGray, None)
+        # Find keypoints and descriptors.
+        # The first arg is the image, second arg is the mask (which is not required in this case).
+        keypoints1, descriptors1 = orb.detectAndCompute(refImageGray, None)
+        keypoints2, descriptors2 = orb.detectAndCompute(imageGray, None)
 
-            # Match descriptors between the two images
-            # We create a Brute Force matcher with Hamming distance as measurement mode.
-            matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        # Match descriptors between the two images
+        # We create a Brute Force matcher with Hamming distance as measurement mode.
+        matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-            # Match the two sets of descriptors.
-            matches = matcher.match(descriptors1, descriptors2)
+        # Match the two sets of descriptors.
+        matches = matcher.match(descriptors1, descriptors2)
 
-            # Sort matches on the basis of their Hamming distance.
-            matches = sorted(matches, key=lambda x: x.distance)
+        # Sort matches on the basis of their Hamming distance.
+        matches = sorted(matches, key=lambda x: x.distance)
 
+        # Extract matched keypoints
+        src_pts = np.float32([keypoints1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+        dst_pts = np.float32([keypoints2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
 
+        # Find homography matrix
+        M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
+        # Compute horizontal and vertical shifts
+        horizontal_shift = M[0, 2]
+        vertical_shift = M[1, 2]
 
-
-            # Extract matched keypoints
-            src_pts = np.float32([keypoints1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-            dst_pts = np.float32([keypoints2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-
-            # Find homography matrix
-            M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-            # Compute horizontal and vertical shifts
-            horizontal_shift = M[0, 2]
-            vertical_shift = M[1, 2]
-
-            return horizontal_shift, vertical_shift
+        return horizontal_shift, vertical_shift
 
 
     # ======================================================================================================================

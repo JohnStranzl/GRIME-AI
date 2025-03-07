@@ -15,10 +15,6 @@ from PyQt5.QtWidgets import QMessageBox
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_QProgressWheel import QProgressWheel
 
-
-import re
-import datetime
-
 endpoint = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
 imageEnpoint = "https://usgs-nims-images.s3.amazonaws.com/overlay"
 
@@ -57,7 +53,7 @@ class USGS_NIMS:
 
         try:
             # QUERY CAMERA LIST
-            uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?"
+            uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?enabled=true"
 
             ssl._create_default_https_context = ssl._create_unverified_context
             response = urllib.request.urlopen(uri)
@@ -231,10 +227,6 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     def downloadImages(self, siteName, nwisID, startDate, endDate, startTime, endTime, saveFolder):
 
-        #endpoint = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
-        #imageEnpoint = "https://usgs-nims-images.s3.amazonaws.com/overlay"
-        #latest image =https://usgs-nims-images.s3.amazonaws.com/overlay/WI_Green_Bay_Oil_Depot/WI_Green_Bay_Oil_Depot_newest.jpg
-
         listOfImages = ""
         numberOfDays = (endDate - startDate).days + 1
 
@@ -356,8 +348,7 @@ class USGS_NIMS:
     #
     # ------------------------------------------------------------------------------------------------------------------
     def fetchListOfImages(self, siteName, after, before):
-        # API COMMAND FORMAT - https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/listFiles?camId=NE_Platte_River_near_Grand_Island&after=2023-07-16%2015:00:00.000   before = DATESTRING & after = DATESTRING
-        imagesToGet = endpoint + "/prod/listFiles?camId=" + siteName + after + before
+        imagesToGet = endpoint + "/prod/cameras?enabled=true/listFiles?camId=" + siteName + after + before
         listOfImages_response = requests.get(imagesToGet)
         listOfImages_text = listOfImages_response.text
 
@@ -392,6 +383,9 @@ class USGS_NIMS:
 
         USGS_stage_df.to_csv(output_file, index=False)
 
+
+
+# THIS "JUNK" IS FOR REFERENCE IN DIAGNOSING ISSUES WITH THE USGS API
     # ------------------------------------------------------------------------------------------------------------------
     # ASCII Format
     #//waterservices.usgs.gov/nwis/iv/?format=rdb,1.0
@@ -410,6 +404,11 @@ class USGS_NIMS:
     # &siteStatus=all
     # ------------------------------------------------------------------------------------------------------------------
     #def fetchStageAndFlowData(self):
+
+# API COMMAND FORMAT - https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/listFiles?camId=NE_Platte_River_near_Grand_Island&after=2023-07-16%2015:00:00.000   before = DATESTRING & after = DATESTRING
+# endpoint = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
+# imageEnpoint = "https://usgs-nims-images.s3.amazonaws.com/overlay"
+# latest image = https://usgs-nims-images.s3.amazonaws.com/overlay/WI_Green_Bay_Oil_Depot/WI_Green_Bay_Oil_Depot_newest.jpg
 
 #https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/listFiles?camId=NE_Platte_River_near_Grand_Island&after=2023-07-16%2015:00:00.000
 #before=DATESTRING&after=DATESTRING
