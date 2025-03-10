@@ -223,6 +223,7 @@ elif full == 4:
 global bStartupComplete
 bStartupComplete = False
 
+bShow_GUI = False
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -360,7 +361,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.11f"
+SW_VERSION = "Ver.: 0.0.5.12"
 
 class displayOptions():
     displayROIs = True
@@ -3416,10 +3417,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def fetchImageList(self, imageFolder, bRecursive):
+    def fetchImageList(self, imageFolder, bRecursive=False):
         global imageFileFolder
         imageFileFolder = imageFolder
-        fetchLocalImageList(self, imageFileFolder, bRecursive, False)  # start_date, end_date, start_time, end_time)
+        self.fetchLocalImageList(imageFileFolder, bRecursive, False)  # start_date, end_date, start_time, end_time)
 
         try:
             global gFrameCount
@@ -3574,9 +3575,10 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     # of images will help determine whether or not there is enough disk space to accomodate storing the images.
     imageCount = GRIME_AI_Utils().getImageCount(filePath, extensions)
 
-    progressBar = QProgressWheel()
-    progressBar.setRange(0, imageCount + 1)
-    progressBar.show()
+    if self.show_gui:
+        progressBar = QProgressWheel()
+        progressBar.setRange(0, imageCount + 1)
+        progressBar.show()
 
     # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
     files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
@@ -3592,9 +3594,10 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     #    not least, if the user selects the option to copy the image to a separate folder, then copy the file to
     #    the folder specified by the user
     for image_index, file in enumerate(files):
-        progressBar.setWindowTitle(file)
-        progressBar.setValue(image_index)
-        progressBar.repaint()
+        if self.show_gui:
+            progressBar.setWindowTitle(file)
+            progressBar.setValue(image_index)
+            progressBar.repaint()
 
         ext = os.path.splitext(file)[-1].lower()
 
@@ -3666,8 +3669,9 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     # clean-up before exiting function
     # 1. close and delete the progress bar
     # 2. close the EXIF log file, if opened
-    progressBar.close()
-    del progressBar
+    if self.show_gui:
+        progressBar.close()
+        del progressBar
 
     if bCreateEXIFFile:
         csvFile.close()
@@ -4944,6 +4948,7 @@ def run_gui():
     # Run the program
     sys.exit(app.exec())
 
+
 def my_main():
     # Main parser
     parser = argparse.ArgumentParser(description='CLI for GRIME AI')
@@ -4953,15 +4958,42 @@ def my_main():
 
     # Triage parser
     triage_parser = subparsers.add_parser('triage', help='Perform Image Triage')
-    triage_parser.add_argument("-m", "--min", type=float, required=False, default=60.0, help="Minimum brightness (default: 60.0).")
-    triage_parser.add_argument("-x", "--max", type=float, required=False, default=180.0, help="Maximum brightness (default: 180.0).")
+    triage_parser.add_argument("-m", "--min", type=float, required=False, default=65.0,
+                               help="Minimum brightness (default: 60.0).")
+    triage_parser.add_argument("-x", "--max", type=float, required=False, default=180.0,
+                               help="Maximum brightness (default: 180.0).")
+    triage_parser.add_argument("-r", "--report", type=bool, required=False, default=True, help="Generate a report.")
+    triage_parser.add_argument("-v", "--move", type=bool, required=False, default=True,
+                               help="Move images to subfolder.")
+    triage_parser.add_argument("-p", "--poly", type=bool, required=False, default=False, help="Save polyline images.")
+    triage_parser.add_argument("-a", "--alignment", type=bool, required=False, default=False,
+                               help="Correct rotated images.")
+    triage_parser.add_argument("-d", "--delta", type=float, required=False, default=0.25,
+                               help="Rotation tolerance for considering an image over- or under-rotated.")
+    triage_parser.add_argument("-i", "--image", type=float, required=False, default="",
+                               help="Image to use as ground truth for rotation angle.")
+    triage_parser.add_argument("-b", "--blurthreshold", type=float, required=False, default=17.50,
+                               help="Blur threshold for FFT.")
+    triage_parser.add_argument("-s", "--shift", type=int, required=False, default=60,
+                               help="FFT Shift size for blur estimation.")
     triage_parser.add_argument("-f", "--folder", type=str, required=True, help="A folder must be specified.")
 
     # Slice parser
     slice_parser = subparsers.add_parser('slice', help='Perform Image Slicing')
-    slice_parser.add_argument("-s", "--start", type=int, required=False, default=0, help="Start index for slicing.")
-    slice_parser.add_argument("-e", "--end", type=int, required=False, default=20, help="End index for slicing.")
+    slice_parser.add_argument("-c", "--center", type=int, required=True, default=0, help="Center of slice (in pixels).")
+    slice_parser.add_argument("-w", "--width", type=int, required=True, default=20,
+                              help="Width of the slice (in pixels).")
     slice_parser.add_argument("-f", "--folder", type=str, required=True, help="A folder must be specified.")
+
+    # Custom help handling
+    if '-h' in sys.argv or '--help' in sys.argv:
+        print("Global Help: CLI for GRIME AI")
+        parser.print_help()  # General help for the main parser
+        print("\nHelp for 'triage' command:")
+        triage_parser.print_help()  # Help for triage subparser
+        print("\nHelp for 'slice' command:")
+        slice_parser.print_help()  # Help for slice subparser
+        sys.exit(0)  # Exit after displaying help
 
     args = parser.parse_args()
 
@@ -4991,7 +5023,7 @@ def run_cli(args):
         print(args.command)
 
         print("These are the Triage parameters:", args.folder, args.min, args.max)
-        myTriage = GRIME_AI_ImageTriage()
+        myTriage = GRIME_AI_ImageTriage(False)
         myTriage.cleanImages(args.folder, \
                              fetch_recursive, \
                              blur_threshold, shift_size, \
@@ -5003,7 +5035,34 @@ def run_cli(args):
         strMessage = 'Image triage is complete!'
         print(strMessage)
     elif args.command == 'slice':
-        print("Call the composite slice function.")
+        filenames = cli_fetchLocalImageList(args.folder)
+
+        compositeSlices = GRIME_AI_CompositeSlices(args.center, args.width, False)
+        compositeSlices.create_composite_image(filenames, args.folder+'\compositeSlices')
+
+        print("Composite slice complete!")
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
+
+    # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
+    extensions = ('.jpg', '.jpeg', '.png', '.bmp')
+
+    List = []
+
+    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
+    files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
+
+    for image_index, file in enumerate(files):
+        ext = os.path.splitext(file)[-1].lower()
+
+        if ext in extensions:
+            List.append(imageData(file, 0, 0, 0))
+
+    return List
 
 
 # ======================================================================================================================
@@ -5015,320 +5074,3 @@ if __name__ == '__main__':
 
     my_main()
 
-
-
-'''
-    from torchvision import models
-    fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    from PIL import Image
-    import matplotlib.pyplot as plt
-    import torch
-
-    !wget - nv
-    https: // static.independent.co.uk / s3fs - public / thumbnails / image / 2018 / 04 / 10 / 19 / pinyon - jay - bird.jpg - O
-    bird.png
-    img = Image.open('./bird.png')
-    plt.imshow(img);
-    plt.show()
-
-    # ----------------------------------------------------------------------------------------------------
-    # Apply the transformations needed
-    # ----------------------------------------------------------------------------------------------------
-    import torchvision.transforms as T
-    trf = T.Compose([T.Resize(256),
-                     T.CenterCrop(224),
-                     T.ToTensor(),
-                     T.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])])
-    inp = trf(img).unsqueeze(0)
-
-    # ----------------------------------------------------------------------------------------------------
-    # Pass the input through the net
-    # ----------------------------------------------------------------------------------------------------
-    out = fcn(inp)['out']
-    print(out.shape)
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    import numpy as np
-    om = torch.argmax(out.squeeze(), dim=0).detach().cpu().numpy()
-    print(om.shape)
-    print(np.unique(om))
-
-    # ----------------------------------------------------------------------------------------------------
-    # Define the helper function
-    # ----------------------------------------------------------------------------------------------------
-    def decode_segmap(image, nc=21):
-        label_colors = np.array([(0, 0, 0),  # 0=background
-                                 # 1=aeroplane, 2=bicycle, 3=bird, 4=boat, 5=bottle
-                                 (128, 0, 0), (0, 128, 0), (128, 128, 0), (0, 0, 128), (128, 0, 128),
-                                 # 6=bus, 7=car, 8=cat, 9=chair, 10=cow
-                                 (0, 128, 128), (128, 128, 128), (64, 0, 0), (192, 0, 0), (64, 128, 0),
-                                 # 11=dining table, 12=dog, 13=horse, 14=motorbike, 15=person
-                                 (192, 128, 0), (64, 0, 128), (192, 0, 128), (64, 128, 128), (192, 128, 128),
-                                 # 16=potted plant, 17=sheep, 18=sofa, 19=train, 20=tv/monitor
-                                 (0, 64, 0), (128, 64, 0), (0, 192, 0), (128, 192, 0), (0, 64, 128)])
-
-        r = np.zeros_like(image).astype(np.uint8)
-        g = np.zeros_like(image).astype(np.uint8)
-        b = np.zeros_like(image).astype(np.uint8)
-
-        for l in range(0, nc):
-            idx = image == l
-            r[idx] = label_colors[l, 0]
-            g[idx] = label_colors[l, 1]
-            b[idx] = label_colors[l, 2]
-
-        rgb = np.stack([r, g, b], axis=2)
-        return rgb
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    rgb = decode_segmap(om)
-    plt.imshow(rgb);
-    plt.show()
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    def segment(net, path, show_orig=True, dev='cuda'):
-        img = Image.open(path)
-        if show_orig: plt.imshow(img); plt.axis('off'); plt.show()
-        # Comment the Resize and CenterCrop for better inference results
-        trf = T.Compose([T.Resize(640),
-                         # T.CenterCrop(224),
-                         T.ToTensor(),
-                         T.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])])
-        inp = trf(img).unsqueeze(0).to(dev)
-        out = net.to(dev)(inp)['out']
-        om = torch.argmax(out.squeeze(), dim=0).detach().cpu().numpy()
-        rgb = decode_segmap(om)
-        plt.imshow(rgb);
-        plt.axis('off');
-        plt.show()
-
-        !wget - nv
-        https: // www.learnopencv.com / wp - content / uploads / 2021 / 01 / horse - segmentation.jpeg - O
-        horse.png
-        segment(fcn, './horse.png')
-
-    # ----------------------------------------------------------------------------------------------------
-    # DeepLabv4
-    # ----------------------------------------------------------------------------------------------------
-    dlab = models.segmentation.deeplabv3_resnet101(pretrained=1).eval()
-
-    segment(dlab, './horse.png')
-
-    !wget - nv
-    "https://www.learnopencv.com/wp-content/uploads/2021/01/person-segmentation.jpeg" - O
-    person.png
-    img = Image.open('./person.png')
-    plt.imshow(img);
-    plt.show()
-
-    print('Segmenatation Image on FCN')
-    segment(fcn, path='./person.png', show_orig=False)
-
-    print('Segmenatation Image on DeepLabv3')
-    segment(dlab, path='./person.png', show_orig=False)
-
-
-    # ----------------------------------------------------------------------------------------------------
-    # INFERENCE TIME
-    # ----------------------------------------------------------------------------------------------------
-    import time
-
-    def infer_time(net, path='./horse.png', dev='cuda'):
-        img = Image.open(path)
-        trf = T.Compose([T.Resize(256),
-                         T.CenterCrop(224),
-                         T.ToTensor(),
-                         T.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])])
-
-        inp = trf(img).unsqueeze(0).to(dev)
-
-        st = time.time()
-        out1 = net.to(dev)(inp)
-        et = time.time()
-
-        return et - st
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    def onCPU()
-        avg_over = 100
-
-        fcn_infer_time_list_cpu = [infer_time(fcn, dev='cpu') for _ in range(avg_over)]
-        fcn_infer_time_avg_cpu = sum(fcn_infer_time_list_cpu) / avg_over
-
-        dlab_infer_time_list_cpu = [infer_time(dlab, dev='cpu') for _ in range(avg_over)]
-        dlab_infer_time_avg_cpu = sum(dlab_infer_time_list_cpu) / avg_over
-        print('The Average Inference time on FCN is:     {:.2f}s'.format(fcn_infer_time_avg_cpu))
-        print('The Average Inference time on DeepLab is: {:.2f}s'.format(dlab_infer_time_avg_cpu))
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    def onGPU()
-        avg_over = 100
-
-        fcn_infer_time_list_gpu = [infer_time(fcn) for _ in range(avg_over)]
-        fcn_infer_time_avg_gpu = sum(fcn_infer_time_list_gpu) / avg_over
-
-        dlab_infer_time_list_gpu = [infer_time(dlab) for _ in range(avg_over)]
-        dlab_infer_time_avg_gpu = sum(dlab_infer_time_list_gpu) / avg_over
-
-        print('The Average Inference time on FCN is:     {:.3f}s'.format(fcn_infer_time_avg_gpu))
-        print('The Average Inference time on DeepLab is: {:.3f}s'.format(dlab_infer_time_avg_gpu))
-
-    # ----------------------------------------------------------------------------------------------------
-    #
-    # ----------------------------------------------------------------------------------------------------
-    def modelSize()
-        import os
-
-        resnet101_size = os.path.getsize('/root/.cache/torch/hub/checkpoints/resnet101-5d3b4d8f.pth')
-        fcn_size = os.path.getsize('/root/.cache/torch/hub/checkpoints/fcn_resnet101_coco-7ecb50ca.pth')
-        dlab_size = os.path.getsize('/root/.cache/torch/hub/checkpoints/deeplabv3_resnet101_coco-586e9e4e.pth')
-
-        fcn_total = fcn_size + resnet101_size
-        dlab_total = dlab_size + resnet101_size
-
-        print('Size of the FCN model with Resnet101 backbone is:       {:.2f} MB'.format(fcn_total / (1024 * 1024)))
-        print('Size of the DeepLabv3 model with Resnet101 backbone is: {:.2f} MB'.format(dlab_total / (1024 * 1024)))
-
-        plt.bar([0, 1], [fcn_total / (1024 * 1024), dlab_total / (1024 * 1024)])
-        plt.ylabel('Size of the model in MegaBytes')
-        plt.xticks([0, 1], ['FCN', 'DeepLabv3'])
-        plt.title('Comparison of the model size of FCN and DeepLabv3')
-        plt.show()
-
-
-
-    # ==================================================================================================================
-    # DIAGNOSTIC FUNCTION???
-    # JES self.pushButton_ColorSegmentation.clicked.connect(self.pushButtonColorSegmentationClicked)
-    # ==================================================================================================================
-    def pushButtonColorSegmentationClicked(self):
-        global currentImage
-
-        myGRIMe_Color = GRIME_AI_Color()
-
-        if len(self.roiList) == 0:
-            strError = "You must train at least one ROI before segmenting the image."
-            msgBox = GRIME_AI_QMessageBox('Color Segmentation Error', strError)
-            response = msgBox.displayMsgBox()
-            return
-
-        # ----------------------------------------------------------------------------------------------------
-        # DISPLAY IMAGE FROM NEON SITE
-        # ----------------------------------------------------------------------------------------------------
-        if currentImage:
-            scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-            width = scaledCurrentImage.width()
-            height = scaledCurrentImage.height()
-
-            # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-
-            rgb = cv2.blur(img1, ksize=(11, 11))
-
-            # convert image to HSV
-            hsv = cv2.cvtColor(img1, cv2.COLOR_RGB2HSV)
-
-            if len(self.roiList) > 0:
-                # DIAGNOSTICS
-                if self.checkBoxColorDiagnostics.checkState():
-                    GRIME_AI_Diagnostics.RGB3DPlot(rgb)
-                    GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
-                    GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
-
-                # segment colors
-                rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
-
-            # display the segemented image on the GUI
-            qImg = QImage(rgb1.data, rgb1.shape[1], rgb1.shape[0], QImage.Format_BGR888)
-            pix = QPixmap(qImg)
-            self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-'''
-
-
-'''
-import torch
-import torchvision
-from torchvision.models.detection import MaskRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
-from torchvision.transforms import transforms
-from torch.utils.data import DataLoader
-from torchvision.datasets import CocoDetection  
-
-# Define transformations for data augmentation
-transform = transforms.Compose([
-    transforms.ToTensor(),
-])
-
-# Load COCO dataset
-train_dataset = CocoDetection(root='path/to/coco/train', annFile='annotations/train.json', transform=transform)
-val_dataset = CocoDetection(root='path/to/coco/val', annFile='annotations/val.json', transform=transform)
-
-# Define dataloaders
-train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4, collate_fn=utils.collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4, collate_fn=utils.collate_fn)
-
-# Define the model
-model = MaskRCNN(num_classes=91)
-
-# Define optimizer and learning rate scheduler
-params = [p for p in model.parameters() if p.requires_grad]
-optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
-lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
-
-# Define the device
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-# Move model to the device
-model.to(device)
-
-# Training loop
-num_epochs = 10
-for epoch in range(num_epochs):
-    model.train()
-    for images, targets in train_loader:
-        images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-        loss_dict = model(images, targets)
-
-        losses = sum(loss for loss in loss_dict.values())
-
-        optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
-
-    # Update the learning rate
-    lr_scheduler.step()
-
-    # Evaluation on the validation dataset
-    model.eval()
-    for images, targets in val_loader:
-        images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-        with torch.no_grad():
-            val_loss_dict = model(images, targets)
-# Save the trained model
-    
-    # Print training and validation losses
-    print(f'Epoch [{epoch}/{num_epochs}], Training Loss: {losses.item()}, Validation Loss: {sum(val_loss_dict.values()).item()}')
-
-torch.save(model.state_dict(), 'trained_model.pth')
-'''

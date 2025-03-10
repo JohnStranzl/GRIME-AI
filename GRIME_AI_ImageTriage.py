@@ -12,8 +12,9 @@ from datetime import datetime
 
 class GRIME_AI_ImageTriage():
 
-    def __init__(self):
+    def __init__(self, show_gui=True):
         self.className = "GRIME_AI_ImageTriage"
+        self.show_gui = show_gui
 
     # ======================================================================================================================
     #
@@ -69,7 +70,7 @@ class GRIME_AI_ImageTriage():
     #
     # ==================================================================================================================
     def cleanImages(self, folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport,
-                    bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold, no_gui=True):
+                    bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold):
 
         badImageCount = 0
         rotationAngle = 0.0
@@ -91,7 +92,7 @@ class GRIME_AI_ImageTriage():
         # of images will help determine whether or not there is enough disk space to accommodate storing the images.
         imageCount = GRIME_AI_Utils().getImageCount(folder, extensions)
 
-        if no_gui == False:
+        if self.show_gui:
             progressBar = QProgressWheel(0, imageCount + 1)
             progressBar.show()
 
@@ -121,7 +122,7 @@ class GRIME_AI_ImageTriage():
             refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)
 
         for file in files:
-            if no_gui == False:
+            if self.show_gui:
                 progressBar.setWindowTitle(file)
                 progressBar.setValue(imageIndex)
                 progressBar.repaint()
@@ -247,7 +248,7 @@ class GRIME_AI_ImageTriage():
         if badImageCount == 0:
             strMessage = 'No bad images found.'
             print(strMessage)
-            if no_gui == False:
+            if self.show_gui:
                 msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
                 response = msgBox.displayMsgBox()
 
@@ -259,7 +260,7 @@ class GRIME_AI_ImageTriage():
         if bCreateReport:
             csvFile.close()
 
-        if no_gui == False:
+        if self.show_gui:
             progressBar.close()
             del progressBar
 

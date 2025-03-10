@@ -6,7 +6,7 @@ from PIL import Image
 from GRIME_AI_QProgressWheel import QProgressWheel
 
 class GRIME_AI_CompositeSlices():
-    def __init__(self, sliceCenter, sliceWidth):
+    def __init__(self, sliceCenter, sliceWidth, show_gui=True):
         """
         Initializes the object with the given slice center and slice width.
 
@@ -17,6 +17,8 @@ class GRIME_AI_CompositeSlices():
 
         self.sliceCenter = sliceCenter
         self.sliceWidth = sliceWidth
+
+        self.show_gui = show_gui
 
 
     # ==================================================================================================================
@@ -71,13 +73,17 @@ class GRIME_AI_CompositeSlices():
             IOError: If an error occurs while opening, processing, or saving the images.
         """
 
+        if os.path.exists(output_path) == False:
+            os.makedirs(output_path, exist_ok=True)
+
         imageCount = len(imageList)
 
         # DISPLAY PROGRESS BAR
         # ----------------------------------------------------------------------------------------------------
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, imageCount + 1)
-        progressBar.show()
+        if self.show_gui:
+            progressBar = QProgressWheel()
+            progressBar.setRange(0, imageCount + 1)
+            progressBar.show()
 
         # CREATE A BASE FILENAME TO WHICH AN INDEX NUMBER WILL BE APPENDED AT THE TIME WHEN THE IMAGE IS SAVED
         # ----------------------------------------------------------------------------------------------------
@@ -108,9 +114,10 @@ class GRIME_AI_CompositeSlices():
         current_image_index = 0
 
         for i, image_file in enumerate(imageList):
-            progressBar.setWindowTitle(image_file.fullPathAndFilename)
-            progressBar.setValue(i)
-            progressBar.repaint()
+            if self.show_gui:
+                progressBar.setWindowTitle(image_file.fullPathAndFilename)
+                progressBar.setValue(i)
+                progressBar.repaint()
 
             # OPEN AN IMAGE AND EXTRACT OUT A SLICE (i.e., THE ROI SELECTED BY THE END-USER)
             # ----------------------------------------------------------------------------------------------------
@@ -138,8 +145,9 @@ class GRIME_AI_CompositeSlices():
         # clean-up before exiting function
         # 1. close and delete the progress bar
         # 2. close the EXIF log file, if opened
-        progressBar.close()
-        del progressBar
+        if self.show_gui:
+            progressBar.close()
+            del progressBar
 
 
     # ==================================================================================================================
