@@ -434,11 +434,11 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     def sumChannels(self, red, green, blue):
 
-        redSum = np.sum(red)
-        greenSum = np.sum(green)
-        blueSum = np.sum(blue)
+        red_sum = np.sum(red)
+        green_sum = np.sum(green)
+        blue_sum = np.sum(blue)
 
-        return redSum, greenSum, blueSum
+        return red_sum, green_sum, blue_sum
 
 
     # ------------------------------------------------------------------------------------------------------------------

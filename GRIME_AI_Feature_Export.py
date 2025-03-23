@@ -95,14 +95,14 @@ class GRIME_AI_Feature_Export:
                 texture = -999
 
                 red, green, blue = GRIME_AI_Utils().separateChannels(img)
-                redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+                red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
 
                 # CREATE HYPERLINK TO FILE
                 strOutputString = '=HYPERLINK(' + '"' + roiObj.getTrainingImageName() + '"' + ')'
                 strOutputString = strOutputString + ','     # DATE
                 strOutputString = strOutputString + ','     # TIME
 
-                strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, redSum, greenSum, blueSum)
+                strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
 
                 strOutputString = strOutputString + ',' + '%3.4f' % intensity
                 strOutputString = strOutputString + ',' + '%3.4f' % entropyValue
@@ -171,9 +171,9 @@ class GRIME_AI_Feature_Export:
                             texture = -999
 
                             red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+                            red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
 
-                            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, redSum, greenSum, blueSum)
+                            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
 
                             if colorSegmentationParams.Intensity:
                                 strOutputString = strOutputString + ', %3.4f' % intensity
@@ -205,7 +205,7 @@ class GRIME_AI_Feature_Export:
                         # WRITE STRING TO CSV FILE
                         strOutputString = strOutputString  + '\n'
                         csvFile.write(strOutputString)
-            except:
+            except Exception:
                 exceptValue = 0
 
             csvFile.close()
@@ -350,7 +350,7 @@ class GRIME_AI_Feature_Export:
             try:
                 hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
                 gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-            except:
+            except Exception:
                 tempValue = 0
 
             # IMAGE INTENSITY CALCULATIONS
@@ -368,9 +368,9 @@ class GRIME_AI_Feature_Export:
             hsvClusterCenters[:, 0] = hsvClusterCenters[:, 0] * 2.0
 
             red, green, blue = GRIME_AI_Utils().separateChannels(rgb)
-            redSum, greenSum, blueSum = GRIME_AI_Utils().sumChannels(red, green, blue)
+            red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
 
-            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, redSum, greenSum, blueSum)
+            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
 
             if colorSegmentationParams.Intensity:
                 strOutputString = strOutputString + ', %3.4f' % intensity
@@ -408,7 +408,7 @@ class GRIME_AI_Feature_Export:
 
         try:
             sum_en = sum(entropy)
-        except:
+        except Exception:
             sum_en = 0.0
 
         return sum_en[0]

@@ -27,7 +27,7 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         self.imageCount = 0
 
-        self.spinBoxImageIndex.valueChanged.connect(self.spinBoxCannyImageIndexChanged)
+        self.spinBoxImageIndex.valueChanged.connect(self.spinBoxChanged)
         self.pushButtonResetImageIndex.clicked.connect(self.pushButtonResetImageImageClicked)
 
         self.spinBoxImageIndex.setMinimum(1)
@@ -48,9 +48,6 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
 
         if self.imageCount > 0:
             self.imageIndexSignal.emit(self.spinBoxImageIndex.value())
-
-    def spinBoxCannyImageIndexChanged(self):
-        self.imageIndexSignal.emit(self.spinBoxImageIndex.value())
 
     def pushButtonResetImageImageClicked(self):
         self.spinBoxImageIndex.setValue(1)

@@ -103,14 +103,14 @@ def loadChromeDriver():
         try:
             strChromeDriverPath = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver')
             driver = webdriver.Chrome(service=Service(ChromeDriverManager(path=strChromeDriverPath).install()), options=options)
-        except:
+        except Exception:
             strChromeExe = os.path.join('C:/Program Files (x86)/GRIME-AI/chromedriver/chromedriver.exe')
             print(strChromeExe)
             # driver = webdriver.Chrome(strChromeExe, options=options)  # Optional argument, if not specified will search path.
             driver = webdriver.Chrome(strChromeExe)  # Optional argument, if not specified will search path.
 
         strChromeDriverVersion = driver.capabilities['browserVersion']
-    except:
+    except Exception:
         pass
 
     """

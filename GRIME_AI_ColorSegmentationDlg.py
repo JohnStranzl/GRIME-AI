@@ -28,6 +28,7 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
     close_signal = pyqtSignal()
     buildFeatureFile_Signal = pyqtSignal()
     universalTestButton_Signal = pyqtSignal(int)
+    greenness_index_signal = pyqtSignal()
 
     returnROIParameters = roiParameters()
 
@@ -57,6 +58,13 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         else:
             self.pushButton_Dlg_TEST.setEnabled(False)
             self.pushButton_Dlg_TEST.hide()
+
+        # GREENNESS INDEX SELECTIONS
+        self.checkBox_GCC.clicked.connect(self.GCC_Clicked)
+        self.checkBox_GLI.clicked.connect(self.GLI_Clicked)
+        self.checkBox_ExG.clicked.connect(self.ExG_Clicked)
+        self.checkBox_RGI.clicked.connect(self.RGI_Clicked)
+        self.checkBox_NDVI.clicked.connect(self.NDVI_Clicked)
 
         # SET CONTROL COLORS
         self.pushButton_Dlg_BuildFeatureFile.setStyleSheet('QPushButton {background-color: steelblue; color: yellow;}')
@@ -100,3 +108,20 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
     # ----------------------------------------------------------------------------------------------------
     def deleteAllROI(self):
         self.deleteAllROI_Signal.emit()
+
+    # ----------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------
+    def GCC_Clicked(self):
+        self.greenness_index_signal.emit()
+
+    def GLI_Clicked(self):
+        self.greenness_index_signal.emit()
+
+    def ExG_Clicked(self):
+        self.greenness_index_signal.emit()
+
+    def RGI_Clicked(self):
+        self.greenness_index_signal.emit()
+
+    def NDVI_Clicked(self):
+        self.greenness_index_signal.emit()

@@ -31,7 +31,7 @@ class GRIME_AI_Color:
 
         try:
             origImg = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        except:
+        except Exception:
             origImg = []
 
         return origImg

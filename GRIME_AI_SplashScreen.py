@@ -73,7 +73,7 @@ class GRIME_AI_SplashScreen(QSplashScreen):
     def splashSound(self):
         try:
            playsound('.\shall-we-play-a-game.mp3')
-        except:
+        except Exception:
            pass
 
 '''

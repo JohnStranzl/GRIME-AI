@@ -1,6 +1,6 @@
-class colorSegmentationParamsClass():
+class colorSegmentationParamsClass:
 
-    def __init__(self, parent=None):
+    def __init__(self):
         self.className = "colorSegmentationParamsClass"
         self.instance = 1
 

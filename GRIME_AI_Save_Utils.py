@@ -135,7 +135,7 @@ class GRIME_AI_Save_Utils:
             USGS_FolderPath = config.get(szSection, 'SaveFilePath')
 
             f.close()
-        except:
+        except Exception:
             USGS_FolderPath = ""
 
         return USGS_FolderPath
@@ -162,7 +162,7 @@ class GRIME_AI_Save_Utils:
             NEON_FolderPath = config.get(szSection, 'SaveFilePath')
 
             f.close()
-        except:
+        except Exception:
             NEON_FolderPath = ""
 
         return NEON_FolderPath
@@ -204,7 +204,7 @@ class JsonEditor():
 
         except FileNotFoundError:
             print('GRIMe-AI.json file not found')
-        except:
+        except Exception:
             print(f'Adding missing entry {entry_key} to GRIMe-AI.json')
             self.add_key_value_to_json(entry_key, new_value)
 
@@ -216,7 +216,7 @@ class JsonEditor():
             # Load the existing data from the JSON file
             with open(json_file, 'r') as file:
                 data = json.load(file)
-        except:
+        except Exception:
             # If the file doesn't exist, create an empty dictionary
             data = {}
 
@@ -242,7 +242,7 @@ class JsonEditor():
                 data = json.load(file)
 
             return(data[key])
-        except:
+        except Exception:
             # If the file doesn't exist, create an empty dictionary
             data = {}
 

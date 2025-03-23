@@ -107,7 +107,7 @@ class EXIFData:
             nSecs = date_obj.time().second
 
             bEXIFDataFound = True
-        except:
+        except Exception:
             # assume the filename contains the timestamp for the image (assumes the image file is a PBT image)
             bEXIFDataFound = False
 
@@ -115,7 +115,7 @@ class EXIFData:
                 nHours = int(str(strTime[0:2]))
                 nMins = int(str(strTime[2:4]))
                 nSecs = int(str(strTime[4:6]))
-            except:
+            except Exception:
                 nHours = 0
                 nMins = 0
                 nSecs = 0

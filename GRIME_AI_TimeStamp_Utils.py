@@ -133,7 +133,7 @@ class GRIME_AI_TimeStamp_Utils:
             arrTime.append('0')
             arrTime.append('0')
             delimiter = ''
-        except:
+        except Exception:
             arrDate = None
             arrTime = None
 
@@ -155,7 +155,7 @@ class GRIME_AI_TimeStamp_Utils:
                 arrDate = re.search('\d{4}-\d{2}-\d{2}', filename)
                 arrTime = re.search('T\d{2}-\d{2}-\d{2}', re.search('T\d{2}-\d{2}-\d{2}', filename)[0])
                 delimiter = '-'
-        except:
+        except Exception:
             arrDate = None
             arrTime = None
 
@@ -169,7 +169,7 @@ class GRIME_AI_TimeStamp_Utils:
                 nYear  = int(arrDate[0])
                 nMonth = int(arrDate[1])
                 nDay   = int(arrDate[2])
-        except:
+        except Exception:
             nYear  = 1970
             nMonth = 1
             nDay   = 1
@@ -184,7 +184,7 @@ class GRIME_AI_TimeStamp_Utils:
                 nHours   = int(arrTime[0])
                 nMinutes = int(arrTime[1])
                 nSeconds = int(arrTime[2])
-        except:
+        except Exception:
             nHours   = 0
             nMinutes = 0
             nSeconds = 0

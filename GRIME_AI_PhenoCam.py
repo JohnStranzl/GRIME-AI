@@ -146,7 +146,7 @@ class GRIME_AI_PhenoCam():
             nYear = int(arrStartDate.group().split(delimiter)[0])
             nMonth = int(arrStartDate.group().split(delimiter)[1])
             nDay = int(arrStartDate.group().split(delimiter)[2])
-        except:
+        except Exception:
             nYear = 1970
             nMonth = 1
             nDay = 1
@@ -181,7 +181,7 @@ class GRIME_AI_PhenoCam():
             nYear = int(arrLastDate.group().split(delimiter)[0])
             nMonth = int(arrLastDate.group().split(delimiter)[1])
             nDay = int(arrLastDate.group().split(delimiter)[2])
-        except:
+        except Exception:
             pass
 
         return nYear, nMonth, nDay
@@ -221,7 +221,7 @@ class GRIME_AI_PhenoCam():
 
         try:
             GRIME_AI_PhenoCam.closeChromeDriver()
-        except:
+        except Exception:
             pass
 
         nImageCount = len(imageList.visibleList)

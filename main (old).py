@@ -130,7 +130,7 @@ from GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
-from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
+from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, greennessIndex
 from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 
 from GRIME_AI_Save_Utils import JsonEditor
@@ -170,14 +170,6 @@ from colorSegmentationParams import colorSegmentationParamsClass
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# HYDRA (for SAM2)
-# ----------------------------------------------------------------------------------------------------------------------
-import hydra
-from hydra import initialize, compose, initialize_config_dir
-from omegaconf import OmegaConf, DictConfig
-
-
-# ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
 from NEON_API import NEON_API
 
@@ -194,8 +186,8 @@ from chrome_driver import *
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-import constants
 from constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -225,34 +217,6 @@ bStartupComplete = False
 
 global bShow_GUI
 bShow_GUI = False
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-# import tensorflow as tf
-try:
-    import torch
-    print(torch.__version__)
-
-    import torchvision.transforms as T
-    from torch.cuda.amp import GradScaler, autocast
-    from torch import nn
-    from torch.utils.data import DataLoader
-    from torch.nn.functional import binary_cross_entropy_with_logits
-
-    print("GRIME AI Deep Learning: PyTorch imported successfully.")
-except ImportError as e:
-    print("GRIME AI Deep Learning: Error importing PyTorch:", e)
-    # Remove the faulty package from sys.modules to prevent further issues
-    if 'torch' in sys.modules:
-        del sys.modules['torch']
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
-import sam2
-from sam2.build_sam import build_sam2
-from sam2.sam2_image_predictor import SAM2ImagePredictor
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -371,7 +335,7 @@ g_displayOptions   = displayOptions()
 #g_featureDetection = featureDetection()
 #g_edgeDetection    = edgeDetection()
 #g_features         = features()
-#g_greennessIndex   = greennessIndex()
+g_greennessIndex   = greennessIndex()
 
 g_edgeMethodSettings = edgeMethodsClass()
 g_featureMethodSettings = featureMethodsClass()
@@ -403,44 +367,6 @@ class Net(nn.Module):
 '''
 
 # ==================================================================================================================
-#
-# ==================================================================================================================
-class SAM2FullModel(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.image_encoder = model.forward_image
-        self._prepare_backbone_features = model._prepare_backbone_features
-        self.directly_add_no_mem_embed = model.directly_add_no_mem_embed
-        self.no_mem_embed = model.no_mem_embed
-        self.prompt_encoder = model.sam_prompt_encoder
-        self.mask_decoder = model.sam_mask_decoder
-        self._bb_feat_sizes = [(256, 256), (128, 128), (64, 64)]
-
-    def forward(self, image, point_coords, point_labels):
-        backbone_out = self.image_encoder(image)
-        _, vision_feats, _, _ = self._prepare_backbone_features(backbone_out)
-        if self.directly_add_no_mem_embed:
-            vision_feats[-1] = vision_feats[-1] + self.no_mem_embed
-        feats = [feat.permute(1, 2, 0).view(1, -1, *feat_size) for feat, feat_size in
-                 zip(vision_feats[::-1], self._bb_feat_sizes[::-1])][::-1]
-        features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
-        high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in features["high_res_feats"]]
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(points=(point_coords, point_labels), boxes=None,
-                                                                  masks=None)
-        low_res_masks, iou_predictions, _, _ = self.mask_decoder(
-            image_embeddings=features["image_embed"][-1].unsqueeze(0),
-            image_pe=self.prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=True,
-            repeat_image=point_coords.shape[0] > 1,
-            high_res_features=high_res_features,
-        )
-        out = {"low_res_masks": low_res_masks, "iou_predictions": iou_predictions}
-        return out
-
-
-# ======================================================================================================================
 #
 # ======================================================================================================================
 class MplCanvas(FigureCanvas):
@@ -571,11 +497,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.populate_controls()
 
-        self.loss_values = []
-        self.val_loss_values = []
-        self.epoch_list = []
-        self.scaler = GradScaler()
-
         # ----------------------------------------------------------------------------------------------------
         #
         # ----------------------------------------------------------------------------------------------------
@@ -595,9 +516,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ----------------------------------------------------------------------------------------------------
         #
         # ----------------------------------------------------------------------------------------------------
-        self.greenness_index_list = []
         self.colorSegmentationParams = colorSegmentationParamsClass()
-        self.getColorSegmentationParams()
+
 
         # ----------------------------------------------------------------------------------------------------
         # GET DATA, POPULATE WIDGETS, ETC.
@@ -608,7 +528,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.NEON_FormatProductTableHeader()
 
-        self.initROITable(self.greenness_index_list)
+        self.initROITable()
 
 
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -810,33 +730,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ------------------------------------------------------------------------------------------------------------------
     def getColorSegmentationParams(self):
-        if self.colorSegmentationDlg is not None:
-            self.colorSegmentationParams.GCC            = self.colorSegmentationDlg.checkBox_GCC.isChecked()
-            self.colorSegmentationParams.GLI            = self.colorSegmentationDlg.checkBox_GLI.isChecked()
-            self.colorSegmentationParams.NDVI           = self.colorSegmentationDlg.checkBox_NDVI.isChecked()
-            self.colorSegmentationParams.ExG            = self.colorSegmentationDlg.checkBox_ExG.isChecked()
-            self.colorSegmentationParams.RGI            = self.colorSegmentationDlg.checkBox_RGI.isChecked()
+        self.colorSegmentationParams.GCC            = self.colorSegmentationDlg.checkBox_GCC.isChecked()
+        self.colorSegmentationParams.GLI            = self.colorSegmentationDlg.checkBox_GLI.isChecked()
+        self.colorSegmentationParams.NDVI           = self.colorSegmentationDlg.checkBox_NDVI.isChecked()
+        self.colorSegmentationParams.ExG            = self.colorSegmentationDlg.checkBox_ExG.isChecked()
+        self.colorSegmentationParams.RGI            = self.colorSegmentationDlg.checkBox_RGI.isChecked()
 
-            self.colorSegmentationParams.Intensity      = self.colorSegmentationDlg.checkBox_Intensity.isChecked()
-            self.colorSegmentationParams.ShannonEntropy = self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked()
-            self.colorSegmentationParams.Texture        = self.colorSegmentationDlg.checkBox_Texture.isChecked()
+        self.colorSegmentationParams.Intensity      = self.colorSegmentationDlg.checkBox_Intensity.isChecked()
+        self.colorSegmentationParams.ShannonEntropy = self.colorSegmentationDlg.checkBox_ShannonEntropy.isChecked()
+        self.colorSegmentationParams.Texture        = self.colorSegmentationDlg.checkBox_Texture.isChecked()
 
-            self.colorSegmentationParams.wholeImage     = self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked()
-
-        self.greenness_index_list.clear()
-
-        if self.colorSegmentationParams.GCC:
-            self.greenness_index_list.append(GreennessIndex(GRIME_AI_Vegetation_Indices.GCC))
-        if self.colorSegmentationParams.GLI:
-            self.greenness_index_list.append(GreennessIndex(GRIME_AI_Vegetation_Indices.GLI))
-        if self.colorSegmentationParams.NDVI:
-            self.greenness_index_list.append(GreennessIndex(GRIME_AI_Vegetation_Indices.NDVI))
-        if self.colorSegmentationParams.ExG:
-            self.greenness_index_list.append(GreennessIndex(GRIME_AI_Vegetation_Indices.ExG))
-        if self.colorSegmentationParams.RGI:
-            self.greenness_index_list.append(GreennessIndex(GRIME_AI_Vegetation_Indices.RGI))
-
-        self.initROITable(self.greenness_index_list)
+        self.colorSegmentationParams.wholeImage     = self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked()
 
     # ------------------------------------------------------------------------------------------------------------------
     # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
@@ -1550,40 +1454,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def initROITable(self, greenness_list=None):
-
-        if greenness_list == []:
-            headerList = ['ROI Name', 'Ref. Image', 'Cur. Image', 'Intensity', 'Entropy']
-        else:
-            headerList = ['ROI Name', 'Ref. Image', 'Cur. Image']
-
-            for greenness_name in greenness_list:
-                headerList.append(greenness_name.get_name())
-
-            headerList.append('Intensity')
-            headerList.append('Entropy')
-
-
+    def initROITable(self):
+        headerList = ['ROI Name', 'Ref. Image', 'Cur. Image', 'Greenness', 'Intensity', 'Entropy']
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
         header = self.tableWidget_ROIList.horizontalHeader()
+        self.tableWidget_ROIList.setColumnCount(len(headerList))
+        i = 0
+        for item in headerList:
+            headerItem = QTableWidgetItem(item)
+            headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
+            self.tableWidget_ROIList.setHorizontalHeaderItem(i, headerItem)
+            self.tableWidget_ROIList.setStyleSheet(stylesheet)
+            header.setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
+            i = i + 1
+
         font = QFont()
         font.setBold(True)
         self.tableWidget_ROIList.horizontalHeader().setFont(font)
         self.tableWidget_ROIList.horizontalHeader().setVisible(True)
-        self.tableWidget_ROIList.setStyleSheet(stylesheet)
-        self.tableWidget_ROIList.setColumnCount(len(headerList))
-
-        for i, item in enumerate(headerList):
-            headerItem = QTableWidgetItem(item)
-            headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.tableWidget_ROIList.setHorizontalHeaderItem(i, headerItem)
-
-            # Automatically resize columns when text is inserted
-            header.setSectionResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)
-
-        # Set the stretch mode to adapt to any remaining space
-        header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
 
     # ==================================================================================================================
     #
@@ -2317,33 +2205,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.colorSegmentationDlg.buildFeatureFile_Signal.connect(self.buildFeatureFile)
                 self.colorSegmentationDlg.universalTestButton_Signal.connect(self.universalTestButton)
 
-                self.colorSegmentationDlg.greenness_index_signal.connect(self.greenness_index_changed)
-
                 self.colorSegmentationDlg.close_signal.connect(self.closeColorSegmentationDlg)
                 self.colorSegmentationDlg.accepted.connect(self.closeColorSegmentationDlg)
                 self.colorSegmentationDlg.rejected.connect(self.closeColorSegmentationDlg)
-
-                self.getColorSegmentationParams()
 
                 self.colorSegmentationDlg.show()
             else:
                 strMessage = 'Please close the Mask Editor toolbox if you want to use the Mask Editor toolbox.\nThis will be resolved in a future design change.'
                 msgBox = GRIME_AI_QMessageBox('Tool Conflict', strMessage, QMessageBox.Yes | QMessageBox.No)
                 response = msgBox.displayMsgBox()
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def greenness_index_changed(self):
-        if self.colorSegmentationDlg != None:
-            self.getColorSegmentationParams()
-
-            # UPDATE THE FEATURE TABLE
-            self.initROITable(self.greenness_index_list)
-
-            processLocalImage(self, currentImageIndex)
-            self.refreshImage()
 
 
     # ==================================================================================================================
@@ -2418,7 +2288,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.buildModelDlg.save_model_masks_signal.connect(self.saveModelMasksChanged)
             self.buildModelDlg.save_original_model_image_signal.connect(self.saveOriginalModelImageChanged)
             self.buildModelDlg.segment_image_signal.connect(self.segment_image_clicked)
-            self.buildModelDlg.build_model_signal.connect(self.tune_model_clicked)
+            self.buildModelDlg.build_model_signal.connect(self.build_model_clicked)
 
             self.buildModelDlg.show()
 
@@ -2454,7 +2324,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def tune_model_clicked(self):
+    def build_model_clicked(self):
 
         global g_modelSettings
         g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
@@ -2466,8 +2336,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             del self.buildModelDlg
             self.buildModelDlg = None
 
-        if g_modelSettings.model_file:
-            self.myDeepLearning(g_modelSettings)
+        #JES - IS THIS USED???
+        #if g_modelSettings.model_file:
+        #    self.myDeepLearning(g_modelSettings)
 
         self.GRIME_AI_tune_sam2_model()
 
@@ -2476,6 +2347,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ==================================================================================================================
     def segment_image_clicked(self):
+
+        from GRIME_AI_SAM2_Model import GRIME_AI_Build_Model
+        from GRIME_AI_SAM2_Model import SAM2FullMode
 
         global progress_bar_closed
 
@@ -2514,10 +2388,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         sam2_checkpoint = os.path.normpath(sam2_checkpoint)
         print(sam2_checkpoint)
 
-        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(DEVICE)
+        myGRIME_AI_Build_Model = GRIME_AI_Build_Model()
 
-        sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE, mode='eval')
+        sam2_model = myGRIME_AI_Build_Model.build_sam2(model_cfg, sam2_checkpoint)
 
         predictor = SAM2ImagePredictor(sam2_model)
 
@@ -2783,6 +2656,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     def GRIME_AI_tune_sam2_model(self):
+        import GRIME_AI_SAM2_Model as GRIME_AI_SAM2_Model
+        from GRIME_AI_SAM2_Model import SAM2FullMode
+
+        loss_values = []
+        val_loss_values = []
+        epoch_list = []
+        scaler = GradScaler()
+
         training_images_folder = [os.path.normpath(self.buildModelDlg.get_training_images_folder())]
 
         annotation_file = [self.buildModelDlg.get_annotation_filename()]
@@ -2805,7 +2686,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         predictor.model.sam_mask_decoder.train(True)  # enable training of mask decoder
         predictor.model.sam_prompt_encoder.train(True)  # enable training of prompt encoder
 
-        model = SAM2FullModel(predictor.model)
+        model = SAM2FullMode(predictor.model)
 
         model.to(DEVICE)
 
@@ -3565,6 +3446,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # BLUR THE IMAGE
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
+            red, green, blue = GRIME_AI_Utils().separateChannels(img)
+            red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
+            strGCC = '%3.3f' % (GRIME_AI_Vegetation_Indices().compute_gcc(red_sum, green_sum, blue_sum))
+
             # IMAGE INTENSITY CALCULATIONS
             intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
             strIntensity = '%3.3f' % (intensity)
@@ -3573,10 +3458,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             entropyValue = self.calcEntropy(gray)
             strEntropy = '%3.3f' % (entropyValue)
         else:
+            strGCC = '---'
             strIntensity = '---'
             strEntropy = '---'
 
-        return strIntensity, strEntropy
+        return strGCC, strIntensity, strEntropy
 
 
 # ======================================================================================================================
@@ -3759,11 +3645,15 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
             tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
             currentImage = QPixmap(tempCurrentImage)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ==================================================================================================================
     # DISPLAY IMAGE FROM NEON SITE
-    # ------------------------------------------------------------------------------------------------------------------
+    # ==================================================================================================================
     if currentImage:
-        numpyImg = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+
+        # CALCULATE THE GREENNESS INDEX (PHENOCAM GCC) FOR THE ENTIRE IMAGE
+        if currentImage != []:
+            numpyImg = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+            #JES self.label_GreennessIndex_Value.setText(str(GRIME_Vegetation_Indices.compute_gcc(numpyImg)))
 
         scaledCurrentImage = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
 
@@ -3777,10 +3667,8 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
 
         img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
 
-        # ==============================================================================================================
-        #  WHOLE IMAGE - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-        # ==============================================================================================================
-        strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
+        # EXTRACT FEATURES FOR WHOLE IMAGE
+        strGCC, strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
 
         nRow = self.tableWidget_ROIList.rowCount()
         if nRow == 0:
@@ -3790,118 +3678,102 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
         wholeImageLabel.setText("Whole Image")
         self.tableWidget_ROIList.setCellWidget(0, 0, wholeImageLabel)
 
-        # COMPUTE THE GREENNESS VALUES FOR THE ENTIRE IMAGE FOR THE ACTIVE GREENNESS INDICES
-        col = 3
-        for index, greenness in enumerate(self.greenness_index_list):
-            # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-            greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
-            self.greenness_index_list[index] = greenness_updated
-
-            # UPDATE TABLE
-            greennessLabel = QtWidgets.QLabel()
-            format_green = "{:.3f}".format(greenness_updated.get_value())
-            greennessLabel.setText(format_green)
-            self.tableWidget_ROIList.setCellWidget(0, col, greennessLabel)
-            col += 1
+        greennessLabel = QtWidgets.QLabel()
+        greennessLabel.setText(strGCC)
+        self.tableWidget_ROIList.setCellWidget(0, 3, greennessLabel)
 
         intensityLabel = QtWidgets.QLabel()
         intensityLabel.setText(strIntensity)
-        self.tableWidget_ROIList.setCellWidget(0, col, intensityLabel)
-        col += 1
+        self.tableWidget_ROIList.setCellWidget(0, 4, intensityLabel)
 
         entropyLabel = QtWidgets.QLabel()
         entropyLabel.setText(strEntropy)
-        self.tableWidget_ROIList.setCellWidget(0, col, entropyLabel)
-        col += 1
+        self.tableWidget_ROIList.setCellWidget(0, 5,entropyLabel)
 
         # DISPLAY THE PROGRESS WHEEL
         progressBar = QProgressWheel()
         progressBar.setRange(0, len(self.roiList) + 1)
         #JES progressBar.show()
 
-        # ==============================================================================================================
-        #  ROIs - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-        # ==============================================================================================================
+        # EXTRACT THE FEATURES FOR EACH ROI
         nRow = 1
         for roiObj in self.roiList:
             progressBar.setValue(nRow+1)
-            #progressBar.repaint()
+            progressBar.repaint()
 
             try:
-                # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
-                rgb = extractROI(roiObj.getImageROI(), img)
+                if (1):
+                    # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
+                    rgb = extractROI(roiObj.getImageROI(), img)
 
-                gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+                    gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
 
-                # ------------------------------------------------------------------------------------------
-                # COLOR SEGMENTATION
-                # ------------------------------------------------------------------------------------------
-                # EXTRACT DOMINANT RGB COLORS
-                _, _, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
+                    # ------------------------------------------------------------------------------------------
+                    # COLOR SEGMENTATION
+                    # ------------------------------------------------------------------------------------------
+                    # EXTRACT DOMINANT RGB COLORS
+                    _, _, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
 
-                # EXTRACT DOMINANT HSV COLORS
-                hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+                    # EXTRACT DOMINANT HSV COLORS
+                    hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
 
-                # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-                colorBar = self.createColorBar(hist, colorClusters)
+                    # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+                    colorBar = self.createColorBar(hist, colorClusters)
 
-                # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
-                qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+                    # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+                    qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
 
-                # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
-                self.label = QtWidgets.QLabel()
-                self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
-                self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
+                    # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+                    self.label = QtWidgets.QLabel()
+                    self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
+                    self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
 
-                self.tableWidget_ROIList.resizeColumnsToContents()
+                    self.tableWidget_ROIList.resizeColumnsToContents()
 
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE GREENNESS INDEX FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    nCol = 3
-                    for index, greenness in enumerate(self.greenness_index_list):
-                        # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-                        greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
-                        self.greenness_index_list[index] = greenness_updated
+                    # ------------------------------------------------------------------------------------------
+                    # CALCULATE THE GREENNESS INDEX FOR THE ROI
+                    # ------------------------------------------------------------------------------------------
+                    try:
+                        # CALCULATE THE ROI'S GREENNES INDEX
+                        red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+                        red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
+                        fGreennessIndex = GRIME_AI_Vegetation_Indices().compute_gcc(red_sum, green_sum, blue_sum)
 
-                        # DISPLAY ROI'S GREENNESS INDEX IN THE GUI TABLE
-                        greennessLabel = QtWidgets.QLabel()
-                        format_green = "{:.3f}".format(greenness_updated.get_value())
-                        greennessLabel.setText(format_green)
-                        self.tableWidget_ROIList.setCellWidget(nRow, nCol, greennessLabel)
-                        nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Greenness Index calculation.')
+                        # DISPLAY ROI'S GREENNESS INDEX ON THE GUI
+                        strGreennessIndex = "{:.4f}".format(fGreennessIndex)
+                        self.greennessLabel = QtWidgets.QLabel()
+                        self.greennessLabel.setText(strGreennessIndex)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 3, self.greennessLabel)
+                    except Exception:
+                        print('Something went wrong with the ROI Greenness Index calculation.')
 
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE INTENSITY FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S INTENSITY
-                    strIntensity = "{:.4f}".format(cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+                    # ------------------------------------------------------------------------------------------
+                    # CALCULATE THE INTENSITY FOR THE ROI
+                    # ------------------------------------------------------------------------------------------
+                    try:
+                        # CALCULATE THE ROI'S INTENSITY
+                        strIntensity = "{:.4f}".format(cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
 
-                    # DISPALY THE ROI'S INTENSITY ON THE GUI
-                    self.intensityLabel = QtWidgets.QLabel()
-                    self.intensityLabel.setText(strIntensity)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.intensityLabel)
-                    nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Intensity calculation.')
+                        # DISPALY THE ROI'S INTENSITY ON THE GUI
+                        self.intensityLabel = QtWidgets.QLabel()
+                        self.intensityLabel.setText(strIntensity)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 4, self.intensityLabel)
+                    except Exception:
+                        print('Something went wrong with the ROI Intensity calculation.')
 
-                # ------------------------------------------------------------------------------------------
-                # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S ENTROPY
-                    strEntropyValue = "{:.4f}".format(self.calcEntropy(gray))
+                    # ------------------------------------------------------------------------------------------
+                    # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                    # ------------------------------------------------------------------------------------------
+                    try:
+                        # CALCULATE THE ROI'S ENTROPY
+                        strEntropyValue = "{:.4f}".format(self.calcEntropy(gray))
 
-                    # DISPLAY THE ROI'S ENTROPY ON THE GUI
-                    self.entropyLabel = QtWidgets.QLabel()
-                    self.entropyLabel.setText(strEntropyValue)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.entropyLabel)
-                except Exception:
-                    pass
+                        # DISPLAY THE ROI'S ENTROPY ON THE GUI
+                        self.entropyLabel = QtWidgets.QLabel()
+                        self.entropyLabel.setText(strEntropyValue)
+                        self.tableWidget_ROIList.setCellWidget(nRow, 5, self.entropyLabel)
+                    except Exception:
+                        pass
 
                 nRow = nRow + 1
             except Exception:

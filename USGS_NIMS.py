@@ -65,7 +65,7 @@ class USGS_NIMS:
                 # ONLY DEAL WITH NIMS SITES AND IGNORE HIVIS SITES
                 if element['locus'] == 'aws':
                     cameraDictionary[index] = element
-        except:
+        except Exception:
             cameraDictionary = {}
 
         return cameraDictionary
@@ -115,7 +115,7 @@ class USGS_NIMS:
 
                                 keyData = key + ': ' + keyData
                                 myList.append(keyData)
-        except:
+        except Exception:
             myList.append("No information available for this site.")
 
         if len(myList) == 0:
@@ -264,7 +264,7 @@ class USGS_NIMS:
                         fullFilename = os.path.join(saveFolder, image)
                         if os.path.isfile(fullFilename) == False:
                             urllib.request.urlretrieve(fullURL, fullFilename)
-                    except:
+                    except Exception:
                         if missingImageCount == 0:
                             strMessage = 'One or more images reported as available by NIMS are not available.'
                             msgBox = GRIME_AI_QMessageBox('Images unavailable', strMessage, QMessageBox.Close)
@@ -320,7 +320,7 @@ class USGS_NIMS:
 
             fullFilename_csv = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".csv")
             self.reformat_file(fullFilename_txt, fullFilename_csv)
-        except:
+        except Exception:
             strMessage = 'Unable to retrieve data from the USGS site.'
             msgBox = GRIME_AI_QMessageBox('USGS - Retrieval Error', strMessage, QMessageBox.Close)
             response = msgBox.displayMsgBox()

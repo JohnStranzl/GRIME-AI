@@ -180,7 +180,7 @@ class QProgressWheel(QWidget):
         if self.m_value > 0:
             try:
                 delta = (self.m_max - self.m_min) / (self.m_value - self.m_min)
-            except:
+            except Exception:
                 delta = 0
         else:
             delta = 0
@@ -282,7 +282,7 @@ class QProgressWheel(QWidget):
         if self.m_updateFlags == self.UpdateFlags.PERCENT:
             try:
                 percent = (value - self.m_min) / (self.m_max - self.m_min) * 100
-            except:
+            except Exception:
                 percent = 0
             textToDraw = textToDraw.replace('%p', str(round(percent, self.m_decimals)))
         if self.m_updateFlags == self.UpdateFlags.MAX:

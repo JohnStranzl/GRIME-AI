@@ -61,7 +61,7 @@ class  NEON_API:
 
             # Convert to Python JSON object
             site_json = site_request.json()
-        except:
+        except Exception:
             site_json = []
 
         return (site_json)
@@ -233,7 +233,7 @@ class  NEON_API:
 
             progressBar.setValue(100)
 
-        except:
+        except Exception:
             nError = -1
 
         progressBar.close()
@@ -302,7 +302,7 @@ class  NEON_API:
                     if (product['dataProductCode'] == PRODUCTCODE):
                         availableMonths = product['availableMonths']
                 bSuccess = True
-            except:
+            except Exception:
                 print("Retry NEON Site Access...")
                 nRetry = nRetry - 1
 
@@ -321,7 +321,7 @@ class  NEON_API:
 
         try:
             productAbstract = product_json['data']['productAbstract']
-        except:
+        except Exception:
             pass
 
         return productAbstract
