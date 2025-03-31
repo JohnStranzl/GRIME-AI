@@ -417,7 +417,7 @@ class GRIME_AI_Feature_Export:
         except Exception:
             sum_en = 0.0
 
-        return sum_en[0]
+        return sum_en
 
     def create_hyperlink(self, file_path: str) -> str:
         """
