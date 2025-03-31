@@ -22,9 +22,9 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def createTrainingDataFilename(self, hardDriveImageFolder):
+    def create_training_data_filename(self, imageFileFolder):
         csvFilename = 'TrainingData_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
-        imageQualityFile = os.path.join(hardDriveImageFolder, csvFilename)
+        imageQualityFile = os.path.join(imageFileFolder, csvFilename)
         csvFilename = open(imageQualityFile, 'a', newline='')
 
         return csvFilename
@@ -32,80 +32,89 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams):
+    def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams, greenness_index_list):
 
-        bCreateEXIFFile = False
-        bCreateVideos = False
-
+        # ----------------------------------------------------------------------------------------------------------
+        # CREATE PROGRESS WHEEL
+        # ----------------------------------------------------------------------------------------------------------
         myGRIMe_Color = GRIME_AI_Color()
-
-        hardDriveImageFolder = imageFileFolder + '/'
 
         # GENERATE LIST OF IMAGE FILES IN FOLDER
         videoFileList = imagesList
-        nFrameCount   = len(videoFileList)
+        nFrameCount = len(videoFileList)
+
+        progressBar = QProgressWheel(0, (len(roiList) * len(videoFileList)) + 1)
+        progressBar.show()
+        progressBarIndex = 1
 
         if nFrameCount > 0:
-
-            # ----------------------------------------------------------------------------------------------------------
             # CREATE TRAINING DATA FILENAME
-            # ----------------------------------------------------------------------------------------------------------
-            csvFile = self.createTrainingDataFilename(hardDriveImageFolder);
+            csvFile = self.create_training_data_filename(imageFileFolder)
 
-            # ----------------------------------------------------------------------------------------------------------
             # CREATE THE OUTPUT FILE COLUMN HEADER
-            # ----------------------------------------------------------------------------------------------------------
             nMaxNumColorClusters = GRIME_AI_Utils().getMaxNumColorClusters(roiList)
 
             for roiObj in roiList:
-                strOutputString = 'Training Filename'
 
-                strOutputString = strOutputString + ',Date (ISO),Time (ISO),Greenness,Intensity,Entropy'
+                # Build the initial columns
+                header_cols = ["Training Filename", "Date (ISO)","Time (ISO)",  "Intensity", "Entropy"]
+                base_header = ",".join(header_cols)
 
-                template = ', ' + (roiObj.getROIName() + ': ') + '#'
+                for greenness in greenness_index_list:
+                    base_header = base_header + ',' + greenness.get_name()
 
+                # Create the template for HSV headings based on the ROI name
+                template = f", {roiObj.getROIName()}: #"
+
+                # Build the HSV part of the header
                 if nMaxNumColorClusters == 1:
-                    strOutputString = (strOutputString + template).replace('#', 'H')
-                    strOutputString = (strOutputString + template).replace('#', 'S')
-                    strOutputString = (strOutputString + template).replace('#', 'V')
+                    hsv_cols = ''.join(template.replace('#', char) for char in ['H', 'S', 'V'])
                 else:
-                    for idx in range(nMaxNumColorClusters):
-                        strOutputString = (strOutputString + template).replace('#', 'H') + ('_' + idx.__str__())
-                        strOutputString = (strOutputString + template).replace('#', 'S') + ('_' + idx.__str__())
-                        strOutputString = (strOutputString + template).replace('#', 'V') + ('_' + idx.__str__())
-                strOutputString = strOutputString + "\n"
+                    hsv_cols = ''.join(
+                        ''.join(f"{template.replace('#', char)}_{idx}" for idx in range(nMaxNumColorClusters))
+                        for char in ['H', 'S', 'V']
+                    )
+
+                # Combine all parts and add a newline at the end
+                strOutputString = base_header + hsv_cols + "\n"
+                strOutputString += "\n"
 
                 csvFile.write(strOutputString)
 
                 # LOAD THE IMAGE FILE
                 img = myGRIMe_Color.loadColorImage(roiObj.getTrainingImageName())
 
-                # BLUR THE IMAGE
+                # CONVERT TO GRAY SCALE
                 gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
                 height, width = gray.shape
                 gray = cv2.resize(gray, (width, height))
 
-                # IMAGE INTENSITY CALCULATIONS
-                intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-                # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                entropyValue = self.calcEntropy(gray)
-
                 texture = -999
 
-                red, green, blue = GRIME_AI_Utils().separateChannels(img)
-                red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
-
                 # CREATE HYPERLINK TO FILE
-                strOutputString = '=HYPERLINK(' + '"' + roiObj.getTrainingImageName() + '"' + ')'
+                #strOutputString = '=HYPERLINK(' + '"' + roiObj.getTrainingImageName() + '"' + ')'
+                strOutputString = self.create_hyperlink(roiObj.getTrainingImageName())
                 strOutputString = strOutputString + ','     # DATE
                 strOutputString = strOutputString + ','     # TIME
 
-                strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
-
+                # COMPUTE INTENSITY FOR THE ENTIRE IMAGE
+                # ------------------------------------------------------------------------------------------------------
+                intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
                 strOutputString = strOutputString + ',' + '%3.4f' % intensity
+
+                # COMPUTE ENTROPY FOR THE ENTIRE IMAGE
+                # ------------------------------------------------------------------------------------------------------
+                entropyValue = self.calcEntropy(gray)
                 strOutputString = strOutputString + ',' + '%3.4f' % entropyValue
+
+                # CALCULATE THE GREENNESS INDEX FOR THE ROI
+                # ------------------------------------------------------------------------------------------------------
+                try:
+                    for greenness in greenness_index_list:
+                        greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+                        strOutputString = strOutputString + ',' + '%3.4f' % greenness_updated.get_value()
+                except:
+                    pass
 
                 hsvClusterCenters, hist = roiObj.getHSVClusterCenters()
                 for i in range(nMaxNumColorClusters):
@@ -118,17 +127,10 @@ class GRIME_AI_Feature_Export:
             # AND TRAIN ALL SUBSEQUENT ROIs FOR THE SAME NUMBER OF COLOR CLUSTERS
             nClusters = colorSegmentationParams.numColorClusters
 
-            header = '\n' + self.buildScalarHeader(nClusters, roiList, colorSegmentationParams)
+            header = '\n' + self.build_scalar_header(nClusters, roiList, colorSegmentationParams, greenness_index_list)
 
             # WRITE THE HEADER TO THE CSV
             csvFile.write(header)
-
-            # ----------------------------------------------------------------------------------------------------------
-            # CREATE PROGRESS WHEEL
-            # ----------------------------------------------------------------------------------------------------------
-            progressBar = QProgressWheel(0, (len(roiList) * len(videoFileList)) + 1)
-            progressBar.show()
-            progressBarIndex = 1
 
             # ----------------------------------------------------------------------------------------------------------
             # PROCESS IMAGES
@@ -141,7 +143,8 @@ class GRIME_AI_Feature_Export:
                     if os.path.isfile(fname.fullPathAndFilename):
 
                         # CREATE A STRING THAT IS A HYPERLINK TO THE FILE
-                        strHyperlink = '=HYPERLINK(' + '"' + fname.fullPathAndFilename + '"' + ')'
+                        #strHyperlink = '=HYPERLINK(' + '"' + fname.fullPathAndFilename + '"' + ')'
+                        strHyperlink = self.create_hyperlink(fname.fullPathAndFilename)
 
                         # EXTRACT DATE/TIME STAMP FROM IMAGE
                         myGRIME_AI_TimeStamp_Utils = GRIME_AI_TimeStamp_Utils()
@@ -154,41 +157,41 @@ class GRIME_AI_Feature_Export:
                         # LOAD THE IMAGE FILE TO START THE PROCESS OF EXTRACTING FEATURE DATA
                         img = myGRIMe_Color.loadColorImage(fname.fullPathAndFilename)
 
-                        #
-                        if colorSegmentationParams.wholeImage:
+                        #if colorSegmentationParams.wholeImage:
+                        if 1:
                             # BLUR THE IMAGE
                             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-                            # IMAGE INTENSITY CALCULATIONS
-                            intensity = cv2.mean(gray)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-                            # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                            entropyValue = self.calcEntropy(gray)
 
                             # EXTRACT 'n' DOMINANT HSV COLORS
                             hist, clusterCenters = myGRIMe_Color.extractDominant_HSV(img, nClusters)
 
-                            texture = -999
-
-                            red, green, blue = GRIME_AI_Utils().separateChannels(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-                            red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
-
-                            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
-
                             if colorSegmentationParams.Intensity:
-                                strOutputString = strOutputString + ', %3.4f' % intensity
+                                # IMAGE INTENSITY CALCULATIONS
+                                # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+                                strOutputString = strOutputString + ', %3.4f' % cv2.mean(gray)[0]
+
                             if colorSegmentationParams.ShannonEntropy:
-                                strOutputString = strOutputString + ', %3.4f' % entropyValue
+                                # COMPUTE ENTROPY FOR ENTIRE IMAGE
+                                strOutputString = strOutputString + ', %3.4f' % self.calcEntropy(gray)
+
                             if colorSegmentationParams.Texture:
+                                texture = -999
                                 strOutputString = strOutputString + ', %3.2f' % texture
 
+                            try:
+                                for greenness in greenness_index_list:
+                                    greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+                                    strOutputString = strOutputString + ',' + '%3.4f' % greenness_updated.get_value()
+                            except ValueError:
+                                pass
+
                             if colorSegmentationParams.HSV:
-                                for idx in range(nClusters):
-                                    # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
-                                    h = float(clusterCenters[idx][0])
-                                    s = float(clusterCenters[idx][1])
-                                    v = float(clusterCenters[idx][2])
-                                    strOutputString = strOutputString + ', %3.2f, %3.2f, %3.2f' % (h, s, v)
+                                # CONVERT FROM OpenCV's HSV HUE DATA FORMAT 0 to 180 DEGREES TO THE HSV STANDARD FORMAT OF 0 to 360 DEGREES
+                                # Concatenate the HSV values for each cluster succinctly
+                                strOutputString += ''.join(
+                                    f", {float(center[0]):3.2f}, {float(center[1]):3.2f}, {float(center[2]):3.2f}"
+                                    for center in clusterCenters[:nClusters]
+                                )
 
                         # --------------------------------------------------------------------------------------------------
                         #
@@ -198,14 +201,14 @@ class GRIME_AI_Feature_Export:
 
                         if colorSegmentationParams.ROI:
 
-                            strROI = self.calculateROIScalars(img, roiList, colorSegmentationParams)
+                            strROI = self.calculate_ROI_scalars(img, roiList, colorSegmentationParams, greenness_index_list)
 
                             strOutputString = strOutputString + strROI
 
                         # WRITE STRING TO CSV FILE
                         strOutputString = strOutputString  + '\n'
                         csvFile.write(strOutputString)
-            except Exception:
+            except ValueError:
                 exceptValue = 0
 
             csvFile.close()
@@ -217,15 +220,16 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def buildScalarHeader(self, nClusters, roiList, colorSegmentationParams):
+    def build_scalar_header(self, nClusters, roiList, colorSegmentationParams, greenness_index_list):
         # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
-        header = 'Image, Date (ISO), Time (ISO)'
+        header = 'Image, Date (ISO), Time (ISO), Intensity, Entropy'
 
         if colorSegmentationParams.wholeImage:
-            header = self.buildImageScalarHeader(header, roiList, colorSegmentationParams)
+            header = self.build_image_scalar_header\
+                (header, roiList, colorSegmentationParams)
 
         if colorSegmentationParams.ROI:
-            header = self.buildROI_ScalarHeader(header, roiList, colorSegmentationParams)
+            header = self.build_ROI_scalar_header(header, roiList, colorSegmentationParams, greenness_index_list)
 
         return header
 
@@ -233,7 +237,7 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def buildImageScalarHeader(self, header, roiList, colorSegmentationParams):
+    def build_image_scalar_header(self, header, roiList, colorSegmentationParams):
         nClusters = GRIME_AI_Utils().getMaxNumColorClusters(roiList)
 
         if colorSegmentationParams.GCC:
@@ -279,7 +283,7 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def buildROI_ScalarHeader(self, header, roiList, colorSegmentationParams):
+    def build_ROI_scalar_header(self, header, roiList, colorSegmentationParams, greenness_index_list):
 
         newHeader = header
 
@@ -335,7 +339,7 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     # CALCULATE THE FEATURE SCALARS FOR THE VARIOUS ROIs AND SAVE THEM TO THE CSV FILE
     # ==================================================================================================================
-    def calculateROIScalars(self, img, roiList, colorSegmentationParams):
+    def calculate_ROI_scalars(self, img, roiList, colorSegmentationParams, greenness_index_list):
 
         strOutputString = ''
 
@@ -367,10 +371,12 @@ class GRIME_AI_Feature_Export:
             # THEREFORE WE MULTIPLY THE KMeans HUE VALUE BY 2 TO STANDARDIZE ON THE ACTUAL COLOR SPACE HUE RANGE.
             hsvClusterCenters[:, 0] = hsvClusterCenters[:, 0] * 2.0
 
-            red, green, blue = GRIME_AI_Utils().separateChannels(rgb)
-            red_sum, green_sum, blue_sum = GRIME_AI_Utils().sumChannels(red, green, blue)
-
-            strOutputString = strOutputString + ',' + GRIME_AI_Vegetation_Indices().computeGreennessValue(colorSegmentationParams, red_sum, green_sum, blue_sum)
+            try:
+                for greenness in greenness_index_list:
+                    greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+                    strOutputString = strOutputString + ',' + '%3.4f' % greenness_updated.get_value()
+            except:
+                pass
 
             if colorSegmentationParams.Intensity:
                 strOutputString = strOutputString + ', %3.4f' % intensity
@@ -412,3 +418,21 @@ class GRIME_AI_Feature_Export:
             sum_en = 0.0
 
         return sum_en[0]
+
+    def create_hyperlink(self, file_path: str) -> str:
+        """
+        Returns an Excel HYPERLINK formula for the given file path.
+        This function cleans the file path and escapes it appropriately for CSV.
+        """
+        # Clean the file path by stripping extra whitespace and any extraneous quotes
+        clean_path = file_path.strip().strip('"')
+
+        # Create the hyperlink formula
+        formula = f'=HYPERLINK("{clean_path}")'
+
+        # If the formula contains commas, enclose the entire field in extra quotes and escape inner quotes.
+        if ',' in formula:
+            safe_formula = formula.replace('"', '""')
+            formula = f'"{safe_formula}"'
+
+        return formula

@@ -22,12 +22,11 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
         loadUi('QDialog_ImageNavigation.ui', self)
 
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        self.imageIndexSignal.connect(parent.getImageIndex)
+        #self.imageIndexSignal.connect(parent.getImageIndex)
 
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         self.imageCount = 0
 
-        self.spinBoxImageIndex.valueChanged.connect(self.spinBoxChanged)
         self.pushButtonResetImageIndex.clicked.connect(self.pushButtonResetImageImageClicked)
 
         self.spinBoxImageIndex.setMinimum(1)

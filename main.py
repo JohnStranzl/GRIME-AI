@@ -362,7 +362,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.12a"
+SW_VERSION = "Ver.: 0.0.5.14"
 
 class displayOptions():
     displayROIs = True
@@ -778,7 +778,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.getColorSegmentationParams()
 
         global imageFileFolder
-        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams)
+        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams, self.greenness_index_list)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1345,7 +1345,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             #    nRow += 1
 
             # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-            colorBar = self.createColorBar(hist, colorClusters)
+            colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
 
             # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
             qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
@@ -1407,34 +1407,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #H = entropy(hist, base=base)
 
         return sum_en[0]
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def createColorBar(self, hist, centroids):
-        # initialize the bar chart representing the relative frequency of each of the colors
-        # bar = np.zeros((50, 300, 3), dtype="uint8")
-        colorBar = np.zeros((50, 100, 3), dtype="uint8")
-
-        startX = 0
-
-        # if only some of the clusters are used, we must rescale their size based upon their percentages to fill the bitmap
-        multiplier = 1.0 / hist.sum()
-
-        centroids[:, 0] = centroids[:, 0] / 2.0
-        for (percent, color) in zip(hist, centroids):
-            # plot the relative percentage of each cluster
-            endX = startX + (percent * multiplier * 100)
-            cv2.rectangle(colorBar, (int(startX), 0), (int(endX), 100), color.astype("uint8").tolist(), -1)
-
-            startX = endX
-
-        # CONVERT HSV TO RGB
-        colorBar = cv2.cvtColor(colorBar, cv2.COLOR_HSV2RGB)
-
-        # RETURN THE COLOR BAR
-        return colorBar
 
 
     # ==================================================================================================================
@@ -3381,7 +3353,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 hist, colorClusters = myGRIMe_Color.extractDominant_HSV(masked, 6)
 
                 # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-                colorBar = self.createColorBar(hist, colorClusters[0:5])
+                colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters[0:5])
 
                 # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
                 qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
@@ -3772,164 +3744,17 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
 
         currentImageRescaled = currentImage.scaled(self.labelOriginalImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
 
+        img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+
+        whole_image_feature_extraction(self, img)
+
         if g_displayOptions.displayROIs:
             painter = QPainter(currentImageRescaled)
 
-        img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-
-        # ==============================================================================================================
-        #  WHOLE IMAGE - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-        # ==============================================================================================================
-        strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
-
-        nRow = self.tableWidget_ROIList.rowCount()
-        if nRow == 0:
-            self.tableWidget_ROIList.insertRow(nRow)
-
-        wholeImageLabel = QtWidgets.QLabel()
-        wholeImageLabel.setText("Whole Image")
-        self.tableWidget_ROIList.setCellWidget(0, 0, wholeImageLabel)
-
-        # COMPUTE THE GREENNESS VALUES FOR THE ENTIRE IMAGE FOR THE ACTIVE GREENNESS INDICES
-        col = 3
-        for index, greenness in enumerate(self.greenness_index_list):
-            # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-            greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
-            self.greenness_index_list[index] = greenness_updated
-
-            # UPDATE TABLE
-            greennessLabel = QtWidgets.QLabel()
-            format_green = "{:.3f}".format(greenness_updated.get_value())
-            greennessLabel.setText(format_green)
-            self.tableWidget_ROIList.setCellWidget(0, col, greennessLabel)
-            col += 1
-
-        intensityLabel = QtWidgets.QLabel()
-        intensityLabel.setText(strIntensity)
-        self.tableWidget_ROIList.setCellWidget(0, col, intensityLabel)
-        col += 1
-
-        entropyLabel = QtWidgets.QLabel()
-        entropyLabel.setText(strEntropy)
-        self.tableWidget_ROIList.setCellWidget(0, col, entropyLabel)
-        col += 1
-
-        # DISPLAY THE PROGRESS WHEEL
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, len(self.roiList) + 1)
-        #JES progressBar.show()
-
-        # ==============================================================================================================
-        #  ROIs - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-        # ==============================================================================================================
-        nRow = 1
-        for roiObj in self.roiList:
-            progressBar.setValue(nRow+1)
-            #progressBar.repaint()
-
-            try:
-                # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
-                rgb = extractROI(roiObj.getImageROI(), img)
-
-                gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
-
-                # ------------------------------------------------------------------------------------------
-                # COLOR SEGMENTATION
-                # ------------------------------------------------------------------------------------------
-                # EXTRACT DOMINANT RGB COLORS
-                _, _, hist = myGRIMe_Color.KMeans(rgb, roiObj.getNumColorClusters())
-
-                # EXTRACT DOMINANT HSV COLORS
-                hist, colorClusters = myGRIMe_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
-
-                # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-                colorBar = self.createColorBar(hist, colorClusters)
-
-                # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
-                qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
-
-                # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
-                self.label = QtWidgets.QLabel()
-                self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
-                self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
-
-                self.tableWidget_ROIList.resizeColumnsToContents()
-
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE GREENNESS INDEX FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    nCol = 3
-                    for index, greenness in enumerate(self.greenness_index_list):
-                        # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-                        greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
-                        self.greenness_index_list[index] = greenness_updated
-
-                        # DISPLAY ROI'S GREENNESS INDEX IN THE GUI TABLE
-                        greennessLabel = QtWidgets.QLabel()
-                        format_green = "{:.3f}".format(greenness_updated.get_value())
-                        greennessLabel.setText(format_green)
-                        self.tableWidget_ROIList.setCellWidget(nRow, nCol, greennessLabel)
-                        nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Greenness Index calculation.')
-
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE INTENSITY FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S INTENSITY
-                    strIntensity = "{:.4f}".format(cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-                    # DISPALY THE ROI'S INTENSITY ON THE GUI
-                    self.intensityLabel = QtWidgets.QLabel()
-                    self.intensityLabel.setText(strIntensity)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.intensityLabel)
-                    nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Intensity calculation.')
-
-                # ------------------------------------------------------------------------------------------
-                # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S ENTROPY
-                    strEntropyValue = "{:.4f}".format(self.calcEntropy(gray))
-
-                    # DISPLAY THE ROI'S ENTROPY ON THE GUI
-                    self.entropyLabel = QtWidgets.QLabel()
-                    self.entropyLabel.setText(strEntropyValue)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.entropyLabel)
-                except Exception:
-                    pass
-
-                nRow = nRow + 1
-            except Exception:
-                nErrorCode = -1
-
-            # OVERLAY ROI BOUNDARY ON IMAGE
-            #JESif self.checkBoxDisplayROIs.isChecked():
-            if (1):
-                pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
-                painter.setPen(pen)
-
-                if roiObj.getROIShape() == ROIShape.RECTANGLE:
-                    painter.drawRect(roiObj.getDisplayROI())
-                elif roiObj.getROIShape() == ROIShape.ELLIPSE:
-                    painter.drawEllipse(roiObj.getDisplayROI())
-
-                font = painter.font()
-                font.setPointSize(8)
-                painter.setPen(QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine))
-                painter.setFont(font)
-                painter.drawText(roiObj.getDisplayROI().x(), roiObj.getDisplayROI().y() - 16, 50, 16, QtCore.Qt.AlignLeft, roiObj.getROIName())
+        roi_feature_extraction(self, painter, img, self.roiList)
 
         if g_displayOptions.displayROIs:
             painter.end()
-
-        # close and delete the progress bar
-        progressBar.close()
-        del progressBar
 
         self.labelOriginalImage.setPixmap(currentImageRescaled)
 
@@ -3952,6 +3777,182 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
 
     # CALL PROCESSEVENTS IN ORDER TO UPDATE GUI
     QCoreApplication.processEvents()
+
+
+def roi_feature_extraction(self, painter, img, roiList):
+
+    # DISPLAY THE PROGRESS WHEEL
+    progressBar = QProgressWheel()
+    progressBar.setRange(0, len(self.roiList) + 1)
+    # JES progressBar.show()
+
+    # ==============================================================================================================
+    #  ROIs - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
+    # ==============================================================================================================
+    nRow = 1
+    for roiObj in roiList:
+        progressBar.setValue(nRow + 1)
+        # progressBar.repaint()
+
+        try:
+            # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
+            rgb = extractROI(roiObj.getImageROI(), img)
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+            gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+            # ------------------------------------------------------------------------------------------
+            # COLOR SEGMENTATION
+            # ------------------------------------------------------------------------------------------
+            # EXTRACT DOMINANT RGB COLORS
+            _, _, hist = GRIME_AI_Color.KMeans(rgb, roiObj.getNumColorClusters())
+
+            # EXTRACT DOMINANT HSV COLORS
+            hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+
+            # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+            colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
+
+            # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+            qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+
+            # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+            self.label = QtWidgets.QLabel()
+            self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
+            self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
+
+            self.tableWidget_ROIList.resizeColumnsToContents()
+
+            # ------------------------------------------------------------------------------------------
+            # CALCULATE THE GREENNESS INDEX FOR THE ROI
+            # ------------------------------------------------------------------------------------------
+            try:
+                nCol = 3
+                for index, greenness in enumerate(self.greenness_index_list):
+                    # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
+                    greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
+                    self.greenness_index_list[index] = greenness_updated
+
+                    # DISPLAY ROI'S GREENNESS INDEX IN THE GUI TABLE
+                    greennessLabel = QtWidgets.QLabel()
+                    format_green = "{:.3f}".format(greenness_updated.get_value())
+                    greennessLabel.setText(format_green)
+                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, greennessLabel)
+                    nCol += 1
+            except Exception:
+                print('Something went wrong with the ROI Greenness Index calculation.')
+
+            # ------------------------------------------------------------------------------------------
+            # CALCULATE THE INTENSITY FOR THE ROI
+            # ------------------------------------------------------------------------------------------
+            try:
+                # CALCULATE THE ROI'S INTENSITY
+                strIntensity = "{:.4f}".format(
+                    cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+
+                # DISPALY THE ROI'S INTENSITY ON THE GUI
+                self.intensityLabel = QtWidgets.QLabel()
+                self.intensityLabel.setText(strIntensity)
+                self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.intensityLabel)
+                nCol += 1
+            except Exception:
+                print('Something went wrong with the ROI Intensity calculation.')
+
+            # ------------------------------------------------------------------------------------------
+            # COMPUTE ENTROPY FOR ENTIRE IMAGE
+            # ------------------------------------------------------------------------------------------
+            try:
+                # CALCULATE THE ROI'S ENTROPY
+                strEntropyValue = "{:.4f}".format(self.calcEntropy(gray))
+
+                # DISPLAY THE ROI'S ENTROPY ON THE GUI
+                self.entropyLabel = QtWidgets.QLabel()
+                self.entropyLabel.setText(strEntropyValue)
+                self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.entropyLabel)
+            except Exception:
+                pass
+
+            nRow = nRow + 1
+        except Exception:
+            nErrorCode = -1
+
+        # OVERLAY ROI BOUNDARY ON IMAGE
+        # JESif self.checkBoxDisplayROIs.isChecked():
+        if (1):
+            pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
+            painter.setPen(pen)
+
+            if roiObj.getROIShape() == ROIShape.RECTANGLE:
+                painter.drawRect(roiObj.getDisplayROI())
+            elif roiObj.getROIShape() == ROIShape.ELLIPSE:
+                painter.drawEllipse(roiObj.getDisplayROI())
+
+            font = painter.font()
+            font.setPointSize(8)
+            painter.setPen(QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine))
+            painter.setFont(font)
+            painter.drawText(roiObj.getDisplayROI().x(), roiObj.getDisplayROI().y() - 16, 50, 16, QtCore.Qt.AlignLeft,
+                             roiObj.getROIName())
+
+    # close and delete the progress bar
+    progressBar.close()
+    del progressBar
+
+
+# ==============================================================================================================
+#  WHOLE IMAGE - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
+# ==============================================================================================================
+def whole_image_feature_extraction(self, img):
+    strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
+
+    nRow = self.tableWidget_ROIList.rowCount()
+    if nRow == 0:
+        self.tableWidget_ROIList.insertRow(nRow)
+
+    wholeImageLabel = QtWidgets.QLabel()
+    wholeImageLabel.setText("Whole Image")
+    self.tableWidget_ROIList.setCellWidget(0, 0, wholeImageLabel)
+
+    # EXTRACT DOMINANT HSV COLORS
+    # self.spinBoxColorClusters.value()
+    # JES - Replace with the value selected in the dialog box
+    hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(img, 4)
+
+    # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
+    colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
+
+    # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
+    qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
+
+    # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+    self.label = QtWidgets.QLabel()
+    self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
+    nRow = 0
+    self.tableWidget_ROIList.setCellWidget(nRow, 1, self.label)
+
+    # COMPUTE THE GREENNESS VALUES FOR THE ENTIRE IMAGE FOR THE ACTIVE GREENNESS INDICES
+    col = 3
+    for index, greenness in enumerate(self.greenness_index_list):
+        # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
+        greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+        self.greenness_index_list[index] = greenness_updated
+
+        # UPDATE TABLE
+        greennessLabel = QtWidgets.QLabel()
+        format_green = "{:.3f}".format(greenness_updated.get_value())
+        greennessLabel.setText(format_green)
+        self.tableWidget_ROIList.setCellWidget(0, col, greennessLabel)
+        col += 1
+
+    intensityLabel = QtWidgets.QLabel()
+    intensityLabel.setText(strIntensity)
+    self.tableWidget_ROIList.setCellWidget(0, col, intensityLabel)
+    col += 1
+
+    entropyLabel = QtWidgets.QLabel()
+    entropyLabel.setText(strEntropy)
+    self.tableWidget_ROIList.setCellWidget(0, col, entropyLabel)
+    col += 1
 
 
 # ======================================================================================================================
