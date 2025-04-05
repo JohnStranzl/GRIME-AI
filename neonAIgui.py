@@ -423,7 +423,7 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menu_About.menuAction())
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(2)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
         MainWindow.setTabOrder(self.tableWidget_ROIList, self.NEON_listboxSites)
         MainWindow.setTabOrder(self.NEON_listboxSites, self.NEON_listboxSiteInfo)

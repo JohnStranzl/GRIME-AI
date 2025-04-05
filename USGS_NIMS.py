@@ -22,22 +22,9 @@ class USGS_NIMS:
     def __init__(self):
         self.instance = 1
 
-        overlayDir   = ""
-        thumbDir     = ""
-        tlDir        = ""
-        smallDir     = ""
-        locus        = ""
-        FRP          = ""
-        nwisId       = ""
-        camId        = ""
-        camName      = ""
-        camDesc      = ""
-        stateAbrv    = ""
-        lat          = ""
-        long         = ""
-        createdDate  = ""
-        modifiedDate = ""
-        tz           = ""
+        self.nwisId = None
+        self.camName = None
+        self.camId = None
 
         self.cameraDictionary = self.initCameraDictionary()
 
@@ -49,26 +36,46 @@ class USGS_NIMS:
     #
     # ------------------------------------------------------------------------------------------------------------------
     def initCameraDictionary(self):
-        cameraDictionary = {}
+        self.cameraDictionary = []
 
         try:
             # QUERY CAMERA LIST
             uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?enabled=true"
 
-            ssl._create_default_https_context = ssl._create_unverified_context
+            #ssl._create_default_https_context = ssl._create_unverified_context
             response = urllib.request.urlopen(uri)
             data = response.read()  # a `bytes` object
-            raw_text = data.decode('utf-8')
-            cameraData = json.loads(data)
+            cameraData = json.loads(data.decode('utf-8'))
 
-            for index, element in enumerate(cameraData):
-                # ONLY DEAL WITH NIMS SITES AND IGNORE HIVIS SITES
-                if element['locus'] == 'aws':
-                    cameraDictionary[index] = element
-        except Exception:
-            cameraDictionary = {}
+            self.cameraDictionary = {}
+            sites_with_hideCam = []
 
-        return cameraDictionary
+            for element in cameraData:
+                if element.get('locus') == 'aws':
+                    if element.get('hideCam', True):
+                        cam_id = element.get('camId')
+                        if cam_id:
+                            sites_with_hideCam.append(cam_id)
+                        else:
+                            print(f"Site with hideCam=True has no camId provided.")
+                    else:
+                        self.cameraDictionary[element['camId']] = element
+
+            # Sort the list of sites with hideCam=True
+            sites_with_hideCam.sort()
+
+            # Print each site on a separate line
+            print("Site with hideCam=True:")
+            for site in sites_with_hideCam:
+                print(site)
+        except (urllib.error.URLError, json.JSONDecodeError) as e:
+            print(f"Error fetching or parsing data: {e}")
+            self.cameraDictionary = {}
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            self.cameraDictionary = {}
+
+        return self.cameraDictionary
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -82,8 +89,8 @@ class USGS_NIMS:
     def getCameraList(self):
         myList = []
 
-        for index in range(len(self.cameraDictionary)):
-            myList.append(self.cameraDictionary[index]['camId'])
+        for element in self.cameraDictionary.values():
+            myList.append(element['camId'])
 
         #myList = sorted(myList, key=lambda x: x[0].split('_')[0])
         myList = sorted(myList)
@@ -99,22 +106,23 @@ class USGS_NIMS:
         myList = []
 
         try:
-            for i in range(len(self.cameraDictionary)):
-                if self.cameraDictionary[i]['camId'] == strCameraID:
-                    for key in self.cameraDictionary[i].keys():
-                        keyData = self.cameraDictionary[i][key]
-                        if (keyData != None):
-                            if (isinstance(keyData, list) != True and isinstance(keyData, dict) != True and isinstance(keyData, int) != True):
+            for camId, camData in self.cameraDictionary.items():
+                # Check if the current camera matches strCameraID
+                if camData.get('camId') == strCameraID:
+                    for key, keyData in camData.items():
+                        if keyData is not None and not isinstance(keyData, (list, dict, int)):
+                            # Assign values based on specific keys
+                            if key == 'nwisId':
+                                self.nwisId = keyData
+                            elif key == 'camName':
+                                self.camName = keyData
+                            elif key == 'camId':
+                                self.camId = keyData
 
-                                if key == 'nwisId':
-                                    self.nwisId = keyData
-                                if key == 'camName':
-                                    self.camName = keyData
-                                if key == 'camId':
-                                    self.camId = keyData
+                            # Format keyData and append to myList
+                            formattedData = f"{key}: {keyData}"
+                            myList.append(formattedData)
 
-                                keyData = key + ': ' + keyData
-                                myList.append(keyData)
         except Exception:
             myList.append("No information available for this site.")
 
@@ -156,7 +164,7 @@ class USGS_NIMS:
 
             if r.status_code != 404:
                 nWebImageCount = 1
-                ssl._create_default_https_context = ssl._create_unverified_context
+                #ssl._create_default_https_context = ssl._create_unverified_context
                 data = urlopen(latestImageURL).read()
                 latestImage = QPixmap()
                 latestImage.loadFromData(data)
@@ -313,7 +321,7 @@ class USGS_NIMS:
         try:
             ssl._create_default_https_context = ssl._create_unverified_context
             with urllib.request.urlopen(fullURL) as response:
-                html = response.read()
+                response.read()
 
             # RETRIEVE DISCHARGE REPORT
             urllib.request.urlretrieve(fullURL, fullFilename_txt)
@@ -323,7 +331,7 @@ class USGS_NIMS:
         except Exception:
             strMessage = 'Unable to retrieve data from the USGS site.'
             msgBox = GRIME_AI_QMessageBox('USGS - Retrieval Error', strMessage, QMessageBox.Close)
-            response = msgBox.displayMsgBox()
+            msgBox.displayMsgBox()
 
 
     # ------------------------------------------------------------------------------------------------------------------

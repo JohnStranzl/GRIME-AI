@@ -114,7 +114,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 import sobelData
 
-
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------------------------------------------------
@@ -362,7 +361,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.14"
+SW_VERSION = "Ver.: 0.0.5.15"
 
 class displayOptions():
     displayROIs = True
@@ -1158,10 +1157,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             currentRow = self.USGS_listboxSites.currentRow()
 
             try:
-                #cameraDictionary = self.myNIMS.getCameraDictionary()
-                cameraList = self.myNIMS.getCameraList()
-                self.USGS_listboxSites.clear()
-                self.USGS_listboxSites.addItems(cameraList)
                 self.listboxUSGSSiteInfo.clear()
                 self.listboxUSGSSiteInfo.addItems(self.myNIMS.getCameraInfo(strCamID))
 
@@ -5140,5 +5135,59 @@ def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
 #jes def main(cfg: DictConfig):
 if __name__ == '__main__':
 
-    my_main()
+    if 1:
+        my_main()
+
+    if 0:
+        import matplotlib.pyplot as plt
+        from GRIME_AI_Texture import GLCMTexture, LBPTexture, GaborTexture, WaveletTexture, FourierTexture
+
+        # Create a synthetic grayscale image for demonstration
+        image = np.random.rand(256, 256)
+
+        # Instantiate our texture measurement classes:
+        glcm_obj = GLCMTexture()
+        gabor_obj = GaborTexture()
+        lbp_obj = LBPTexture()
+        wavelet_obj = WaveletTexture()
+        fourier_obj = FourierTexture()
+
+        # Compute features using each method
+        glcm_features = glcm_obj.compute_features(image)
+        gabor_features = gabor_obj.compute_features(image)
+        lbp_features = lbp_obj.compute_features(image)
+        wavelet_features = wavelet_obj.compute_features(image)
+        fourier_features = fourier_obj.compute_features(image)
+        laws_features = laws_texture_features(image)
+        haralick_features_dict = haralick_features(image)
+
+        print("Laws Texture Features:")
+        print(laws_features)
+        print("\nHaralick Features:")
+        print(haralick_features_dict)
+
+        # Print out the extracted features
+        print("GLCM Features:")
+        print(glcm_features)
+        print("\nGabor Features:")
+        print(gabor_features)
+        print("\nLBP Features (Histogram):")
+        print(lbp_features)
+        print("\nWavelet Features:")
+        print(wavelet_features)
+        print("\nFourier Radial Profile:")
+        print(fourier_features)
+        print("Laws Texture Features:")
+        print(laws_features)
+        print("\nHaralick Features:")
+        print(haralick_features_dict)
+
+        # Plot the Fourier radial profile as an example
+        plt.figure(figsize=(6, 4))
+        plt.plot(fourier_features, marker='o')
+        plt.title("Fourier Radial Profile")
+        plt.xlabel("Radial Bin")
+        plt.ylabel("Average Magnitude")
+        plt.grid(True)
+        plt.show()
 
