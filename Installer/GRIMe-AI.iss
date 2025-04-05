@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.5.11d"
+#define MyAppVersion "0.0.5.15"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -22,12 +22,13 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=yes
 DisableProgramGroupPage=yes
+DiskSpanning=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ; PrivilegesRequired=lowest
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_5_11d Setup
+OutputBaseFilename=GRIME-AI 0_0_5_15 Setup
 Password=C0rnHusk3r%
 Compression=lzma
 SolidCompression=yes
@@ -61,7 +62,7 @@ Source: "C:\Users\johns\pycharmprojects\neonAI\sam2\*.*"; DestDir: "{app}\sam2"
 ;Source: "C:\Users\johns\pycharmprojects\neonAI\models\sam_vit_h_4b8939.pth"; DestDir: "{app}\models"
 ;
 ; user interface files
-Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}"
+Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
 Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
