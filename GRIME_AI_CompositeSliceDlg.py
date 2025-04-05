@@ -52,8 +52,9 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
     #
     # ==================================================================================================================
     def loadImage(self, filename):
-        numpyImage = cv2.imread(filename)
-        myImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
+        numpyImage_bgr = cv2.imread(filename)
+        numpyImage_rgb = cv2.cvtColor(numpyImage_bgr, cv2.COLOR_BGR2RGB)
+        myImage = QImage(numpyImage_rgb, numpyImage_rgb.shape[1], numpyImage_rgb.shape[0], QImage.Format_RGB888)
         myImage = QPixmap(myImage)
         self.widthMultiplier = myImage.width() / self.label_Image.width()
         self.heightMultiplier = myImage.height() / self.label_Image.height()

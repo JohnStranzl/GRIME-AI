@@ -22,7 +22,6 @@ class GRIME_AI_buildModelDlg(QDialog):
     segment_image_signal = pyqtSignal()
 
     build_model_signal = pyqtSignal()
-    tune_model_signal = pyqtSignal()
 
     def __init__(self, parent=None):
         super(QDialog, self).__init__(parent)
@@ -280,7 +279,7 @@ class GRIME_AI_buildModelDlg(QDialog):
     # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------
     def tune_model(self):
-        self.tune_model_signal.emit()
+        self.build_model_signal.emit()
 
 
     # ----------------------------------------------------------------------------------------------------

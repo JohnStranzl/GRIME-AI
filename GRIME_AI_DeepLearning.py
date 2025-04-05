@@ -13,6 +13,8 @@ except ImportError as e:
     if 'torch' in sys.modules:
         del sys.modules['torch']
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 from GRIME_AI_QProgressWheel import QProgressWheel
 import shutil

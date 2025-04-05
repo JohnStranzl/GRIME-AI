@@ -52,6 +52,7 @@ class GRIME_AI_Video:
                 progressBar.setValue(imageIndex)
 
                 img = myGRIMe_Color.loadColorImage(os.path.join(rootFolder, file))
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 height, width, layers = img.shape
 
                 # WE CAN'T OPEN THE VIDEO STREAM UNTIL WE KNOW THE SIZE OF ONE OF THE IMAGES WHICH ALSO ASSUMES THAT
