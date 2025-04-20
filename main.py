@@ -43,6 +43,7 @@ import iopath
 import numpy as np
 
 
+
 # ------------------------------------------------------------
 # PIL LIBRARIES AND IMPORTS
 # ------------------------------------------------------------
@@ -204,6 +205,11 @@ from playsound import playsound
 # import GRIME_KMeans
 # from webdriver_manager.core.utils import ChromeType
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+from ML_SAM import ML_SAM
+from ML_Load_Model import ML_Load_Model
+from ML_view_segmentation_object import ML_view_segmentation_object
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -247,10 +253,12 @@ except ImportError as e:
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
-import sam2
-from sam2.build_sam import build_sam2
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+#sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
+#import sam2
+#from sam2.build_sam import build_sam2
+#from sam2.sam2_image_predictor import SAM2ImagePredictor
+#from sam2.modeling import sam2_base
+#print(sam2_base.__file__)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -5127,6 +5135,51 @@ def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
 
     return List
 
+from hydra.core.global_hydra import GlobalHydra
+GlobalHydra.instance().clear()
+
+
+dirname = os.path.dirname(__file__)
+
+myconfig_path=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1"))
+print(myconfig_path)
+myconfig_name=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1\\sam2.1_hiera_l.yaml"))
+print(myconfig_name)
+
+@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
+def train_main(cfg: DictConfig) -> None:
+    # If Hydra is already initialized, clear it
+    if GlobalHydra.instance().is_initialized():
+        GlobalHydra.instance().clear()
+    print("Hydra SAM2 training config:")
+    print(OmegaConf.to_yaml(cfg))
+
+    # Instantiate your SAM2 training object (assumed to accept cfg)
+    myML_SAM = ML_SAM(cfg)
+    myML_SAM.ML_SAM_Main()
+
+@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
+def view_segmentation_main(cfg: DictConfig) -> None:
+    # If Hydra is already initialized, clear it
+    if GlobalHydra.instance().is_initialized():
+        GlobalHydra.instance().clear()
+    print("Hydra SAM2 training config:")
+    print(OmegaConf.to_yaml(cfg))
+
+    myViewSegObj = ML_view_segmentation_object(cfg)
+    myViewSegObj.ML_view_segmentation_object_main()
+
+
+@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
+def load_model_main(cfg: DictConfig) -> None:
+    # If Hydra is already initialized, clear it
+    if GlobalHydra.instance().is_initialized():
+        GlobalHydra.instance().clear()
+    print("Hydra SAM2 training config:")
+    print(OmegaConf.to_yaml(cfg))
+
+    myLocalModel = ML_Load_Model(cfg)
+    myLocalModel.ML_Load_Model_Main()
 
 # ======================================================================================================================
 #
@@ -5137,6 +5190,15 @@ if __name__ == '__main__':
 
     if 1:
         my_main()
+
+    if 0:
+        train_main()
+
+    if 0:
+        view_segmentation_main()
+
+    if 0:
+        load_model_main()
 
     if 0:
         import matplotlib.pyplot as plt

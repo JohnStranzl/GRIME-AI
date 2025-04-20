@@ -1,0 +1,145 @@
+{
+    "siteName": "MD_Lake_Serene_Edgewood",
+    "learningRates": [0.0001,0.001],
+    "Optimizer": "Adam",
+    "loss_function": "IOU",
+    "weight_decay": 0.01,
+    "number_of_epochs": 20,
+    "batch_size": 32,
+    "save_model_frequency": 20,
+    "validation_frequency": 20,
+    "early_stopping": false,
+    "patience": 3,
+    "device": "cpu",
+    "load_model": {
+        "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
+        "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+        "INPUT_DIR": "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/images/default",
+        "OUTPUT_DIR": "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/Predictions",
+        "MODEL": "models/Edgewood_19_0.0001_1804_1437.torch"
+    },
+    "Path": [
+        {
+            "siteName": "MD_Lake_Serene_Edgewood",
+            "directoryPaths": {
+                "folders": [
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default"
+                ],
+                "annotations": [
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "MO_Missouri_River_at_Hermann",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/MO_Missouri_River_at_Hermann/COCO Products/CT_MO_Missouri_River_at_Hermann_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/MO_Missouri_River_at_Hermann/COCO Products/DK_MO_Missouri_River_at_Hermann_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/MO_Missouri_River_at_Hermann/COCO Products/CT_MO_Missouri_River_at_Hermann_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/MO_Missouri_River_at_Hermann/COCO Products/DK_MO_Missouri_River_at_Hermann_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "KOLA",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/KOLA/CT_KOLA_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/KOLA/MW_KOLA_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/KOLA/DK_KOLA_ir-set_COCO/images/default"
+                    
+                  ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/KOLA/CT_KOLA_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/KOLA/MW_KOLA_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/KOLA/DK_KOLA_ir-set_COCO/annotations/instances_default.json"
+                    ]
+            }
+        },
+        {
+            "siteName": "NM_Pecos_River_near_Acme",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/CT_NM_Pecos_River_near_Acme_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/DK_NM_Pecos_River_near_Acme_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/JB_NM_Pecos_River_near_Acme_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/MS_NM_Pecos_River_near_Acme_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/CT_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/DK_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/JB_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/NM_Pecos_River_near_Acme/COCO Products/MS_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "PA_East_Branch_Brandywine_Creek_below_Downingtown",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/PA_East_Branch_Brandywine_Creek_below_Downingtown/COCO Products/CT_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/PA_East_Branch_Brandywine_Creek_below_Downingtown/COCO Products/DK_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/PA_East_Branch_Brandywine_Creek_below_Downingtown/COCO Products/CT_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/PA_East_Branch_Brandywine_Creek_below_Downingtown/COCO Products/DK_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "VA_Beggars_Cr_nr_Dawley_Corners",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/VA_Beggars_Cr_nr_Dawley_Corners/COCO Products/CT_VA_Beggars_Cr_nr_Dawley_Corners_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/VA_Beggars_Cr_nr_Dawley_Corners/COCO Products/MW_VA_Beggars_Cr_nr_Dawley_Corners_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/VA_Beggars_Cr_nr_Dawley_Corners/COCO Products/CT_VA_Beggars_Cr_nr_Dawley_Corners_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/VA_Beggars_Cr_nr_Dawley_Corners/COCO Products/MW_VA_Beggars_Cr_nr_Dawley_Corners_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "WI_AO1_STAFF",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/WI_AO1_STAFF/COCO Products/CT_WI_AO1_STAFF_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/WI_AO1_STAFF/COCO Products/MS_AO1_STAFF_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/WI_AO1_STAFF/COCO Products/CT_WI_AO1_STAFF_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/WI_AO1_STAFF/COCO Products/MS_AO1_STAFF_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire/COCO Products/CT_WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire/COCO Products/CT_WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire_COCO/annotations/instances_default.json"
+                ]
+            }
+        },
+        {
+            "siteName": "WI_East_River_at_HWY_ZZ_near_Greenleaf",
+            "directoryPaths": {
+                "folders": [
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/CT_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/DK_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/images/default",
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/JB_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/images/default"
+                ],
+                "annotations": [
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/CT_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/DK_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/annotations/instances_default.json",
+                    "/work/gilmoregwlab/juddin/WI_East_River_at_HWY_ZZ_ near_Greenleaf/COCO Products/JB_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO/annotations/instances_default.json"
+                ]
+            }
+        }
+    ]
+}
