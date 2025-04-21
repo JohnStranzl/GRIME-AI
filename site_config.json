@@ -16,17 +16,19 @@
         "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
         "INPUT_DIR": "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/images/default",
         "OUTPUT_DIR": "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/Predictions",
-        "MODEL": "models/Edgewood_19_0.0001_1804_1437.torch"
+        "MODEL": "models/Edgewood_19_0.0001_2004_2040.torch"
     },
     "Path": [
         {
             "siteName": "MD_Lake_Serene_Edgewood",
             "directoryPaths": {
                 "folders": [
-                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default"
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default",
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/images/default"
                 ],
                 "annotations": [
-                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/annotations/instances_default.json"
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/annotations/instances_default.json",
+                    "C:/MD_Lake_Serene_Edgewood/COCO Products/CT_MD_Lake_Serene_Edgewood_COCO/annotations/instances_default.json"
                 ]
             }
         },

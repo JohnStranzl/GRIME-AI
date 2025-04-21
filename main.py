@@ -5135,17 +5135,22 @@ def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
 
     return List
 
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
 from hydra.core.global_hydra import GlobalHydra
 GlobalHydra.instance().clear()
 
-
 dirname = os.path.dirname(__file__)
-
 myconfig_path=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1"))
 print(myconfig_path)
 myconfig_name=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1\\sam2.1_hiera_l.yaml"))
 print(myconfig_name)
 
+# ======================================================================================================================
+#
+# ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name)
 def train_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
@@ -5158,6 +5163,10 @@ def train_main(cfg: DictConfig) -> None:
     myML_SAM = ML_SAM(cfg)
     myML_SAM.ML_SAM_Main()
 
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name)
 def view_segmentation_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
@@ -5170,6 +5179,9 @@ def view_segmentation_main(cfg: DictConfig) -> None:
     myViewSegObj.ML_view_segmentation_object_main()
 
 
+# ======================================================================================================================
+#
+# ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name)
 def load_model_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
@@ -5184,8 +5196,6 @@ def load_model_main(cfg: DictConfig) -> None:
 # ======================================================================================================================
 #
 # ======================================================================================================================
-#jes @hydra.main(config_path=None, config_name=None, version_base=None)
-#jes def main(cfg: DictConfig):
 if __name__ == '__main__':
 
     if 1:
