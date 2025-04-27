@@ -1,10 +1,10 @@
-# SAM.py
+# ML_SAM.py
 
 from ML_Dependencies import *
 import os
 import sys
-import shutil
 from datetime import datetime
+from utils.datasetutils import DatasetUtils
 
 if True:
     import logging
@@ -17,6 +17,8 @@ if True:
 from omegaconf import OmegaConf, DictConfig
 
 from torch.cuda.amp import GradScaler
+
+from hydra.core.global_hydra import GlobalHydra
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
 from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -64,8 +66,6 @@ class ML_SAM:
         self.patience = self.site_config['patience']
         self.device = self.site_config.get('device', str(device))
 
-        self.site_short_name = self.site_name.split('_')[-1]
-
         self.dataset = {}
 
         self.loss_values = []
@@ -77,62 +77,19 @@ class ML_SAM:
         self.sam2_model = None
         self.folders = None
         self.annotation_files = None
+        self.all_folders=[]
+        self.all_annotations = []
 
         self.image_shape_cache = {}
+
+        # objects for other classes
+        self.dataset_util = DatasetUtils()
 
 
     def debug_print(self, msg):
         if DEBUG:
             print(msg)
-
-    def load_images_and_annotations(self, folders, annotation_files):
-        dataset = {}
-
-        for folder, annotation_file in zip(folders, annotation_files):
-            water_category_id = None
-            images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
-
-            with open(annotation_file, 'r') as f:
-                annotations = json.load(f)
-
-            if water_category_id is None:
-                for category in annotations.get('categories', []):
-                    if category['name'] == 'water':
-                        water_category_id = category['id']
-                        break
-
-            if water_category_id is None:
-                raise ValueError(f"The 'water' category is not found in {annotation_file}.")
-
-            water_annotations = [
-                ann for ann in annotations['annotations']
-                if ann['category_id'] == water_category_id
-            ]
-
-            dataset[folder] = {
-                "images": [os.path.join(folder, img) for img in images],
-                "annotations": {
-                    "images": annotations["images"],
-                    "annotations": water_annotations
-                }
-            }
-
-        return dataset
-
-
-    def build_annotation_index(self):
-        """
-        Build and return a mapping from image file basenames to their corresponding annotation data.
-        """
-        annotation_index = {}
-        for folder, data in self.dataset.items():
-            for image_path in data["images"]:
-                # Using the basename of the image as the key
-                base_name = os.path.basename(image_path)
-                annotation_index[base_name] = data["annotations"]
-        return annotation_index
-
-
+            
     def find_best_water_points(self, image_path):
         """
         Finds a water point by computing the centroid of the annotated water mask (true mask).
@@ -170,152 +127,6 @@ class ML_SAM:
             return np.array([[w // 2, h // 2]])
 
 
-    def split_dataset(self, dataset_dict, train_split=0.9, val_split=0.1):
-        all_images = []
-        for data in dataset_dict.values():
-            all_images.extend(data["images"])
-        random.shuffle(all_images)
-
-        num_images = len(all_images)
-        train_size = int(train_split * num_images)
-
-        train_images = all_images[:train_size]
-        val_images = all_images[train_size:]
-        print(f"Train: {len(train_images)} images, Validation: {len(val_images)} images")
-        return train_images, val_images
-
-    np.random.seed(3)
-
-
-    def save_split_dataset(self, train_images, val_images):
-        # Set the output directory to the current execution directory
-        output_dir = os.getcwd()
-
-        # Create train and validation directories within the current directory
-        train_dir = os.path.join(output_dir, "train")
-        val_dir = os.path.join(output_dir, "validation")
-        os.makedirs(train_dir, exist_ok=True)
-        os.makedirs(val_dir, exist_ok=True)
-        # Copy training images
-        for image_path in train_images:
-            file_name = os.path.basename(image_path)
-            dest_path = os.path.join(train_dir, file_name)
-            shutil.copy2(image_path, dest_path)  # copy2 preserves metadata
-            print(f"Copied train image: {image_path} -> {dest_path}")
-
-        # Copy validation images
-        for image_path in val_images:
-            file_name = os.path.basename(image_path)
-            dest_path = os.path.join(val_dir, file_name)
-            shutil.copy2(image_path, dest_path)
-            print(f"Copied validation image: {image_path} -> {dest_path}")
-
-        if len(train_images) == 0 or len(val_images) == 0:
-            print("Empty split — cannot train/validate properly.")
-            return
-
-
-    def show_mask(self, mask, ax, random_color=False, borders = True):
-        if random_color:
-            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-        else:
-            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-        h, w = mask.shape[-2:]
-        mask = mask.astype(np.uint8)
-        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-        if borders:
-            import cv2
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            # Try to smooth contours
-            contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
-            mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2)
-        ax.imshow(mask_image)
-
-    def show_points(self, coords, labels, ax, marker_size=375):    
-        pos_points = coords[labels == 1]
-        neg_points = coords[labels == 0]
-        ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-        ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-
-    def show_box(self, box, ax):
-        x0, y0 = box[0], box[1]
-        w, h = box[2] - box[0], box[3] - box[1]
-        ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0, 0, 0, 0), lw=2))
-
-    def show_masks(self, image, masks, scores, point_coords=None, box_coords=None, input_labels=None, borders=True):
-        for i, (mask, score) in enumerate(zip(masks, scores)):
-            plt.figure(figsize=(10, 10))
-            plt.imshow(image)
-            self.show_mask(mask, plt.gca(), borders=borders)
-            if point_coords is not None:
-                assert input_labels is not None
-                self.show_points(point_coords, input_labels, plt.gca())
-            if box_coords is not None:
-                #boxes
-            	self.show_box(box_coords, plt.gca())
-            if len(scores) > 1:
-                plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
-            plt.axis('off')
-            plt.show()
-
-
-    def load_image_and_annotation(self, folder, image_file, annotations):
-        image_path = os.path.join(folder, image_file)
-        image = np.array(Image.open(image_path))
-
-        image_info = next((img for img in annotations['images'] if img['file_name'] == image_file), None)
-
-        if image_info is None:
-            raise ValueError(f"Image file {image_file} not found in annotations.")
-
-        image_id = image_info['id']
-        annotation = next((ann for ann in annotations['annotations'] if ann['image_id'] == image_id), None)
-
-        if annotation is None:
-            raise ValueError(f"Annotation for image ID {image_id} not found.")
-
-        return image, annotation
-
-
-    def load_true_mask(self, image_file, dataset):
-        """
-        Efficiently loads the true mask for an image by using the precomputed annotation_index.
-        """
-        base_name = os.path.basename(image_file)
-        if not hasattr(self, 'annotation_index') or base_name not in self.annotation_index:
-            raise ValueError(f"Image file {image_file} not found in the annotation index.")
-
-        annotation_data = self.annotation_index[base_name]
-
-        # Find image metadata
-        image_info = next((img for img in annotation_data['images'] if img['file_name'] == base_name), None)
-        if image_info is None:
-            raise ValueError(f"Image file {image_file} not found in annotations.")
-
-        image_id, height, width = image_info['id'], image_info['height'], image_info['width']
-
-        # Get all annotations for the image
-        annotations_for_image = [ann for ann in annotation_data['annotations'] if ann['image_id'] == image_id]
-        if not annotations_for_image:
-            return np.zeros((height, width), dtype=np.uint8)
-
-        # Initialize an empty mask
-        combined_mask = np.zeros((height, width), dtype=np.uint8)
-
-        # Iterate over each annotation and decode RLE mask
-        for ann in annotations_for_image:
-            rle = coco_mask.frPyObjects(ann['segmentation'], height, width)
-            mask = coco_mask.decode(rle)
-
-            # Merge multiple segmentation parts if necessary
-            if len(mask.shape) == 3:
-                mask = np.any(mask, axis=2)
-
-            combined_mask = np.logical_or(combined_mask, mask).astype(np.uint8)
-
-        return combined_mask.astype(np.float32)
-
-
     def train_sam(self, learnrate, weight_decay, predictor, train_images, val_images, input_point_op, input_label_op,
                   epochs=20):
         optimizer = torch.optim.AdamW(predictor.model.parameters(), lr=learnrate, weight_decay=weight_decay)
@@ -341,7 +152,7 @@ class ML_SAM:
                 input_point = self.find_best_water_points(image_file)
                 input_label = np.ones(len(input_point), dtype=int)
                 image = np.array(Image.open(image_file).convert("RGB"))
-                true_mask = self.load_true_mask(image_file, self.dataset)
+                true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index)
 
                 if true_mask is None:
                     print(f"No annotation found for image {image_file}, skipping.")
@@ -473,7 +284,7 @@ class ML_SAM:
                 with torch.no_grad():
                     for val_idx, val_image_file in enumerate(val_images):
                         val_image = np.array(Image.open(val_image_file).convert("RGB"))
-                        val_true_mask = self.load_true_mask(val_image_file, self.dataset)
+                        val_true_mask = self.dataset_util.load_true_mask(val_image_file, self.annotation_index)
 
                         if val_true_mask is None:
                             print(f"No annotation found for validation image {val_image_file}, skipping.")
@@ -544,7 +355,7 @@ class ML_SAM:
                 print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss}")
             if (epoch + 1) % self.save_model_frequency == 0:
                 torch.save(predictor.model.state_dict(),
-                           f"{self.site_short_name}_{epoch}_{learnrate}_{self.formatted_time}.torch")
+                           f"{self.site_name}_{epoch}_{learnrate}_{self.formatted_time}.torch")
 
 
     def save_config_to_text(self, output_text_file):
@@ -566,20 +377,32 @@ class ML_SAM:
     def ML_SAM_Main(self, cfg=None):
         now_start = datetime.now()
         print(f"Execution Started: {now_start.strftime('%y%m%d %H:%M:%S')}")
+        all_folders = []
+        all_annotations = []
 
         paths = self.site_config.get('Path', [])
         for path in paths:
-            if path['siteName'] == self.site_name:
+            # If site_name is mentioned as "all_sites" in the site_config.json, then all the sites are considered i.e., all the folders and annotatons listed under the Path in the json
+            if self.site_name == "all_sites":
                 directory_path = path['directoryPaths']
                 self.folders = directory_path.get('folders', [])
                 self.annotation_files = directory_path.get('annotations', [])
+                self.all_folders.extend(self.folders)
+                self.all_annotations.extend(self.annotation_files)
+            # If site_name is specific site then only the folders and annotatons of that particular site is considered for training. 
+            elif path['siteName'] == self.site_name:
+                directory_path = path['directoryPaths']
+                self.folders = directory_path.get('folders', [])
+                self.annotation_files = directory_path.get('annotations', [])
+                self.all_folders.extend(self.folders)
+                self.all_annotations.extend(self.annotation_files)
 
-        self.dataset = self.load_images_and_annotations(self.folders, self.annotation_files)
-        self.annotation_index = self.build_annotation_index()
+        self.dataset = self.dataset_util.load_images_and_annotations(self.all_folders, self.all_annotations)
+        self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
 
         # Split dataset into train and validation sets
-        train_images, val_images = self.split_dataset(self.dataset)
-        self.save_split_dataset(train_images, val_images)
+        train_images, val_images = self.dataset_util.split_dataset(self.dataset)
+        self.dataset_util.save_split_dataset(train_images, val_images)
 
         print(f"[DEBUG] train_images count: {len(train_images)}")
         if len(train_images) == 0:
@@ -609,7 +432,9 @@ class ML_SAM:
         from hydra.utils import instantiate
         from omegaconf import OmegaConf
         import os
-
+        
+        
+        GlobalHydra.instance().clear()
         # Initialize Hydra explicitly with the relative path. (version_base can be None to suppress version warnings.)
         with initialize(config_path=config_dir, version_base=None):
             # The config_name should be the base name of the YAML file.
@@ -642,14 +467,14 @@ class ML_SAM:
         for learnrate in self.learning_rates:
             print(f"Training with learning rate: {learnrate}")
             self.train_sam(learnrate, self.weight_decay, predictor, train_images, val_images,
-                           input_point, input_label, epochs=20)
+                           input_point, input_label, epochs=self.num_epochs)
 
 
             plt.plot(self.epoch_list, self.loss_values, marker='*')
             plt.title('Epoch vs loss')
             plt.xlabel('Epoch')
             plt.ylabel('loss')
-            plt.savefig(f"{self.site_short_name}_EpochVsLoss_{learnrate}_{self.formatted_time}.png")
+            plt.savefig(f"{self.site_name}_EpochVsLoss_{learnrate}_{self.formatted_time}.png")
             plt.close()
 
 
@@ -659,9 +484,9 @@ class ML_SAM:
             plt.ylabel("Accuracy")
             plt.title("Training and Validation Accuracy Over Epochs")
             plt.legend()
-            plt.savefig(f"{self.site_short_name}_Accuracy_{learnrate}_{self.formatted_time}.png")
+            plt.savefig(f"{self.site_name}_Accuracy_{learnrate}_{self.formatted_time}.png")
             plt.close()
-        self.save_config_to_text(f"{self.site_short_name}_configuration_{self.formatted_time}.txt")
+        self.save_config_to_text(f"{self.site_name}_configuration_{self.formatted_time}.txt")
 
         now_end = datetime.now()
         print(f"Execution Started: {now_start.strftime('%y%m%d %HH:%MM:%SS')}")
