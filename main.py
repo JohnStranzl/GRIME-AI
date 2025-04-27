@@ -5201,12 +5201,15 @@ if __name__ == '__main__':
     if 1:
         my_main()
 
+    # ###
+    # THIS SECTION IS TO TEST NEW FUNCTIONALITY OR EXTENSIVE CODE CHANGES BEFORE INTEGRATING INTO THE MAIN BODY OF CODE
+    # OR THE MAIN TRUNK IN GITHUB.
+    # ###
+
     if 0:
         train_main()
-
     if 0:
         view_segmentation_main()
-
     if 0:
         load_model_main()
 
