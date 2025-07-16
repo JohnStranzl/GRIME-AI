@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.5.15"
+#define MyAppVersion "0.0.6.0 (beta 7)"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -28,9 +28,9 @@ DiskSpanning=yes
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_5_15 Setup
-Password=C0rnHusk3r%
-Compression=lzma
+OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 7) Setup
+;Password=C0rnHusk3r%
+Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
@@ -43,10 +43,16 @@ Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
+; --- Existing task ---
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; --- NEW TASK: Optional Install of R ---
+Name: "installR"; Description: "Install R"; GroupDescription: "Optional Components:"; Flags: unchecked
 
 [Dirs]
+; Create models folder in the user's Documents directory
 Name: "{app}\models"
+; Create configuration folder in the user's Documents directory
+Name: "{userdocs}\GRIME-AI\Settings"; Flags: uninsalwaysuninstall
 
 [Files]
 ;
@@ -54,16 +60,23 @@ Name: "{app}\models"
 Source: "C:\Users\johns\pycharmprojects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
 ; 3rd party installers
-Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller
+; --- Modified to include Tasks: installR so the R installer is only installed when selected ---
+Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller; Flags: ignoreversion; Tasks: installR
 ;
 ; machine learning files
-Source: "C:\Users\johns\pycharmprojects\neonAI\sam2\*.*"; DestDir: "{app}\sam2"
+Source: "C:\Users\johns\pycharmprojects\neonAI\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
+
 ;Source: "C:\Users\johns\pycharmprojects\neonAI\sam2.1\checkpoints\*.*"; DestDir: "{app}\sam2.1\checkpoints"
 ;Source: "C:\Users\johns\pycharmprojects\neonAI\models\sam_vit_h_4b8939.pth"; DestDir: "{app}\models"
+;
+; Copy
+; Save the site_config.json to the user's Documents folder
+Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion
 ;
 ; user interface files
 Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
 Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
+Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
 ; documentation
@@ -83,10 +96,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
 Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "R_HOME"; ValueData: "C:\Program Files\R\R-4.4.1"; Flags: preservestringtype
 
 [Run]
-; cmd line: r.exe -e "install.packages('neonUtilities', repos='https://cran.rstudio.com/')"
-Filename: "{commonpf64}\R\R-4.4.1\bin\x64\r.exe"; Parameters: "-e ""install.packages('neonUtilities', repos='https://cran.rstudio.com/')"""
+; --- Conditioned to run only if the installR task is selected ---
+Filename: "{commonpf64}\R\R-4.4.1\bin\x64\r.exe"; Parameters: "-e ""install.packages('neonUtilities', repos='https://cran.rstudio.com/')"""; Tasks: installR
+
+; --- Launch the main application ---
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-Filename: "{cmd}"; Parameters: "/C pip install torch torchvision"; WorkingDir: "{app}";
+
+; --- Also run pip install command ---
+Filename: "{cmd}"; Parameters: "/C pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126"; WorkingDir: "{app}"
 
 [Code]
 procedure RunOtherInstaller;
@@ -99,4 +116,3 @@ begin
     MsgBox('Other installer failed to run!' + #13#10 +
       SysErrorMessage(ResultCode), mbError, MB_OK);
 end;
-
