@@ -90,7 +90,7 @@ class GRIME_AI_Video:
         filenames = []
 
         # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-        files = myGRIMEAI_utils.getFileList(rootFolder, extensions)
+        file_count, files = myGRIMEAI_utils.getFileList(rootFolder, extensions)
 
         # APPEND THE SOURCE FOLDER PATH AND THE FILENAME
         for imageIndex, file in enumerate(files):

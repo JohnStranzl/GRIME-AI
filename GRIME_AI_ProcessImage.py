@@ -24,7 +24,7 @@ class GRIME_AI_ProcessImage:
     # ------------------------------------------------------------------------------------------------------------------
     def processCanny(self, img1, gray, edgeMethodSettings):
 
-        # JESkernelSize = self.spinBoxCannyKernel.value()
+        #JESkernelSize = self.spinBoxCannyKernel.value()
         highThreshold = edgeMethodSettings.getCannyThresholdHigh()
         lowThreshold  = edgeMethodSettings.getCannyThresholdLow()
         kernelSize    = 3

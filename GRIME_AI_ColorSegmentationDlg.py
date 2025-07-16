@@ -1,27 +1,25 @@
 import os
-
-from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QDialog, QVBoxLayout
+from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 
 # ====================================================================================================
 #
 # ====================================================================================================
-class roiParameters():
-
+class roiParameters:
     def __init__(self, parent=None):
-        strROIName = ''
-        numColorClusters = 4
-        bDisplayROIs = True
-        bDisplayROIColors = True
+        self.strROIName = ''
+        self.numColorClusters = 4
+        self.bDisplayROIs = True
+        self.bDisplayROIColors = True
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 class GRIME_AI_ColorSegmentationDlg(QDialog):
 
-    # SIGNALS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    # SIGNALS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     colorSegmentation_Signal = pyqtSignal(int)
     addROI_Signal = pyqtSignal(roiParameters)
     deleteAllROI_Signal = pyqtSignal()
@@ -36,23 +34,24 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
     #
     # -----------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
-        super(QDialog, self).__init__(parent)
-
-        layout = QVBoxLayout(self)
-
+        super(GRIME_AI_ColorSegmentationDlg, self).__init__(parent)
+        # Removed: layout = QVBoxLayout(self)
         # SET BEHAVIOR OF DIALOG BOX
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
+        # Load the UI file (which now contains dynamic layouts)
         loadUi('QDialog_ColorSegmentation.ui', self)
+        # Ensure the dialog starts with the intended size
+        self.resize(400, 676)
 
         # CONNECT CONTROLS/WIDGETS TO FUNCTIONS THAT RESPOND TO CLICKS
-        #self.checkBoxDisplayROIs.clicked.connect(self.displayROIs)
         self.pushButtonAddROI.clicked.connect(self.addROI)
         self.pushButton_deleteAllROIs.clicked.connect(self.deleteAllROI)
         self.buttonBox_Close.clicked.connect(self.closeClicked)
         self.pushButton_Dlg_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
+
         if os.getlogin() == 'johns':
             self.pushButton_Dlg_TEST.clicked.connect(self.universalTestButton)
         else:
@@ -67,19 +66,18 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.checkBox_NDVI.clicked.connect(self.NDVI_Clicked)
 
         # SET CONTROL COLORS
-        self.pushButton_Dlg_BuildFeatureFile.setStyleSheet('QPushButton {background-color: steelblue; color: yellow;}')
+        self.pushButton_Dlg_BuildFeatureFile.setStyleSheet(
+            'QPushButton {background-color: steelblue; color: yellow;}'
+        )
 
-    # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------
     def buildFeatureFile(self):
         self.buildFeatureFile_Signal.emit()
 
     # ----------------------------------------------------------------------------------------------------
-    # ----------------------------------------------------------------------------------------------------
     def universalTestButton(self):
         self.universalTestButton_Signal.emit(1)
 
-    # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------
     def closeEvent(self, event):
         super(GRIME_AI_ColorSegmentationDlg, self).closeEvent(event)
@@ -89,15 +87,14 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.close_signal.emit()
 
     # ----------------------------------------------------------------------------------------------------
-    # self.pushButton_ColorSegmentation.clicked.connect(self.colorSegmentationClicked)
-    # ----------------------------------------------------------------------------------------------------
     def colorSegmentationClicked(self):
         self.colorSegmentation_Signal.emit(1)
 
     # ----------------------------------------------------------------------------------------------------
-    # ----------------------------------------------------------------------------------------------------
     def addROI(self):
         self.returnROIParameters.strROIName = self.lineEdit_roiName.text()
+        # Optionally, you could read the actual spinbox value like:
+        # self.returnROIParameters.numColorClusters = self.spinBoxColorClusters.value()
         self.returnROIParameters.numColorClusters = 4
         self.returnROIParameters.bDisplayROIs = True
         self.returnROIParameters.bDisplayROIColors = True
@@ -105,11 +102,9 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.addROI_Signal.emit(self.returnROIParameters)
 
     # ----------------------------------------------------------------------------------------------------
-    # ----------------------------------------------------------------------------------------------------
     def deleteAllROI(self):
         self.deleteAllROI_Signal.emit()
 
-    # ----------------------------------------------------------------------------------------------------
     # ----------------------------------------------------------------------------------------------------
     def GCC_Clicked(self):
         self.greenness_index_signal.emit()

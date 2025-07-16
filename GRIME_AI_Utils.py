@@ -142,6 +142,7 @@ class GRIME_AI_Utils:
     def getFileList(self, folder='', extensions='jpg', bFetchRecursive=False):
 
         filenames = []
+        image_count = 0
 
         if bFetchRecursive:
             for root, dirs, files in os.walk(folder):
@@ -149,13 +150,15 @@ class GRIME_AI_Utils:
                     ext = os.path.splitext(file)[-1].lower()
                     if ext in extensions:
                         filenames.append(os.path.join(root, file))
+                        image_count += 1
         else:
             for imageIndex, file in enumerate(os.listdir(folder)):
                 ext = os.path.splitext(file)[-1].lower()
                 if ext in extensions:
                     filenames.append(os.path.join(folder, file))
+                    image_count += 1
 
-        return filenames
+        return image_count, filenames
 
 
     # ======================================================================================================================

@@ -18,7 +18,7 @@ class QProgressWheel(QWidget):
     PositionBottom = -90
 
     # CONSTRUCTOR ---------------------------------------------------
-    def __init__(self, startVal=0, maxVal=0, parent=None):
+    def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True, parent=None):
         super(QProgressWheel, self).__init__(parent)
         self.m_min = 0
         self.m_max = maxVal
@@ -63,10 +63,34 @@ class QProgressWheel(QWidget):
         self.move(QApplication.desktop().screen().rect().center() - self.rect().center())
 
         self.setWindowFlag(Qt.FramelessWindowHint, False)
+        flags = Qt.Window | Qt.WindowTitleHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint
+        self.setWindowFlags(flags)
+
+        self.show()
+
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
 
         self.setStyleSheet("background-color: white;")
+
+        # Optionally set the window to be always on top
+        if alwaysOnTop:
+            self.setAlwaysOnTop(True)
+
+
+    def setAlwaysOnTop(self, enable: bool):
+        # Retrieve the current window flags
+        flags = self.windowFlags()
+        if enable:
+            # Add the 'stay on top' flag
+            flags |= Qt.WindowStaysOnTopHint
+        else:
+            # Remove the 'stay on top' flag
+            flags &= ~Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        # Note: To see the effect, you might need to hide and re-show the widget.
+        self.show()
+
 
     # ENUMS ---------------------------------------------------------
     class BarStyle(Enum):

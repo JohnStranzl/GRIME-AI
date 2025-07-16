@@ -31,6 +31,8 @@ class GRIME_AI_Color:
         # Resize the image by a scale factor
         scale_x = 0.5  # Scale along the width
         scale_y = 0.5  # Scale along the height
+        print("rgb shape:", rgb.shape)
+        print("scale_x:", scale_x, "scale_y:", scale_y)
         resized_image = cv2.resize(rgb, None, fx=scale_x, fy=scale_y)
 
         hsv = cv2.cvtColor(resized_image, cv2.COLOR_RGB2HSV)

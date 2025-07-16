@@ -1,0 +1,1597 @@
+import os
+import json
+from pathlib import Path
+from promptlib import Files
+
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
+from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import (QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox, QComboBox)
+from PyQt5.uic import loadUi
+
+import matplotlib
+matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
+
+from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+from GRIME_AI_Save_Utils import JsonEditor
+from coco_generator import CocoGenerator
+
+
+import torch
+
+# ======================================================================================================================
+# ======================================================================================================================
+#  =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+# Custom ListWidget classes with drag and drop support.
+class DraggableListWidget(QListWidget):
+    def mimeData(self, items):
+        mimeData = QtCore.QMimeData()
+        texts = "\n".join(sorted(set(item.text() for item in self.selectedItems())))
+        mimeData.setText(texts)
+        return mimeData
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+#  =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+class DroppableListWidget(QListWidget):
+    def dropEvent(self, event):
+        if event.mimeData().hasText():
+            text = event.mimeData().text()
+            # In case multiple items were dragged:
+            items_to_drop = [line.strip() for line in text.splitlines() if line.strip()]
+            dlg = self.parent()
+            if dlg is not None:
+                for item_text in items_to_drop:
+                    # Remove matching item from available list.
+                    available = dlg.listWidget_availableFolders
+                    for idx in range(available.count()):
+                        avail_item = available.item(idx)
+                        if avail_item.text() == item_text:
+                            available.takeItem(idx)
+                            break
+                    # Add the item if not already transferred.
+                    if item_text not in dlg.transferred_items:
+                        self.addItem(item_text)
+                        dlg.transferred_items.add(item_text)
+                        print(f"Dragged '{item_text}' from available to selected folders via drop.")
+                dlg.updateTrainButtonState()  # Update Train button after drop.
+            event.accept()
+        else:
+            event.ignore()
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+#  =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+class GRIME_AI_HyperparametersDlg(QDialog):
+
+    ml_train_signal = pyqtSignal()
+    ml_segment_signal = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        import xml.etree.ElementTree as ET
+        ui_file = r"QDialog_Hyperparameters.ui"  # use the same path you printed above
+        tree = ET.parse(ui_file)
+        print("Widgets declared in this UI:")
+        for w in tree.getroot().iter('widget'):
+            cls = w.get('class')
+            name = w.get('name')
+            print(f"  {cls:12} → {name!r}")
+
+        ui_file = r"QDialog_Hyperparameters.ui"  # use the same path you printed above
+        loadUi(ui_file, self)
+
+        # --- Filmstrip one‐row configuration ---
+        filmstrip = self.listWidget_annotationFilmstrip
+
+        # 1. Layout: Left‐to‐right, no wrapping, static movement
+        filmstrip.setFlow(QtWidgets.QListView.LeftToRight)
+        filmstrip.setWrapping(False)
+        filmstrip.setResizeMode(QtWidgets.QListView.Adjust)
+        filmstrip.setMovement(QtWidgets.QListView.Static)
+
+        # 2. Scroll bars: only horizontal
+        filmstrip.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        filmstrip.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+
+        # 3. Fix height to exactly one icon row
+        icon_h = filmstrip.iconSize().height()
+        # account for widget frame borders
+        frame = filmstrip.frameWidth() * 2
+        # if you want a tiny gap above/below, you can include spacing()
+        spacing = filmstrip.spacing()
+        filmstrip.setFixedHeight(icon_h + frame + spacing)
+
+        # Optional: Prevent the layout from stretching it vertically
+        filmstrip.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Fixed
+        )
+
+        # annotation tab state
+        self._annotation_image_paths = []
+
+        # Example hookup in your dialog __init__
+        le = self.lineEdit_annotationCategory
+        lst = self.listWidget_annotationCategories
+
+        # Enter → add to list
+        le.returnPressed.connect(lambda: self._add_category(le, lst))
+
+        # ---
+        # --- Segment Images Tab Layout
+        # ---
+        layout = self.horizontalLayoutSegmentImages
+        layout.setStretch(0, 4)  # left content area
+        layout.setStretch(1, 1)  # right 'Labels' group box
+
+        # filmstrip widget
+        lw = self.listWidget_filmstrip
+
+        # 1) no wrapping, no internal spacing
+        lw.setWrapping(False)
+        lw.setSpacing(0)
+
+        # 2) remove any margins between viewport and frame
+        lw.setContentsMargins(0, 0, 0, 0)
+        lw.setViewportMargins(0, 0, 0, 0)
+
+        # 3) remove the frame entirely
+        from PyQt5.QtWidgets import QFrame
+
+        lw.setFrameShape(QFrame.NoFrame)
+
+        # 4) fix the height to exactly the icon height
+        icon_h = lw.iconSize().height()
+        lw.setFixedHeight(icon_h)
+
+        # Initialize tracking variables.
+        self.transferred_items = set()
+        self.original_folders = []
+        self.selected_label_categories = []
+        self.categories_available = False
+
+        # Call helper methods.
+        #self.setup_from_config_file()
+        self.setup_custom_list_widgets()
+        self.setup_ui_properties()
+        self.setup_connections()
+        self.setup_drag_and_drop()
+        self.populate_segment_images_tab()
+        self.updateTrainButtonState()
+
+        model_path = self.lineEdit_segmentation_model_file.text().strip()
+        self.updateSegmentButtonState(model_path)
+
+        # install event filter on the annotation‐image label
+        self.label_imageAnnotation.installEventFilter(self)
+
+
+    def _add_category(self, lineedit, listwidget):
+        text = lineedit.text().strip()
+        if text and not listwidget.findItems(text, QtCore.Qt.MatchExactly):
+            listwidget.addItem(text)
+        lineedit.clear()
+
+
+    def _openAnnotator(self):
+        pm = self.label_imageAnnotation.pixmap()
+        if pm is None:
+            QtWidgets.QMessageBox.warning(self, "No Image",
+                                          "No image is loaded in the annotation label.")
+            return
+
+        # pick mode based on some UI switch if you have one
+        mode = 'click'  # or 'drag'
+        dlg = ImageAnnotatorDialog(pm, mode=mode, parent=self)
+        if dlg.exec_():
+            annos = dlg.getAnnotations()
+            print("Captured polygons:", annos)
+        else:
+            print("Annotator canceled.")
+
+
+    def setup_from_config_file(self):
+        """
+        Initialize dialog controls from a configuration dictionary.
+        """
+        self.lineEdit_siteName.setText(self.config.get("siteName", ""))
+        learningRates = self.config.get("learningRates", [])
+        lr_str = ", ".join(str(x) for x in learningRates)
+        self.lineEdit_learningRates.setText(lr_str)
+
+        optimizer = self.config.get("Optimizer", "")
+        idx = self.comboBox_optimizer.findText(optimizer)
+        if idx >= 0:
+            self.comboBox_optimizer.setCurrentIndex(idx)
+
+        loss_function = self.config.get("loss_function", "")
+        idx = self.comboBox_lossFunction.findText(loss_function)
+        if idx >= 0:
+            self.comboBox_lossFunction.setCurrentIndex(idx)
+
+        self.doubleSpinBox_weightDecay.setValue(self.config.get("weight_decay", 0.0))
+        self.spinBox_epochs.setValue(self.config.get("number_of_epochs", 0))
+        self.spinBox_batchSize.setValue(self.config.get("batch_size", 0))
+        self.spinBox_saveFrequency.setValue(self.config.get("save_model_frequency", 0))
+        self.spinBox_validationFrequency.setValue(self.config.get("validation_frequency", 0))
+        self.checkBox_earlyStopping.setChecked(self.config.get("early_stopping", False))
+        self.spinBox_patience.setValue(self.config.get("patience", 0))
+
+        device = self.config.get("device", "")
+        idx = self.comboBox_device.findText(device)
+        if idx >= 0:
+            self.comboBox_device.setCurrentIndex(idx)
+
+        self.lineEdit_segmentation_model_file.setText(self.config.get("segmentation_model_file", ""))
+        self.lineEdit_segmentation_images_folder.setText(self.config.get("segmentation_images_folder", ""))
+        self.checkBox_saveModelMasks.setChecked(self.config.get("save_model_masks", True))
+        self.checkBox_copyOriginalModelImage.setChecked(self.config.get("copy_original_model_image", True))
+
+        load_model_conf = self.config.get("load_model", {})
+        if load_model_conf:
+            model_path = load_model_conf.get("MODEL", "")
+            if model_path:
+                self.lineEdit_segmentation_model_file.setText(model_path)
+                print("Populated segmentation model file from JSON (MODEL):", model_path)
+            input_dir = load_model_conf.get("INPUT_DIR", "")
+            if input_dir:
+                self.lineEdit_segmentation_images_folder.setText(input_dir)
+                print("Populated segmentation images folder from JSON (INPUT_DIR):", input_dir)
+
+        self.current_path = self.config.get("Path", None)
+
+
+    def setup_custom_list_widgets(self):
+        """Replace default list widgets with custom draggable/droppable ones."""
+        self.listWidget_availableFolders.__class__ = DraggableListWidget
+        self.listWidget_selectedFolders.__class__ = DroppableListWidget
+
+
+    def setup_ui_properties(self):
+        """Set size policies and layout stretch factors."""
+        self.tabWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.listWidget_availableFolders.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.listWidget_selectedFolders.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.listWidget_availableFolders.setMinimumHeight(200)
+        self.listWidget_selectedFolders.setMinimumHeight(200)
+        self.adjustSize()
+        self.setMinimumSize(self.size())
+        self.verticalTabParametersLayout.setStretch(0, 1)
+        self.verticalTabParametersLayout.setStretch(1, 0)
+        self.horizontalMainLayout.setStretch(0, 1)
+        self.horizontalMainLayout.setStretch(1, 3)
+        self.horizontalListLayout.setStretch(0, 1)
+        self.horizontalListLayout.setStretch(1, 0)
+        self.horizontalListLayout.setStretch(2, 1)
+
+
+    def setup_connections(self):
+        """Connect signals with their slot methods."""
+        # Folder management signals.
+        self.pushButton_browseFolder.clicked.connect(self.browse_folder)
+        self.lineEdit_folderPath.editingFinished.connect(self.populate_available_folders)
+
+        self.pushButton_moveRight.clicked.connect(self.move_to_right)
+        self.pushButton_moveRight.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_moveLeft.clicked.connect(self.move_to_left)
+        self.pushButton_moveLeft.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_reset.clicked.connect(self.reset_lists)
+        self.pushButton_reset.setStyleSheet('QPushButton {background-color: darkred; color: white;}')
+
+        self.pushButton_train.clicked.connect(self.train)
+        self.pushButton_train.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.listWidget_availableFolders.itemDoubleClicked.connect(self.handle_left_item_doubleclick)
+        self.listWidget_selectedFolders.itemDoubleClicked.connect(self.handle_right_item_doubleclick)
+
+        # Data Annotation tab connections
+        self.pushButton_annotationBrowse.clicked.connect(self.browse_annotation_folder)
+        self.pushButton_annotationBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.listWidget_annotationFilmstrip.itemClicked.connect(self.display_annotation_image)
+
+        # Segment Images tab signals.
+        self.pushButton_Select_Model.clicked.connect(self.select_segmentation_model)
+        self.pushButton_Select_Model.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_Select_Images_Folder.clicked.connect(self.select_segmentation_images_folder)
+        self.pushButton_Select_Images_Folder.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_Segment.clicked.connect(self.segment_images)
+        self.pushButton_Segment.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.lineEdit_segmentation_model_file.textChanged.connect(self.updateSegmentButtonState)
+        self.lineEdit_segmentation_images_folder.textChanged.connect(self.updateSegmentButtonState)
+        self.checkBox_saveModelMasks.toggled.connect(self.on_save_masks_toggled)
+        self.checkBox_copyOriginalModelImage.toggled.connect(self.on_copy_original_toggled)
+
+        # ### COCO GENERATION TAB CONNECTIONS ###
+        # Connect COCO tab widgets (ensure these names match the UI file).
+        self.lineEdit_cocoFolder.textChanged.connect(self.updateCOCOButtonState)
+        self.pushButton_cocoBrowse.clicked.connect(self.selectCocoFolder)
+        self.pushButton_cocoBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.lineEdit_maskFile.textChanged.connect(self.updateCOCOButtonState)
+        self.pushButton_maskBrowse.clicked.connect(self.selectMaskFile)
+        self.pushButton_maskBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.checkBox_singleMask.toggled.connect(self.updateMaskFieldState)
+        self.pushButton_generateCOCO.clicked.connect(self.generateCOCOAnnotations)
+        self.pushButton_generateCOCO.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.updateMaskFieldState(self.checkBox_singleMask.isChecked())
+        self.updateCOCOButtonState()
+        # ### END NEW COCO CONNECTIONS ###
+
+        # <<<< Connection for ROI Analyzer Analyze button >>>>
+        self.pushButton_browseFolderNew.clicked.connect(self.browse_folder_new)
+        self.pushButton_browseFolderNew.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.pushButton_analyze.clicked.connect(self.analyze_roi)
+        self.pushButton_analyze.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
+        self.listWidget_filmstrip.itemClicked.connect(self.on_filmstrip_item_clicked)
+
+        self.num_clusters = self.spinBox_numClusters.value()
+        self.spinBox_numClusters.valueChanged.connect(self._on_num_clusters_changed)
+
+
+    def _on_num_clusters_changed(self, value):
+        self.num_clusters = value
+
+        current = self.listWidget_filmstrip.currentItem()
+        if current:
+            # re-run analysis on the highlighted image
+            self.on_filmstrip_item_clicked(current)
+        else:
+            # fallback: rerun the initial analysis sequence
+            self.analyze_roi()
+
+
+    def on_save_masks_toggled(self, checked: bool):
+        print(f"Save Masks checkbox toggled: {checked}")
+        # Add any logic here to update internal state or UI
+
+
+    def on_copy_original_toggled(self, checked: bool):
+        print(f"Copy Original Image checkbox toggled: {checked}")
+        # Add any logic here to update internal state or UI
+
+
+    def on_filmstrip_item_clicked(self, item: QListWidgetItem):
+        """
+        When a thumbnail is clicked, re-run ROI analysis on that image/mask pair
+        and update label_displayImages with the composite plot + top-3 swatches.
+        """
+        # Retrieve the index we stored in populate_filmstrip
+        idx = item.data(Qt.UserRole)
+        orig_path, mask_path = self._pairs[idx]
+
+        # grab the user-selected cluster count
+        n_clusters = self.spinBox_numClusters.value()
+
+        # Run analysis for this specific pair
+        from GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
+        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+        analyzer.run_analysis()
+
+        # Display composite+metrics plot
+        composite_pix = analyzer.get_results_pixmap()
+        self.label_displayImages.setPixmap(composite_pix)
+
+        # Overlay top-3 dominant color swatches
+        swatches = analyzer.dominant_rgb_list[:3]
+        self._draw_color_swatches_on_label(swatches, swatch_size=100)
+
+
+    def populate_filmstrip(self, image_paths):
+        """
+        Given a list of file paths, clear the filmstrip and add each
+        image as a thumbnail icon.
+        """
+        # clear existing items
+        self.listWidget_filmstrip.clear()
+
+        icon_size = self.listWidget_filmstrip.iconSize()
+        for idx, path in enumerate(image_paths):                      # <<< changed: enumerate
+            pixmap = QPixmap(path)
+            if pixmap.isNull():
+                continue  # skip invalid images
+
+            # scale to fit iconSize, keeping aspect ratio
+            thumb = pixmap.scaled(icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            item = QListWidgetItem()
+            item.setIcon(QIcon(thumb))
+            item.setData(Qt.UserRole, idx)                           # <<< changed: store index
+            self.listWidget_filmstrip.addItem(item)
+
+        # highlight the first thumbnail by default
+        if self.listWidget_filmstrip.count():
+            self.listWidget_filmstrip.setCurrentRow(0)
+
+
+    def browse_folder_new(self):
+        """
+        Open a folder chooser dialog and set the text of lineEdit_folderPathNew
+        with the selected folder path.
+        """
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
+        if folder:
+            self.lineEdit_folderPathNew.setText(folder)
+
+
+    def analyze_roi(self):
+        """
+        1) Generate file pairs and populate filmstrip
+        2) Run analysis on the first (or clicked) pair
+        3) Display composite plot, fallback to original if empty
+        4) Overlay top-3 color swatches
+        """
+        folder = self.lineEdit_folderPathNew.text().strip()
+        if not folder:
+            QMessageBox.warning(self, "ROI Analyzer", "Please specify a folder path.")
+            return
+
+        try:
+            from GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
+        except ImportError:
+            QMessageBox.warning(self, "ROI Analyzer", "Unable to import ROI Analyzer module.")
+            return
+
+        # 1) generate pairs + filmstrip
+        temp = GRIME_AI_ROI_Analyzer("", "")
+        pairs = temp.generate_file_pairs(folder)
+        if not pairs:
+            QMessageBox.warning(self, "ROI Analyzer", "No image/mask pairs found.")
+            return
+        self._pairs = pairs
+        image_paths = [orig for orig, _ in pairs]
+        self.populate_filmstrip(image_paths)
+
+        # 2) analyze the first pair (index 0) by default
+        orig_path, mask_path = pairs[0]
+        n_clusters = self.spinBox_numClusters.value()
+        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+        analyzer.run_analysis()
+
+        # 3) try to get the composite+metrics pixmap
+        try:
+            comp_pix = analyzer.get_results_pixmap()
+        except Exception as e:
+            # fallback: load the original image manually
+            img = cv2.imread(orig_path)
+            if img is None or img.size == 0:
+                QMessageBox.warning(self, "ROI Analyzer",
+                                    f"Could not generate results pixmap or load original:\n{e}")
+                return
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            h, w = rgb.shape[:2]
+            comp_pix = QPixmap.fromImage(
+                QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+            )
+
+        self.label_displayImages.setPixmap(comp_pix)
+
+        # 4) overlay the top-3 swatches
+        swatches = getattr(analyzer, "dominant_rgb_list", [])[:3]
+        self._draw_color_swatches_on_label(swatches, swatch_size=100)
+
+
+    def setup_drag_and_drop(self):
+        """Configure drag & drop for folder lists and set style for the Segment button."""
+        self.listWidget_availableFolders.setDragEnabled(True)
+        self.listWidget_availableFolders.setDragDropMode(QAbstractItemView.DragOnly)
+        self.listWidget_selectedFolders.setAcceptDrops(True)
+        self.listWidget_selectedFolders.setDragDropMode(QAbstractItemView.DropOnly)
+        self.listWidget_selectedFolders.installEventFilter(self)
+        self.pushButton_Segment.setStyleSheet(
+            'QPushButton {background-color: steelblue; color: white; }'
+            'QPushButton:disabled {background-color: gray; color: black; }'
+        )
+        self.pushButton_Segment.setMinimumSize(150, 40)
+        self.pushButton_Segment.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+
+    def updateSegmentButtonState(self, path: str):
+        """Enable the Segment button only if model file and images folder fields are non-empty."""
+        """
+        Trigger label population when the model path is manually updated.
+        """
+        path = path.strip()
+
+        if path.lower().endswith('.torch') and os.path.isfile(path):
+            self.populate_model_labels(path)
+            model_text = self.lineEdit_segmentation_model_file.text().strip()
+
+            images_text = self.lineEdit_segmentation_images_folder.text().strip()
+
+            self.pushButton_Segment.setEnabled(bool(model_text and images_text))
+
+
+    def updateTrainButtonState(self):
+        """Enable the Train button only if at least one selected folder exists."""
+        self.pushButton_train.setEnabled(self.listWidget_selectedFolders.count() > 0)
+
+
+    def populate_segment_images_tab(self):
+        """Populate the Segment Images tab with default values."""
+        self.lineEdit_segmentation_model_file.setText("")
+        self.lineEdit_segmentation_images_folder.setText(os.getcwd())
+        self.checkBox_saveModelMasks.setChecked(True)
+        self.checkBox_copyOriginalModelImage.setChecked(True)
+        print("Segment Images tab populated with default values.")
+
+
+    def browse_folder(self):
+        """Open a dialog to choose a folder and update the folder path field."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
+        if folder:
+            self.lineEdit_folderPath.setText(folder)
+            self.populate_available_folders()
+
+
+    def updateCOCOButtonState(self):
+        """Enable the Generate COCO button only if a folder is provided in the COCO tab."""
+        folder_entered = bool(self.lineEdit_cocoFolder.text().strip())
+        self.pushButton_generateCOCO.setEnabled(folder_entered)
+
+
+    def updateMaskFieldState(self, checked):
+        """Enable/disable the mask file field and its Browse button based on the Single Mask checkbox state."""
+        self.lineEdit_maskFile.setEnabled(checked)
+        self.pushButton_maskBrowse.setEnabled(checked)
+
+
+    def selectCocoFolder(self):
+        """Open a folder chooser for the COCO generation folder."""
+        folder = Files().dir()  # You can replace this with QFileDialog.getExistingDirectory if needed.
+        if folder:
+            self.lineEdit_cocoFolder.setText(folder)
+
+
+    def selectMaskFile(self):
+        """Open a file chooser to select a mask file."""
+        mask_file = Files().file()  # Replace with QFileDialog.getOpenFileName if preferred.
+        if mask_file:
+            self.lineEdit_maskFile.setText(mask_file)
+
+
+    def getCopyOriginalImage(self):
+        return self.checkBox_copyOriginalModelImage.isChecked()
+
+
+    def getSaveMasks(self):
+        return self.checkBox_saveModelMasks.isChecked()
+
+    def getSelectedLabelCategories(self):
+        return self.selected_label_categories
+
+
+    def generateCOCOAnnotations(self):
+        """
+        Instantiate the CocoGenerator with the folder (and the mask file if Single Mask is checked)
+        then generate the COCO annotation JSON in the images folder.
+        """
+        folder_text = self.lineEdit_cocoFolder.text().strip()
+        if not folder_text:
+            QMessageBox.warning(self, "COCO Generation", "Please specify a folder path.")
+            return
+
+        folder_path = Path(folder_text)
+        output_path = folder_path / "instances_default.json"
+
+        if self.checkBox_singleMask.isChecked():
+            mask_text = self.lineEdit_maskFile.text().strip()
+            if not mask_text:
+                QMessageBox.warning(self, "COCO Generation", "Single Mask is selected but no mask file was specified.")
+                return
+            shared_mask = Path(mask_text)
+            if not shared_mask.exists():
+                QMessageBox.warning(self, "COCO Generation", f"Specified mask file not found:\n{shared_mask.resolve()}")
+                return
+            generator = CocoGenerator(folder=folder_path, shared_mask=shared_mask, output_path=output_path)
+        else:
+            generator = CocoGenerator(folder=folder_path, output_path=output_path)
+
+        generator.generate_annotations()
+        QMessageBox.information(self, "COCO Generation",
+                                f"COCO annotation file successfully created at:\n{output_path.resolve()}")
+
+
+    def find_coco_products(self, root_folder):
+        """
+        Recursively search for all occurrences of 'COCO Products' folders under the given root.
+        """
+        found = []
+        for dirpath, dirnames, _ in os.walk(root_folder):
+            print(f"Scanning directory: {dirpath}")
+            if "COCO Products" in dirnames:
+                coco_path = os.path.join(dirpath, "COCO Products")
+                print(f"  Found 'COCO Products' folder: {coco_path}")
+                found.append(coco_path)
+        if not found:
+            print("No 'COCO Products' folder found under", root_folder)
+        return found
+
+
+    def populate_available_folders(self):
+        """
+        Search for valid COCO Products subfolders and add them (relative to the root) to the available list.
+        """
+        root_folder = os.path.abspath(self.lineEdit_folderPath.text().strip())
+        self.listWidget_availableFolders.clear()
+        if not os.path.isdir(root_folder):
+            print("The provided root folder is not valid:", root_folder)
+            return
+        print(f"Starting recursive search for 'COCO Products' under: {root_folder}")
+        coco_products_folders = self.find_coco_products(root_folder)
+        valid_folders = []
+        for coco_products_path in coco_products_folders:
+            if os.path.abspath(coco_products_path) == root_folder:
+                print(f"Skipping 'COCO Products' folder equal to root folder: {coco_products_path}")
+                continue
+            print(f"Processing COCO Products folder: {coco_products_path}")
+            try:
+                for subfolder in os.listdir(coco_products_path):
+                    subfolder_path = os.path.join(coco_products_path, subfolder)
+                    abs_subfolder = os.path.abspath(subfolder_path)
+                    if os.path.isdir(subfolder_path):
+                        images_path = os.path.join(subfolder_path, "Images", "default")
+                        annotations_path = os.path.join(subfolder_path, "annotations")
+                        print(f"  Checking subfolder: {subfolder_path}")
+                        images_exist = False
+                        annotations_exist = False
+                        if os.path.isdir(images_path):
+                            image_files = [f for f in os.listdir(images_path)
+                                           if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                            images_exist = len(image_files) > 0
+                            print(f"    Images folder at '{images_path}' contains {len(image_files)} image(s)")
+                        else:
+                            print(f"    Images folder missing at: {images_path}")
+                        if os.path.isdir(annotations_path):
+                            json_files = [f for f in os.listdir(annotations_path)
+                                          if f.lower().endswith('.json')]
+                            annotations_exist = len(json_files) > 0
+                            print(f"    Annotations folder at '{annotations_path}' contains {len(json_files)} JSON file(s)")
+                        else:
+                            print(f"    Annotations folder missing at: {annotations_path}")
+                        if images_exist and annotations_exist:
+                            if abs_subfolder == root_folder:
+                                print(f"    --> Skipping candidate equal to root folder: {subfolder_path}")
+                                continue
+                            print(f"    --> Valid folder found: {subfolder_path}")
+                            valid_folders.append(subfolder_path)
+                        else:
+                            print("    --> Folder skipped (does not meet criteria).")
+            except Exception as e:
+                print("Error scanning inside 'COCO Products' folder:", e)
+        if not valid_folders:
+            print("No valid subfolders found.")
+        else:
+            print("Valid folders found:")
+            for folder in valid_folders:
+                print("  ", folder)
+        self.original_folders = valid_folders.copy()
+        for folder in valid_folders:
+            rel_folder = os.path.relpath(folder, root_folder)
+            self.listWidget_availableFolders.addItem(rel_folder)
+
+
+    def move_to_right(self):
+        """
+        Move selected items from the available folders list to the selected folders list.
+        """
+        selected_items = self.listWidget_availableFolders.selectedItems()
+        for item in selected_items:
+            if item:
+                if item.text() not in self.transferred_items:
+                    self.listWidget_selectedFolders.addItem(item.text())
+                    self.transferred_items.add(item.text())
+                row = self.listWidget_availableFolders.row(item)
+                self.listWidget_availableFolders.takeItem(row)
+                print(f"Moved '{item.text()}' from available to selected folders (button).")
+        self.updateTrainButtonState()
+
+
+    def move_to_left(self):
+        """
+        Move selected items back from the selected folders list to the available folders list,
+        then re-sort the available folders.
+        """
+        selected_items = self.listWidget_selectedFolders.selectedItems()
+        for item in selected_items:
+            if item:
+                row = self.listWidget_selectedFolders.row(item)
+                self.listWidget_selectedFolders.takeItem(row)
+                if item.text() in self.transferred_items:
+                    self.transferred_items.remove(item.text())
+                available_items = [self.listWidget_availableFolders.item(i).text() for i in range(self.listWidget_availableFolders.count())]
+                available_items.append(item.text())
+                available_items.sort()
+                self.listWidget_availableFolders.clear()
+                for text in available_items:
+                    self.listWidget_availableFolders.addItem(text)
+                print(f"Moved '{item.text()}' from selected back to available folders (sorted, button).")
+        self.updateTrainButtonState()
+
+
+    def eventFilter(self, source, event):
+        """
+        Process drag-and-drop events on the selected folders list.
+        """
+        if source == self.listWidget_selectedFolders:
+            if event.type() in (QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove):
+                event.accept()
+                return True
+            elif event.type() == QtCore.QEvent.Drop:
+                if event.mimeData().hasText():
+                    mime_text = event.mimeData().text()
+                    dragged_items = [txt.strip() for txt in mime_text.splitlines() if txt.strip()]
+                    for txt in dragged_items:
+                        for idx in range(self.listWidget_availableFolders.count()):
+                            avail_item = self.listWidget_availableFolders.item(idx)
+                            if avail_item.text() == txt:
+                                self.listWidget_availableFolders.takeItem(idx)
+                                break
+                        if txt not in self.transferred_items:
+                            self.listWidget_selectedFolders.addItem(txt)
+                            self.transferred_items.add(txt)
+                            print(f"Dragged '{txt}' from available to selected folders via eventFilter.")
+                event.accept()
+                self.updateTrainButtonState()
+                return True
+
+        if source == self.label_imageAnnotation and event.type() == QtCore.QEvent.MouseButtonDblClick:
+            self._openAnnotator()
+            return True
+
+        return super().eventFilter(source, event)
+
+
+    def reset_lists(self):
+        """
+        Clear both list boxes and restore available folders from the original list.
+        """
+        self.listWidget_availableFolders.clear()
+        self.listWidget_selectedFolders.clear()
+        self.transferred_items.clear()
+        for folder in self.original_folders:
+            self.listWidget_availableFolders.addItem(QListWidgetItem(folder))
+        self.updateTrainButtonState()
+
+
+    def get_values(self):
+        """
+        Collect values from dialog controls and return them as a dictionary.
+        """
+        values = {}
+        values["siteName"] = self.lineEdit_siteName.text()
+        lr_text = self.lineEdit_learningRates.text()
+        try:
+            values["learningRates"] = [float(x.strip()) for x in lr_text.split(",") if x.strip()]
+        except Exception as e:
+            print("Error parsing learning rates:", e)
+            values["learningRates"] = lr_text
+        values["optimizer"] = self.comboBox_optimizer.currentText()
+        values["loss_function"] = self.comboBox_lossFunction.currentText()
+        values["weight_decay"] = self.doubleSpinBox_weightDecay.value()
+        values["number_of_epochs"] = self.spinBox_epochs.value()
+        values["batch_size"] = self.spinBox_batchSize.value()
+        values["save_model_frequency"] = self.spinBox_saveFrequency.value()
+        values["validation_frequency"] = self.spinBox_validationFrequency.value()
+        values["early_stopping"] = self.checkBox_earlyStopping.isChecked()
+        values["patience"] = self.spinBox_patience.value()
+        values["device"] = self.comboBox_device.currentText()
+        values["folder_path"] = self.lineEdit_folderPath.text()
+        values["available_folders"] = [self.listWidget_availableFolders.item(i).text() for i in range(self.listWidget_availableFolders.count())]
+        values["selected_folders"] = [self.listWidget_selectedFolders.item(i).text() for i in range(self.listWidget_selectedFolders.count())]
+        values["segmentation_model_file"] = self.lineEdit_segmentation_model_file.text()
+        values["segmentation_images_folder"] = self.lineEdit_segmentation_images_folder.text()
+        values["save_model_masks"] = self.checkBox_saveModelMasks.isChecked()
+        values["copy_original_model_image"] = self.checkBox_copyOriginalModelImage.isChecked()
+
+        values["num_clusters"] = self.spinBox_numClusters.value()
+
+        return values
+
+
+    def load_config_from_json(self, filepath):
+        """
+        Load configuration values from a JSON file.
+        """
+        with open(filepath, 'r') as f:
+            config = json.load(f)
+        return config
+
+
+    def create_custom_json(self):
+        """
+        Gather all dialog values and create a JSON configuration file.
+        """
+        from datetime import datetime
+
+        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+        CONFIG_FILENAME = "site_config.json"
+        config_file = os.path.join(settings_folder, CONFIG_FILENAME)
+        if os.path.exists(config_file):
+            now_str = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
+            backup_filename = os.path.join(settings_folder, f"{now_str}_{CONFIG_FILENAME}")
+            os.rename(config_file, backup_filename)
+            print(f"Existing {config_file} renamed to {backup_filename}")
+
+        values = self.get_values()
+        values["siteName"] = "custom"
+
+        seg_images_folder = self.lineEdit_segmentation_images_folder.text().strip()
+        if seg_images_folder:
+            seg_images_folder = os.path.abspath(seg_images_folder).replace("\\", "/")
+        else:
+            seg_images_folder = ""
+
+        values["load_model"] = {
+            "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
+            "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+            "INPUT_DIR": seg_images_folder,
+            "OUTPUT_DIR": os.path.join(seg_images_folder, "predictions").replace("\\", "/"),
+            "MODEL": "models/Edgewood_19_0.0001_2004_2040.torch"
+        }
+
+        seg_model_path = self.lineEdit_segmentation_model_file.text().strip()
+        if seg_model_path and seg_model_path.lower().endswith('.torch') and os.path.isfile(seg_model_path):
+            abs_model_path = os.path.abspath(seg_model_path.strip()).replace("\\", "/")
+            values["load_model"]["MODEL"] = abs_model_path
+            print("Updated MODEL path to:", abs_model_path)
+        else:
+            print("No valid segmentation model file selected; using default MODEL path.")
+
+        root_folder = os.path.abspath(self.lineEdit_folderPath.text().strip()).replace("\\", "/")
+        selected_folders = values.get("selected_folders", [])
+        if selected_folders:
+            new_folders = []
+            new_annotations = []
+            for folder in selected_folders:
+                folder_fwd = folder.replace("\\", "/")
+                new_folders.append(root_folder + "/" + folder_fwd + "/images/default")
+                new_annotations.append(root_folder + "/" + folder_fwd + "/annotations/instances_default.json")
+            values["Path"] = [{
+                "siteName": "custom",
+                "directoryPaths": {
+                    "folders": new_folders,
+                    "annotations": new_annotations
+                }
+            }]
+            print("Updated Path section from selected folders.")
+        else:
+            if hasattr(self, "current_path") and self.current_path:
+                values["Path"] = self.current_path
+                print("Right listbox is empty; retaining existing Path section from config.")
+            else:
+                values["Path"] = []
+                print("Right listbox is empty and no existing Path data available; setting Path to empty.")
+
+        with open(config_file, "w") as outfile:
+            json.dump(values, outfile, indent=4)
+        print("Custom JSON file 'site_config.json' created successfully.")
+
+
+    def initialize_dialog_from_config(self, config):
+        self.config = config
+        self.setup_from_config_file()
+
+
+    def accept(self):
+        self.create_custom_json()
+        super().accept()
+
+
+    def train(self):
+        """
+        Called when the Train button is clicked.
+        Validates model path, images folder, label selections, and image presence.
+        """
+        model_path = self.lineEdit_segmentation_model_file.text().strip()
+        image_folder = self.lineEdit_segmentation_images_folder.text().strip()
+
+        # Validate model path
+        if not model_path or not os.path.isfile(model_path):
+            QMessageBox.warning(self, "Validation Error", f"Model file not found:\n{model_path}")
+            return
+
+        # Validate image folder
+        if not image_folder or not os.path.isdir(image_folder):
+            QMessageBox.warning(self, "Validation Error", f"Image folder not found:\n{image_folder}")
+            return
+
+        # Check for JPG files
+        jpg_files = [f for f in os.listdir(image_folder) if f.lower().endswith(".jpg")]
+        if not jpg_files:
+            QMessageBox.warning(self, "Validation Error", f"No JPG images found in:\n{image_folder}")
+            return
+
+        # Label validation if categories were expected
+        if self.categories_available:
+            selected_labels = []
+            for idx in range(self.listWidget_labels.count()):
+                item = self.listWidget_labels.item(idx)
+                if item and item.isSelected():
+                    selected_labels.append(item.text())
+
+        self.create_custom_json()
+        print("Train button clicked. Starting training process...")
+
+        settings = self.get_values()
+        print("Current settings:", settings)
+
+        self.ml_train_signal.emit()
+
+
+    def select_segmentation_model(self):
+        """
+        Open a file dialog to select a segmentation model file (only .torch files).
+        Clears the label list and populates it from the model metadata.
+        """
+        model_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Segmentation Model",
+            "",
+            "Torch Model Files (*.torch)"
+        )
+
+        if model_file:
+            print("Segmentation model selected:", model_file)
+
+            # Clear the label listbox before repopulating
+            self.listWidget_labels.clear()
+
+            self.populate_model_labels(model_file)
+            self.lineEdit_segmentation_model_file.setText(model_file)
+            JsonEditor().update_json_entry("Segmentation_Torch_File", model_file)
+
+
+    def populate_model_labels(self, model_path):
+        """
+        Load label categories from side-car JSON or checkpoint metadata.
+        Set a fallback flag if none are found.
+        """
+        labels = None
+
+        '''
+        # PROVISIONAL - CURRENTLY, THERE IS NO SIDE-CAR DEPLOYED WITH THE MODEL
+        # Try side-car JSON
+        meta_json = os.path.splitext(model_path)[0] + ".json"
+        if os.path.isfile(meta_json):
+            try:
+                with open(meta_json, "r") as f:
+                    data = json.load(f)
+                labels = data.get("categories") or data.get("classes")
+            except Exception as e:
+                print("Failed to load JSON metadata:", e)
+        '''
+
+        # Try torch checkpoint
+        if labels is None:
+            try:
+                ckpt = torch.load(model_path, map_location="cpu")
+                labels = ckpt.get("categories") or ckpt.get("meta", {}).get("classes")
+            except Exception as e:
+                print("Error reading torch file:", e)
+
+        # Clear previous entries
+        self.listWidget_labels.clear()
+
+        # No labels found — flag it and allow training
+        if not labels:
+            QMessageBox.warning(
+                self,
+                "Load Model Categories",
+                "No category list found in:\n" + model_path
+            )
+            self.categories_available = False
+            self.listWidget_labels.addItem("<Older model format>")
+            self.listWidget_labels.addItem("<Labels unavailable>")
+            self.listWidget_labels.addItem("<ID 2 : Water assumed>")
+            self.listWidget_labels.setDisabled(True)
+            return
+
+        # If labels exist, reset flag and populate
+        self.categories_available = True
+        self.listWidget_labels.setDisabled(False)
+        for entry in labels:
+            if isinstance(entry, dict):
+                name = entry.get("name") or entry.get("label") or entry.get("class") or repr(entry)
+            else:
+                name = str(entry)
+            self.listWidget_labels.addItem(name)
+
+
+    def select_segmentation_images_folder(self):
+        """
+        Open a folder selection dialog to choose a folder with images for segmentation.
+        """
+        folder = QFileDialog.getExistingDirectory(self, "Select Images Folder", os.getcwd())
+        if folder:
+            self.lineEdit_segmentation_images_folder.setText(folder)
+            print("Segmentation images folder selected:", folder)
+
+
+    def segment_images(self):
+        """
+        Called when the Segment button is clicked.
+        Validates label selections, updates configuration, runs segmentation,
+        then post-processes outputs according to the two checkboxes.
+        """
+        # Ensure that at least one label is selected
+        selected_labels = []
+        for idx in range(self.listWidget_labels.count()):
+            item = self.listWidget_labels.item(idx)
+            if item and item.isSelected():
+                selected_labels.append(item.text())
+
+        if not selected_labels:
+            QMessageBox.warning(self, "Segmentation Error",
+                                "Please select at least one label before segmenting images.")
+            return
+
+        # Populate selected_label_categories from selection
+        self.selected_label_categories = []
+        if self.categories_available == True:
+            for idx in range(self.listWidget_labels.count()):
+                item_text = self.listWidget_labels.item(idx).text().strip()
+                if item_text and item_text in selected_labels:
+                    self.selected_label_categories.append({
+                        "id": idx + 1,
+                        "name": item_text
+                    })
+
+        print("Selected categories:", self.selected_label_categories)
+
+        # 1) Gather user settings
+        settings = self.get_values()
+
+        # 2) Write JSON config for downstream pipeline
+        self.create_custom_json()
+
+        # 3) Kick off the actual segmentation
+        self.ml_segment_signal.emit()
+
+        # 4) Close dialog as “Accepted”
+        QtCore.QMetaObject.invokeMethod(
+            self, 'done', QtCore.Qt.QueuedConnection,
+            QtCore.Q_ARG(int, QDialog.Accepted)
+        )
+
+
+    def resizeEvent(self, event):
+        """
+        Ensure list widgets update their geometry on dialog resize.
+        """
+        super().resizeEvent(event)
+        self.listWidget_availableFolders.updateGeometry()
+        self.listWidget_selectedFolders.updateGeometry()
+
+        if hasattr(self, "_full_canvas"):
+            scaled = self._full_canvas.scaled(
+                self.label_displayImages.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.label_displayImages.setPixmap(scaled)
+
+
+    def handle_left_item_doubleclick(self, item):
+        self.move_items_to_selected([item])
+
+
+    def handle_right_item_doubleclick(self, item):
+        self.move_items_to_available([item])
+
+
+    def move_items_to_selected(self, items):
+        for item in items:
+            name = item.text()
+            if name not in self.transferred_items:
+                self.listWidget_selectedFolders.addItem(name)
+                self.transferred_items.add(name)
+            for i in range(self.listWidget_availableFolders.count()):
+                if self.listWidget_availableFolders.item(i).text() == name:
+                    self.listWidget_availableFolders.takeItem(i)
+                    break
+        self.updateTrainButtonState()
+
+
+    def move_items_to_available(self, items):
+        for item in items:
+            name = item.text()
+            if name in self.transferred_items:
+                self.transferred_items.remove(name)
+                available_items = [self.listWidget_availableFolders.item(i).text()
+                                   for i in range(self.listWidget_availableFolders.count())]
+                available_items.append(name)
+                available_items.sort()
+                self.listWidget_availableFolders.clear()
+                for text in available_items:
+                    self.listWidget_availableFolders.addItem(text)
+                for i in range(self.listWidget_selectedFolders.count()):
+                    if self.listWidget_selectedFolders.item(i).text() == name:
+                        self.listWidget_selectedFolders.takeItem(i)
+                        break
+        self.updateTrainButtonState()
+
+
+    def reset_lists(self):
+        """
+        Clear both list widgets and restore available folders from the original list.
+        """
+        self.listWidget_availableFolders.clear()
+        self.listWidget_selectedFolders.clear()
+        self.transferred_items.clear()
+        for folder in self.original_folders:
+            self.listWidget_availableFolders.addItem(QListWidgetItem(folder))
+        self.updateTrainButtonState()
+
+
+    def display_color_swatches(self, rgb_list, swatch_size=100):
+        """
+        Paints each RGB tuple in rgb_list as a swatch of size swatch_size × swatch_size,
+        laid out horizontally, and sets the result into label_displayImages.
+        """
+        count = len(rgb_list)
+        if count == 0:
+            return
+
+        # Create a pixmap wide enough for all swatches
+        pixmap = QPixmap(swatch_size * count, swatch_size)
+        pixmap.fill(Qt.transparent)  # start blank
+
+        painter = QPainter(pixmap)
+        for i, (r, g, b) in enumerate(rgb_list):
+            color = QColor(r, g, b)
+            painter.fillRect(i * swatch_size, 0, swatch_size, swatch_size, color)
+        painter.end()
+
+        # Display
+        self.label_displayImages.setPixmap(pixmap)
+
+
+    def _draw_color_swatches_on_label(self, rgb_list, swatch_size=100):
+        """
+        Builds a canvas containing the current QLabel pixmap (if any) plus
+        a horizontal row of color swatches beneath it. The full‐size canvas
+        is stored in self._full_canvas, then scaled to fit the label.
+        """
+        # Determine the base pixmap (the composite + metrics)
+        base = self.label_displayImages.pixmap()
+        if base:
+            base_w, base_h = base.width(), base.height()
+        else:
+            # no existing image: base area is zero
+            base_w, base_h = 0, 0
+
+        # Compute canvas size: width must fit all swatches or base, whichever is wider
+        swatch_count = len(rgb_list)
+        swatches_w = swatch_count * swatch_size
+        total_w = max(base_w, swatches_w)
+        total_h = base_h + (swatch_size if swatch_count else 0)
+
+        # Create the full‐size canvas
+        canvas = QPixmap(total_w, total_h)
+        canvas.fill(Qt.transparent)
+
+        painter = QPainter(canvas)
+        # 1) Draw the existing image at the top, if present
+        if base:
+            painter.drawPixmap(0, 0, base)
+
+        # 2) Draw each swatch beneath the base image
+        for i, (r, g, b) in enumerate(rgb_list):
+            x = i * swatch_size
+            y = base_h
+            painter.fillRect(x, y, swatch_size, swatch_size, QColor(r, g, b))
+        painter.end()
+
+        # Store the unscaled full‐canvas for future resize events
+        self._full_canvas = canvas
+
+        # Scale to fit the QLabel’s current size and set it
+        scaled = self._full_canvas.scaled(
+            self.label_displayImages.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.label_displayImages.setPixmap(scaled)
+
+    def browse_annotation_folder(self):
+        """
+        Open dialog, select a folder, populate line edit and filmstrip.
+        """
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Annotation Folder",
+            os.getcwd()
+        )
+        if not folder:
+            return
+
+        self.lineEdit_annotationFolder.setText(folder)
+        self.populate_annotation_filmstrip(folder)
+
+
+    def populate_annotation_filmstrip(self, folder):
+        """
+        List all supported images in `folder`, fill the filmstrip.
+        """
+        self.listWidget_annotationFilmstrip.clear()
+        # gather all image files
+        exts = ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff')
+        paths = sorted(
+            Path(folder).glob('*')
+        )
+        images = [str(p) for p in paths if p.suffix.lower() in exts]
+        self._annotation_image_paths = images
+
+        icon_size = self.listWidget_annotationFilmstrip.iconSize()
+        for idx, img_path in enumerate(images):
+            pix = QPixmap(img_path)
+            if pix.isNull():
+                continue
+            thumb = pix.scaled(icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            item = QListWidgetItem(QIcon(thumb), "")
+            # store index so we can look it up on click
+            item.setData(Qt.UserRole, idx)
+            self.listWidget_annotationFilmstrip.addItem(item)
+
+        # auto-select first
+        if self.listWidget_annotationFilmstrip.count():
+            self.listWidget_annotationFilmstrip.setCurrentRow(0)
+            # display it immediately
+            self.display_annotation_image(self.listWidget_annotationFilmstrip.currentItem())
+
+
+    def display_annotation_image(self, item):
+        """
+        Show the full image corresponding to the clicked thumbnail.
+        """
+        idx = item.data(Qt.UserRole)
+        path = self._annotation_image_paths[idx]
+        pix = QPixmap(path)
+        if pix.isNull():
+            return
+
+        # scale to fit the label, keep aspect ratio
+        lbl = self.label_imageAnnotation
+        scaled = pix.scaled(
+            lbl.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        lbl.setPixmap(scaled)
+
+
+    def add_annotation_category(self):
+        """
+        Called when the user presses Enter in the annotation combo's line edit.
+        Adds the current text as a new category if it’s non-empty and not already present.
+        """
+        text = self.comboBox_annotationCategories.currentText().strip()
+        if not text:
+            return
+
+        # Only add unique, non-empty entries
+        if self.comboBox_annotationCategories.findText(text) == -1:
+            self.comboBox_annotationCategories.addItem(text)
+
+        # Clear the editor so it's ready for the next entry
+        self.comboBox_annotationCategories.lineEdit().clear()
+
+# End of GRIME_AI_HyperparametersDlg class.
+
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+
+# MACHINE LEARNING ANNOTATION SUPPORT
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+from shapely.geometry import Polygon
+
+def simplify_path(path, stride=5):
+    if len(path) < 3:
+        return []
+    return path[::stride]
+
+class AnnotatorLabel(QtWidgets.QLabel):
+    """
+    Draws onto a fixed‐resolution base pixmap and
+    always scales that pixmap to fit the current label size.
+    """
+
+    def __init__(self, pixmap, mode='drag', parent=None):
+        super().__init__(parent)
+
+        # 1) Keep a copy of your full‐res pixmap
+        self._base = pixmap.copy()
+
+        # 2) drawing state
+        self.mode = mode
+        self.shapes = []         # list of dicts {'type':'click'|'drag','points':[QPoint,...]}
+        self.active_pts = []     # click‐mode in‐progress
+        self.active_path = []    # drag‐mode in‐progress
+        self.drawing = False
+        self.annotations = []    # final output as list of [(x,y),...]
+
+        # 3) Make the label fully stretch/shrink
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored,
+            QtWidgets.QSizePolicy.Ignored
+        )
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setMouseTracking(True)
+
+        # initial draw
+        self._render_scaled()
+
+
+    def resizeEvent(self, ev):
+        # redraw whenever the widget changes size
+        self._render_scaled()
+        super().resizeEvent(ev)
+
+
+    '''
+    def _render_scaled(self):
+        """
+        Composite _base + all shapes onto a temporary canvas,
+        then scale that canvas to the label’s current size.
+        """
+        # draw everything into a fresh canvas
+        canvas = self._base.copy()
+        painter = QtGui.QPainter(canvas)
+
+        # 1) finalized shapes in green, 2px
+        pen = QtGui.QPen(QtCore.Qt.green, 1)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        for s in self.shapes:
+            pts = s['points']
+            if s['type'] == 'click':
+                for i, p in enumerate(pts):
+                    painter.drawEllipse(p, 1, 1)
+                    if i > 0:
+                        painter.drawLine(pts[i-1], p)
+            else:  # drag
+                for i in range(len(pts)):
+                    painter.drawLine(pts[i], pts[(i+1) % len(pts)])
+
+        # 2) active click pts in red
+        if self.active_pts:
+            pen.setColor(QtCore.Qt.red)
+            painter.setPen(pen)
+            for i, p in enumerate(self.active_pts):
+                painter.drawEllipse(p, 1, 1)
+                if i > 0:
+                    painter.drawLine(self.active_pts[i-1], p)
+
+        # 3) active drag stroke in green
+        if self.active_path:
+            pen.setColor(QtCore.Qt.green)
+            painter.setPen(pen)
+            for p in self.active_path:
+                painter.drawPoint(p)
+
+        painter.end()
+
+        # now scale that canvas to exactly fill the label
+        lbl_w, lbl_h = self.width(), self.height()
+        scaled = canvas.scaled(
+            lbl_w, lbl_h,
+            QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation
+        )
+        super().setPixmap(scaled)
+
+    '''
+
+    def _render_scaled(self, include_temp=False):
+        canvas = self._base.copy()
+        painter = QtGui.QPainter(canvas)
+
+        # Finalized shapes (green)
+        pen = QtGui.QPen(QtCore.Qt.green, 2)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        for s in self.shapes:
+            pts = s['points']
+            if s['type'] == 'click':
+                for i, p in enumerate(pts):
+                    painter.drawEllipse(p, 2, 2)
+                    if i > 0:
+                        painter.drawLine(pts[i - 1], p)
+            else:
+                for i in range(len(pts)):
+                    painter.drawLine(pts[i], pts[(i + 1) % len(pts)])
+
+        # Click-mode in-progress (red)
+        if self.active_pts:
+            pen.setColor(QtCore.Qt.red)
+            painter.setPen(pen)
+            for i, p in enumerate(self.active_pts):
+                painter.drawEllipse(p, 2, 2)
+                if i > 0:
+                    painter.drawLine(self.active_pts[i - 1], p)
+
+        # 👇 Drag-mode preview while drawing
+        if include_temp and self.active_path:
+            pen.setColor(QtCore.Qt.green)
+            painter.setPen(pen)
+            for p in self.active_path:
+                painter.drawPoint(p)
+
+        painter.end()
+
+        scaled = canvas.scaled(
+            self.width(), self.height(),
+            QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation
+        )
+        self.setPixmap(scaled)
+
+
+    def _map_to_base(self, pos):
+        """
+        Given a mouse pos in the label’s widget coords,
+        map it back to a QPoint in the base pixmap’s coords.
+        """
+        pm = self.pixmap()
+        if pm is None:
+            return None
+
+        bw, bh = self._base.width(), self._base.height()
+        pw, ph = pm.width(), pm.height()
+
+        sx = pw / bw
+        sy = ph / bh
+
+        # centered?
+        dx = (self.width()  - pw) // 2
+        dy = (self.height() - ph) // 2
+
+        x = (pos.x() - dx) / sx
+        y = (pos.y() - dy) / sy
+
+        x = max(0, min(x, bw - 1))
+        y = max(0, min(y, bh - 1))
+        return QtCore.QPoint(int(x), int(y))
+
+    def mousePressEvent(self, ev):
+        bp = self._map_to_base(ev.pos())
+        if not bp:
+            return super().mousePressEvent(ev)
+
+        if ev.button() == QtCore.Qt.LeftButton:
+            if self.mode == 'click':
+                self.active_pts.append(bp)
+            else:
+                self.drawing = True
+                self.active_path = [bp]
+        elif ev.button() == QtCore.Qt.RightButton and self.mode == 'click':
+            pts = list(self.active_pts)
+            self.active_pts.clear()
+            self._finalize('click', pts)
+
+        self._render_scaled()
+        super().mousePressEvent(ev)
+
+
+    '''
+    def mouseMoveEvent(self, ev):
+        if self.drawing and self.mode == 'drag':
+            bp = self._map_to_base(ev.pos())
+            if bp:
+                self.active_path.append(bp)
+                self._render_scaled()
+        super().mouseMoveEvent(ev)
+    '''
+
+    def mouseMoveEvent(self, ev):
+        if self.drawing and self.mode == 'drag':
+            bp = self._map_to_base(ev.pos())
+            if bp:
+                self.active_path.append(bp)
+                self._render_scaled(include_temp=True)  # <-- NEW: draw active drag
+        super().mouseMoveEvent(ev)
+
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() == QtCore.Qt.LeftButton and self.drawing and self.mode == 'drag':
+            self.drawing = False
+            raw = [(p.x(), p.y()) for p in self.active_path]
+            simp = simplify_path(raw, stride=5)
+            pts = [QtCore.QPoint(x, y) for x, y in simp]
+            self.active_path.clear()
+            self._finalize('drag', pts)
+        super().mouseReleaseEvent(ev)
+
+    def _finalize(self, kind, pts):
+        if len(pts) < 3:
+            return
+
+        # store shape & annotation
+        self.shapes.append({'type': kind, 'points': pts})
+        self.annotations.append([(p.x(), p.y()) for p in pts])
+
+        # update the base canvas so future scaling includes this shape
+        painter = QtGui.QPainter(self._base)
+        pen = QtGui.QPen(QtCore.Qt.green, 1)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        if kind == 'click':
+            for i, p in enumerate(pts):
+                painter.drawEllipse(p, 1, 1)
+                if i > 0:
+                    painter.drawLine(pts[i-1], p)
+        else:
+            for i in range(len(pts)):
+                painter.drawLine(pts[i], pts[(i+1) % len(pts)])
+        painter.end()
+
+        self._render_scaled()
+
+
+class ImageAnnotatorDialog(QtWidgets.QDialog):
+    """
+    Wraps AnnotatorLabel in a scroll area; the label always expands
+    or shrinks the image to fill its area, up to widget bounds.
+    Enter accepts.
+    """
+    def __init__(self, pixmap, mode='drag', parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Annotate Image")
+
+        # optionally half‐screen if too large
+        screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        iw, ih = pixmap.width(), pixmap.height()
+        sw, sh = screen.width(), screen.height()
+        if iw > sw or ih > sh:
+            pixmap = pixmap.scaled(
+                sw//2, sh//2,
+                QtCore.Qt.KeepAspectRatio,
+                QtCore.Qt.SmoothTransformation
+            )
+
+        self.label = AnnotatorLabel(pixmap, mode=mode, parent=self)
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidget(self.label)
+        scroll.setWidgetResizable(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(scroll)
+
+        # start within screen bounds
+        self.resize(min(iw, sw), min(ih, sh))
+        self.setSizeGripEnabled(True)
+
+    def keyPressEvent(self, ev):
+        if ev.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+            self.accept()
+        else:
+            super().keyPressEvent(ev)
+
+    def getAnnotations(self):
+        return self.label.annotations

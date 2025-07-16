@@ -15,19 +15,26 @@ class GRIME_AI_Save_Utils:
     def __init__(self):
         self.className = "GRIME_AI_Save_Utils"
 
-        self.configFile = self.getSettingsFolder()
+        self.configFile = self.get_settings_folder()
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    def getSettingsFolder(self):
-        configFilePath = os.path.expanduser('~')
-        configFilePath = os.path.join(configFilePath, 'Documents')
-        configFilePath = os.path.join(configFilePath, 'GRIMe-AI')
+    def get_models_folder(self):
+        models_file_path = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIMe-AI', 'Models')
+
+        if not os.path.exists(models_file_path):
+            os.makedirs(models_file_path)
+
+        return models_file_path
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_settings_folder(self):
+        configFilePath = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIMe-AI', 'Settings')
+
         if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
-        configFilePath = os.path.join(configFilePath, 'Settings')
-        if not os.path.exists(configFilePath):
-            os.mkdir(configFilePath)
+            os.makedirs(configFilePath)
 
         return configFilePath
 
@@ -35,7 +42,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def read_config_file(self):
-        configFilePath = self.getSettingsFolder()
+        configFilePath = self.get_settings_folder()
         configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
 
         config_object = configparser.ConfigParser()
@@ -49,12 +56,11 @@ class GRIME_AI_Save_Utils:
     def saveSettings(self):
         config = ConfigParser()
 
-        configFilePath = self.getSettingsFolder()
+        configFilePath = self.get_settings_folder()
         configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
 
-        f = open(configFile, 'w+')
-
-        config.read(configFile)
+        with open(configFile, 'w+') as f:
+            config.read(configFile)
 
         szSection = 'ROI'
         config.add_section(szSection)
@@ -75,7 +81,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------------
     '''
     def save_images_folder_path(self, images_folder_path):
-        configFilePath = self.getSettingsFolder()
+        configFilePath = self.get_settings_folder()
 
         config = ConfigParser()
 
@@ -97,7 +103,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------------
     '''
     def USGS_SaveFolderPath(self, USGS_FolderPath):
-        configFilePath = self.getSettingsFolder()
+        configFilePath = self.get_settings_folder()
 
         config = ConfigParser()
 
@@ -122,7 +128,7 @@ class GRIME_AI_Save_Utils:
     def USGS_getSaveFolderPath(self):
     
         try:
-            configFilePath = self.getSettingsFolder()
+            configFilePath = self.get_settings_folder()
 
             config = ConfigParser()
 
@@ -149,7 +155,7 @@ class GRIME_AI_Save_Utils:
     def NEON_getSaveFolderPath(self):
 
         try:
-            configFilePath = self.getSettingsFolder()
+            configFilePath = self.get_settings_folder()
 
             config = ConfigParser()
 
@@ -187,7 +193,7 @@ class JsonEditor():
 
     def update_json_entry(self, entry_key, new_value):
         try:
-            json_file = os.path.join(GRIME_AI_Save_Utils().getSettingsFolder(), 'GRIMe-AI.json')
+            json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
             json_file = os.path.normpath(json_file)
 
             with open(json_file, 'r') as file:
@@ -210,7 +216,7 @@ class JsonEditor():
 
 
     def add_key_value_to_json(self, key, value):
-        json_file = os.path.join(GRIME_AI_Save_Utils().getSettingsFolder(), 'GRIMe-AI.json')
+        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
 
         try:
             # Load the existing data from the JSON file
@@ -234,16 +240,16 @@ class JsonEditor():
 
 
     def getValue(self, key):
-        json_file = os.path.join(GRIME_AI_Save_Utils().getSettingsFolder(), 'GRIMe-AI.json')
+        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
 
         try:
             # Load the existing data from the JSON file
             with open(json_file, 'r') as file:
                 data = json.load(file)
 
-            return(data[key])
+            return data[key]
         except Exception:
             # If the file doesn't exist, create an empty dictionary
             data = {}
 
-            return(None)
+            return None

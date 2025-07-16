@@ -116,7 +116,7 @@ class GRIME_AI_ImageTriage():
         # --------------------------------------------------------------------------------------------------------------
         # process images to determine which ones are too dark/too light, blurry/clear, etc and move them into a subfolder
         # created so they are not processed with nominal images.
-        files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
+        file_count, files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
 
         if bCorrectAlignment:
             refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)

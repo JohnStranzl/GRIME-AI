@@ -130,9 +130,15 @@ class GRIME_AI_CompositeSlices():
             slice_count += 1
 
             if slice_count == filesPerImage[current_image_index]:
+
                 # Save the composite image
                 compFilename = f"{outputFilename}{'-'}{current_image_index}{'.jpg'}"
                 composite_image.save(compFilename)
+
+                print("\nComposite Filename: ", compFilename)
+                print("Composite Image ", current_image_index+1, " of ", numImages)
+                print("Files Used in this Composite Image: ", filesPerImage)
+                print("Composite Image Width: ", imageWidths)
 
                 total_slices -= filesPerImage[current_image_index]
                 current_image_index += 1

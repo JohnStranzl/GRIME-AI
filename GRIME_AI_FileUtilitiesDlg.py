@@ -1,14 +1,20 @@
 import os
+import promptlib
+import datetime
+
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
-import promptlib
-import datetime
+
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Save_Utils import JsonEditor
 from GRIME_AI_Video import GRIME_AI_Video
 
+
+# ======================================================================================================================
+#
+# ======================================================================================================================
 class Datapaths():
 
     def __init__(self, parent=None):
@@ -169,7 +175,7 @@ def getLocalFileDates(filePath, bFetchRecursive):
     endDate   = datetime.date(1970, 1, 1)
 
     myGRIME_AI_Utils = GRIME_AI_Utils()
-    files = myGRIME_AI_Utils.getFileList(filePath, extensions, bFetchRecursive)
+    file_count, files = myGRIME_AI_Utils.getFileList(filePath, extensions, bFetchRecursive)
 
     for file in files:
         ext = os.path.splitext(file)[-1].lower()
