@@ -114,7 +114,7 @@ class GRIME_AI_Utils:
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def getImageCount(self, folder, extensions):
+    def get_image_count(self, folder, extensions):
         imageCount = 0
 
         for filename in os.listdir(folder):
@@ -125,7 +125,7 @@ class GRIME_AI_Utils:
         return imageCount
 
 
-    def getImageCount_walk(self, folder, extensions):
+    def get_image_count_walk(self, folder, extensions):
         imageCount = 0
 
         for root, dirs, files in os.walk(folder):
@@ -187,7 +187,7 @@ class GRIME_AI_Utils:
         # <user>/Documents/GRIME-AI
         # --------------------------------------------------------------------------------------------------------------
         rootFolder = os.path.expanduser('~')
-        rootFolder = os.path.join(rootFolder, 'Documents', 'GRIMe-AI')
+        rootFolder = os.path.join(rootFolder, 'Documents', 'GRIME-AI')
         if not os.path.exists(rootFolder):
             os.mkdir(rootFolder)
 
@@ -200,7 +200,7 @@ class GRIME_AI_Utils:
             os.mkdir(configFilePath)
 
         # CHECK TO SEE IF THE GRIME-AI CONFIGURATION FILE EXISTS. IF IT DOES NOT, THEN CREATE IT USING touch
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.json')
+        configFile = os.path.join(configFilePath, 'GRIME-AI.json')
         if not os.path.isfile(configFile):
             configFileWithPath = Path(configFile)
             configFileWithPath.touch(exist_ok=True)
@@ -385,7 +385,7 @@ class GRIME_AI_Utils:
     def fetchDownloadsFolderPath(self):
         downloadsFilePath = os.path.expanduser('~')
         downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
-        downloadsFilePath = os.path.join(downloadsFilePath, 'GRIMe-AI')
+        downloadsFilePath = os.path.join(downloadsFilePath, 'GRIME-AI')
         if not os.path.exists(downloadsFilePath):
             os.mkdir(downloadsFilePath)
         downloadsFilePath = os.path.join(downloadsFilePath, 'Downloads')

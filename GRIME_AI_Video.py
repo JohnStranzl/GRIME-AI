@@ -40,7 +40,7 @@ class GRIME_AI_Video:
         extensions = ('.jpg', '.jpeg', '.png')
 
         myGRIMEAI_utils = GRIME_AI_Utils()
-        imageCount = myGRIMEAI_utils.getImageCount(rootFolder, extensions)
+        imageCount = myGRIMEAI_utils.get_image_count(rootFolder, extensions)
 
         progressBar = QProgressWheel(0, imageCount)
         progressBar.show()
@@ -82,7 +82,7 @@ class GRIME_AI_Video:
         extensions = ('.jpg', '.jpeg', '.png')
 
         myGRIMEAI_utils = GRIME_AI_Utils()
-        imageCount = myGRIMEAI_utils.getImageCount(rootFolder, extensions)
+        imageCount = myGRIMEAI_utils.get_image_count(rootFolder, extensions)
 
         progressBar = QProgressWheel(0, 0)
         progressBar.show()

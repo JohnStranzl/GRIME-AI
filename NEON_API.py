@@ -21,7 +21,7 @@ import rpy2.robjects as robjects
 #import rpy2.robjects.packages as rpackages
 from rpy2.robjects.packages import importr
 
-# GRIMe-AI MODULES
+# GRIME-AI MODULES
 from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Save_Utils import JsonEditor
@@ -112,7 +112,7 @@ class  NEON_API:
         r = requests.get(link, stream=True)
 
         configFilePath = os.path.expanduser('~')
-        configFilePath = os.path.join(configFilePath, 'Documents', 'GRIMe-AI', 'Downloads', 'NEON', 'Metadata')
+        configFilePath = os.path.join(configFilePath, 'Documents', 'GRIME-AI', 'Downloads', 'NEON', 'Metadata')
         if not os.path.exists(configFilePath):
             os.makedirs(configFilePath)
         filename_with_path = os.path.join(configFilePath, file_name)
@@ -187,7 +187,7 @@ class  NEON_API:
             '''
             neon_zips = neonUtilities.zipsByProduct(dpID='DP1.10003.001',
                                         site=base.c('HARV', 'BART'),
-                                        savepath='C:/Users/johns/Documents/GRIMe-AI/Downloads/NEON/Data/filesToStack10003',
+                                        savepath='C:/Users/johns/Documents/GRIME-AI/Downloads/NEON/Data/filesToStack10003',
                                         package='basic',
                                         check_size='FALSE',
                                         include_provisional = robjects.vectors.BoolVector([True]));

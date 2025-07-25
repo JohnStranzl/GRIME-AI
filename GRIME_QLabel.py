@@ -1,8 +1,7 @@
 from PyQt5 import Qt
 from PyQt5.QtCore import QRect, QPoint, Qt
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPainterPath, QPolygon, QPolygonF
-from PyQt5.QtWidgets import QLabel, QVBoxLayout
-
+from PyQt5.QtWidgets import QLabel, QVBoxLayout, QToolTip
 from GRIME_AI_roiData import ROIShape
 
 from enum import Enum
@@ -36,6 +35,8 @@ class GRIME_QLabel(QLabel):
     def __init__(self, parent=None):
         QLabel.__init__(self, parent=parent)
         layout = QVBoxLayout(self)
+        self.setLayout(layout)
+
         self.path = QPainterPath()
         self.points = QPolygon()
 
@@ -43,11 +44,14 @@ class GRIME_QLabel(QLabel):
 
         self.polygonList = []
 
-        self.setLayout(layout)
         self.setWindowTitle("Slice Position")
 
         self.sliceCenter = int(self.size().width() / 2)
         self.sliceWidth = int(10)
+
+        self.setMouseTracking(True)
+        self.setAttribute(Qt.WA_Hover, True)
+        self.tooltipGenerator = None  # Set this to a callable that returns the tooltip string.
 
     # ------------------------------------------------------------------------------------------------------------------------
     # Mouse click event
@@ -100,6 +104,24 @@ class GRIME_QLabel(QLabel):
             self.drawPolygon()
         elif self.drawingMode == DrawingMode.SLICE:
             self.drawCompositeSlice(self.sliceCenter)
+
+    def enterEvent(self, event):
+        """
+        When the mouse enters the label's area, update its tooltip using the instance-specific tooltip generator.
+        """
+        if self.tooltipGenerator and callable(self.tooltipGenerator):
+            try:
+                tooltip_text = self.tooltipGenerator()
+            except Exception as e:
+                tooltip_text = f"Error retrieving tooltip: {e}"
+            self.setToolTip(tooltip_text)
+            self.showToolTip(event.globalPos())  # Force tooltip display
+        super(GRIME_QLabel, self).enterEvent(event)
+
+
+    def showToolTip(self, global_pos):
+        """Manually display the tooltip at the cursor location."""
+        QToolTip.showText(global_pos, self.toolTip(), self)
 
 
     # ------------------------------------------------------------------------------------------------------------------------

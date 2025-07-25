@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>GRIMe-AI: John E. Stranzl Jr.</string>
+   <string>GRIME-AI: John E. Stranzl Jr.</string>
   </property>
   <property name="tabShape">
    <enum>QTabWidget::Rounded</enum>
@@ -35,8 +35,8 @@
     </property>
     <property name="geometry">
      <rect>
-      <x>20</x>
-      <y>10</y>
+      <x>-30</x>
+      <y>20</y>
       <width>1400</width>
       <height>800</height>
      </rect>
@@ -100,12 +100,15 @@
        </layout>
       </item>
       <item>
-       <layout class="QVBoxLayout" name="verticalLayout_2">
+       <layout class="QVBoxLayout" name="verticalLayout_3">
         <property name="sizeConstraint">
          <enum>QLayout::SetNoConstraint</enum>
         </property>
+        <property name="bottomMargin">
+         <number>70</number>
+        </property>
         <item>
-         <widget class="QLabel" name="labelNEONSiteDetails">
+         <widget class="QLabel" name="labelNEONSites_2">
           <property name="font">
            <font>
             <pointsize>12</pointsize>
@@ -115,28 +118,40 @@
            </font>
           </property>
           <property name="text">
-           <string>NEON Site Info</string>
+           <string>NEON Site Products</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QListWidget" name="NEON_listboxSiteInfo">
+         <widget class="QListWidget" name="NEON_listboxSiteProducts">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>350</height>
-           </size>
+          <property name="selectionMode">
+           <enum>QAbstractItemView::ExtendedSelection</enum>
           </property>
          </widget>
         </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <property name="sizeConstraint">
+         <enum>QLayout::SetNoConstraint</enum>
+        </property>
         <item>
          <widget class="QLabel" name="label">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
           <property name="text">
            <string>Latest Site Image</string>
           </property>
@@ -176,18 +191,8 @@
           </property>
          </widget>
         </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QVBoxLayout" name="verticalLayout_3">
-        <property name="sizeConstraint">
-         <enum>QLayout::SetNoConstraint</enum>
-        </property>
-        <property name="bottomMargin">
-         <number>70</number>
-        </property>
         <item>
-         <widget class="QLabel" name="labelNEONSites_2">
+         <widget class="QLabel" name="labelNEONSiteDetails">
           <property name="font">
            <font>
             <pointsize>12</pointsize>
@@ -197,23 +202,23 @@
            </font>
           </property>
           <property name="text">
-           <string>NEON Site Products</string>
+           <string>NEON Site Info</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QListWidget" name="NEON_listboxSiteProducts">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
+         <widget class="QListWidget" name="NEON_listboxSiteInfo">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
           </property>
-          <property name="selectionMode">
-           <enum>QAbstractItemView::ExtendedSelection</enum>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>350</height>
+           </size>
           </property>
          </widget>
         </item>
@@ -992,6 +997,8 @@
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="action_RefreshNEON"/>
+    <addaction name="action_CreateJSON"/>
+    <addaction name="action_Generate_Greenness_Test_Images"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuImage_Set"/>
@@ -1011,7 +1018,7 @@
   </action>
   <action name="action_About">
    <property name="text">
-    <string>&amp;About GRIMe-AI</string>
+    <string>&amp;About GRIME-AI</string>
    </property>
   </action>
   <action name="action_Clean">
@@ -1044,6 +1051,16 @@
     <string>Extract COCO Masks</string>
    </property>
   </action>
+  <action name="action_CreateJSON">
+   <property name="text">
+    <string>Create JSON</string>
+   </property>
+  </action>
+  <action name="action_Generate_Greenness_Test_Images">
+   <property name="text">
+    <string>Generate Greenness Test Images</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>
@@ -1060,7 +1077,6 @@
  <tabstops>
   <tabstop>tableWidget_ROIList</tabstop>
   <tabstop>NEON_listboxSites</tabstop>
-  <tabstop>NEON_listboxSiteInfo</tabstop>
   <tabstop>NEON_listboxSiteProducts</tabstop>
   <tabstop>NEON_tableProducts</tabstop>
   <tabstop>edit_NEONSaveFilePath</tabstop>

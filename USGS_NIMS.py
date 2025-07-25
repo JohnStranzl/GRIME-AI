@@ -3,17 +3,20 @@ import json
 import urllib
 import requests
 from urllib.request import urlopen
-import ssl
 
 import pandas as pd
 
-from datetime import timedelta
+from datetime import datetime, timedelta, time
 
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QMessageBox
 
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_QProgressWheel import QProgressWheel
+
+
+import re
+import datetime
 
 endpoint = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
 imageEnpoint = "https://usgs-nims-images.s3.amazonaws.com/overlay"
@@ -22,11 +25,24 @@ class USGS_NIMS:
     def __init__(self):
         self.instance = 1
 
-        self.nwisId = None
-        self.camName = None
-        self.camId = None
+        overlayDir   = ""
+        thumbDir     = ""
+        tlDir        = ""
+        smallDir     = ""
+        locus        = ""
+        FRP          = ""
+        nwisId       = ""
+        camId        = ""
+        camName      = ""
+        camDesc      = ""
+        stateAbrv    = ""
+        lat          = ""
+        long         = ""
+        createdDate  = ""
+        modifiedDate = ""
+        tz           = ""
 
-        self.cameraDictionary = self.initCameraDictionary()
+        self.camera_dictionary = self.init_camera_dictionary()
 
         self.siteCount = 0;
 
@@ -35,19 +51,17 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def initCameraDictionary(self):
-        self.cameraDictionary = []
+    def init_camera_dictionary(self):
+        self.camera_dictionary = {}
 
         try:
             # QUERY CAMERA LIST
             uri = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/cameras?enabled=true"
 
-            #ssl._create_default_https_context = ssl._create_unverified_context
             response = urllib.request.urlopen(uri)
             data = response.read()  # a `bytes` object
             cameraData = json.loads(data.decode('utf-8'))
 
-            self.cameraDictionary = {}
             sites_with_hideCam = []
 
             for element in cameraData:
@@ -59,7 +73,7 @@ class USGS_NIMS:
                         else:
                             print(f"Site with hideCam=True has no camId provided.")
                     else:
-                        self.cameraDictionary[element['camId']] = element
+                        self.camera_dictionary[element['camId']] = element
 
             # Sort the list of sites with hideCam=True
             sites_with_hideCam.sort()
@@ -70,29 +84,28 @@ class USGS_NIMS:
                 print(site)
         except (urllib.error.URLError, json.JSONDecodeError) as e:
             print(f"Error fetching or parsing data: {e}")
-            self.cameraDictionary = {}
+            self.camera_dictionary = {}
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
-            self.cameraDictionary = {}
+            self.camera_dictionary = {}
 
-        return self.cameraDictionary
-
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
-    def getCameraDictionary(self):
-        return(self.cameraDictionary)
+        return self.camera_dictionary
 
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def getCameraList(self):
+    def get_camera_dictionary(self):
+        return(self.camera_dictionary)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_camera_list(self):
         myList = []
 
-        for element in self.cameraDictionary.values():
+        for element in self.camera_dictionary.values():
             myList.append(element['camId'])
 
-        #myList = sorted(myList, key=lambda x: x[0].split('_')[0])
         myList = sorted(myList)
 
         self.siteCount = len(myList)
@@ -102,34 +115,32 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def getCameraInfo(self, strCameraID):
-        myList = []
+    def get_camera_info(self, camera_id: str) -> list[str]:
+        """
+        Retrieve formatted camera information lines for the given camera_id.
+        Updates instance attributes nwisId, camName, and camId if present.
+        Returns a list of strings or a single-item list indicating no data.
+        """
+        # Direct dictionary lookup; assume cameraDictionary maps IDs to info dicts
+        camera = self.camera_dictionary.get(camera_id)
+        if camera is None:
+            return ["No information available for this site."]
 
-        try:
-            for camId, camData in self.cameraDictionary.items():
-                # Check if the current camera matches strCameraID
-                if camData.get('camId') == strCameraID:
-                    for key, keyData in camData.items():
-                        if keyData is not None and not isinstance(keyData, (list, dict, int)):
-                            # Assign values based on specific keys
-                            if key == 'nwisId':
-                                self.nwisId = keyData
-                            elif key == 'camName':
-                                self.camName = keyData
-                            elif key == 'camId':
-                                self.camId = keyData
+        info_lines: list[str] = []
+        for key, value in camera.items():
+            # Skip None, lists, dicts, and ints
+            if value is None or isinstance(value, (list, dict, int)):
+                continue
 
-                            # Format keyData and append to myList
-                            formattedData = f"{key}: {keyData}"
-                            myList.append(formattedData)
+            # Update instance attributes when relevant
+            if key in ("nwisId", "camName", "camId"):
+                setattr(self, key, value)
 
-        except Exception:
-            myList.append("No information available for this site.")
+            # Format and collect the info line
+            info_lines.append(f"{key}: {value}")
 
-        if len(myList) == 0:
-            myList.append("No information available for this site.")
-
-        return(myList)
+        # Fallback if no valid info was collected
+        return info_lines or ["No information available for this site."]
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -152,7 +163,7 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def getLatestImage(self, siteName):
+    def get_latest_image(self, siteName):
         nErrorCode = -1
         nRetryCount = 3
         nWebImageCount = 0
@@ -164,7 +175,6 @@ class USGS_NIMS:
 
             if r.status_code != 404:
                 nWebImageCount = 1
-                #ssl._create_default_https_context = ssl._create_unverified_context
                 data = urlopen(latestImageURL).read()
                 latestImage = QPixmap()
                 latestImage.loadFromData(data)
@@ -186,7 +196,7 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def getImageCount(self, siteName, nwisID, startDate, endDate, startTime, endTime):
+    def get_image_count(self, siteName, nwisID, startDate, endDate, startTime, endTime):
 
         listOfImages = ""
         numberOfDays = (endDate - startDate).days + 1
@@ -233,7 +243,7 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def downloadImages(self, siteName, nwisID, startDate, endDate, startTime, endTime, saveFolder):
+    def download_images(self, siteName, nwisID, startDate, endDate, startTime, endTime, saveFolder):
 
         listOfImages = ""
         numberOfDays = (endDate - startDate).days + 1
@@ -319,7 +329,6 @@ class USGS_NIMS:
         fullFilename_txt = os.path.join(saveFolder, siteName + " - " + nwisID + " - " + timeStamp + ".txt")
 
         try:
-            ssl._create_default_https_context = ssl._create_unverified_context
             with urllib.request.urlopen(fullURL) as response:
                 response.read()
 
@@ -337,17 +346,31 @@ class USGS_NIMS:
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def buildImageDateTimeFilter(self, index, startDate, endDate, startTime, endTime):
-        startDay = startDate + timedelta(days=index)
+    import datetime
 
-        # IF START AND END TIME ARE 0, GET ALL IMAGES FOR THE ENTIRE DAY
+    def buildImageDateTimeFilter(self, index, startDate, endDate, startTime, endTime):
+        # startDate is expected to be of type datetime.date,
+        # startTime and endTime are expected to be of type datetime.time
+
+        # Compute the current day.
+        startDay = startDate + datetime.timedelta(days=index)
+
+        # Check if both start and end times are 00:00, meaning whole day request.
         if startTime.hour == 0 and startTime.minute == 0 and endTime.hour == 0 and endTime.minute == 0:
-            after  = "&after="  + startDay.strftime("%Y-%m-%d") + ":00:00:00"
-            before = "&before=" + startDay.strftime("%Y-%m-%d") + ":23:59:59"
-        # OTHERWISE, ONLY GET IMAGES BETWEEN THE SPECIFIED START AND END TIMES FOR EACH DAY
+            day_start = datetime.datetime.combine(startDay, datetime.time(0, 0, 0))
+            day_end = datetime.datetime.combine(startDay, datetime.time(23, 59, 59))
         else:
-            after  = "&after="  + startDay.strftime("%Y-%m-%d") + ":" + startTime.strftime("%H:%M:%S")
-            before = "&before=" + startDay.strftime("%Y-%m-%d") + ":" + endTime.strftime("%H:%M:%S")
+            day_start = datetime.datetime.combine(startDay, startTime)
+            day_end = datetime.datetime.combine(startDay, endTime)
+
+        # Adjust the boundaries: subtract 30 seconds from the "after" datetime,
+        # add 30 seconds to the "before" datetime.
+        after_dt = day_start - datetime.timedelta(seconds=30)
+        before_dt = day_end + datetime.timedelta(seconds=30)
+
+        # Format the adjusted datetimes as strings in the "YYYY-MM-DD:HH:MM:SS" format.
+        after = "&after=" + after_dt.strftime("%Y-%m-%d:%H:%M:%S")
+        before = "&before=" + before_dt.strftime("%Y-%m-%d:%H:%M:%S")
 
         return after, before
 
@@ -356,7 +379,7 @@ class USGS_NIMS:
     #
     # ------------------------------------------------------------------------------------------------------------------
     def fetchListOfImages(self, siteName, after, before):
-        imagesToGet = endpoint + "/prod/cameras?enabled=true/listFiles?camId=" + siteName + after + before
+        imagesToGet = endpoint + "/prod/listFiles?camId=" + siteName + after + before
         listOfImages_response = requests.get(imagesToGet)
         listOfImages_text = listOfImages_response.text
 
@@ -391,9 +414,6 @@ class USGS_NIMS:
 
         USGS_stage_df.to_csv(output_file, index=False)
 
-
-
-# THIS "JUNK" IS FOR REFERENCE IN DIAGNOSING ISSUES WITH THE USGS API
     # ------------------------------------------------------------------------------------------------------------------
     # ASCII Format
     #//waterservices.usgs.gov/nwis/iv/?format=rdb,1.0
@@ -412,11 +432,6 @@ class USGS_NIMS:
     # &siteStatus=all
     # ------------------------------------------------------------------------------------------------------------------
     #def fetchStageAndFlowData(self):
-
-# API COMMAND FORMAT - https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/listFiles?camId=NE_Platte_River_near_Grand_Island&after=2023-07-16%2015:00:00.000   before = DATESTRING & after = DATESTRING
-# endpoint = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
-# imageEnpoint = "https://usgs-nims-images.s3.amazonaws.com/overlay"
-# latest image = https://usgs-nims-images.s3.amazonaws.com/overlay/WI_Green_Bay_Oil_Depot/WI_Green_Bay_Oil_Depot_newest.jpg
 
 #https://jj5utwupk5.execute-api.us-east-1.amazonaws.com/prod/listFiles?camId=NE_Platte_River_near_Grand_Island&after=2023-07-16%2015:00:00.000
 #before=DATESTRING&after=DATESTRING

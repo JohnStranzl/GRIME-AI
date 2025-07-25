@@ -44,7 +44,6 @@ class GRIME_AI_SplashScreen(QSplashScreen):
 
 
     def show(self, mainWin):
-        #Thread(target=self.splashSound()).start()
         Thread(target=self.splashImage(mainWin)).start()
 
 
@@ -65,16 +64,6 @@ class GRIME_AI_SplashScreen(QSplashScreen):
         q_image = QImage(rotated_image.data, cols, rows, QImage.Format_RGB888)
         self.image_label.setPixmap(QPixmap.fromImage(q_image))
     '''
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # ARTISTIC LICENSE
-    # ------------------------------------------------------------------------------------------------------------------
-    def splashSound(self):
-        try:
-           playsound('.\shall-we-play-a-game.mp3')
-        except Exception:
-           pass
 
 '''
 class ImageSpinner(QMainWindow):

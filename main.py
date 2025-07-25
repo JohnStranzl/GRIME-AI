@@ -25,9 +25,80 @@
 # matplotlib.use('Qt5Agg')
 
 # import pycurl
+# main.py – at the very top
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+import logging
+
+# Optional: set up logging so you can track initialization
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+try:
+    import torch
+    logging.debug("Successfully imported torch.")
+
+    # If you need to disable profiling to avoid TorchScript type inference issues,
+    # do it explicitly here. (Remove these lines if you want profiling enabled.)
+    torch._C._jit_set_profiling_mode(False)
+    torch._C._jit_set_profiling_executor(False)
+    logging.debug("Disabled Torch profiling mode and executor.")
+
+    # Force torch.jit initialization.
+    jit_doc = torch.jit.__doc__
+    logging.debug("Torch JIT initialized successfully, first 100 chars of doc: %.100s", jit_doc)
+except Exception as e:
+    logging.error("Error during Torch initialization", exc_info=True)
+
+try:
+    import torch.jit
+except Exception as e:
+    logging.error("Error importing torch.jit", exc_info=True)
+
+try:
+    import torch.jit._script    # This can be important if your models are scripted.
+except Exception as e:
+    logging.error("Error importing torch.jit._script", exc_info=True)
+
+try:
+    import sklearn.neighbors._typedefs
+except Exception:
+    pass
+
+try:
+    import sklearn.neighbors._partition_nodes
+except Exception:
+    pass
+
+try:
+    import sklearn.utils._weight_vector
+except Exception:
+    pass
+
+try:
+    import sklearn.neighbors._quad_tree
+except Exception:
+    pass
+
+try:
+    import skimage
+except Exception:
+    pass
+
+try:
+    import imageio
+except Exception:
+    pass
+
+try:
+    import imageio_ffmpeg
+except Exception:
+    pass
+
+
 import os
 os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 #os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
@@ -41,7 +112,6 @@ from pathlib import Path
 import iopath
 
 import numpy as np
-
 
 
 # ------------------------------------------------------------
@@ -101,7 +171,7 @@ from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QAction, QHeaderView
+    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog
 
 from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
@@ -114,6 +184,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 import sobelData
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
@@ -134,6 +205,8 @@ from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIn
 from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 
 from GRIME_AI_Save_Utils import JsonEditor
+
+from GRIME_AI_HyperparametersDlg import GRIME_AI_HyperparametersDlg
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -167,6 +240,7 @@ from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
 from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
 from colorSegmentationParams import colorSegmentationParamsClass
+from GRIME_AI_GreenImageGenerator import GreenImageGenerator
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -293,43 +367,6 @@ from pycocotools import mask as coco_mask
 
 # from tensorflow.python.client import device_lib as dev_lib
 
-# ------------------------------------------------------------
-# THESE HIDDEN IMPORTS ARE ONLY REQUIRED WHEN COMPILING WITH PYINSTALLER
-# ------------------------------------------------------------
-try:
-    import sklearn.neighbors._typedefs
-except Exception:
-    pass
-
-try:
-    import sklearn.neighbors._partition_nodes
-except Exception:
-    pass
-
-try:
-    import sklearn.utils._weight_vector
-except Exception:
-    pass
-
-try:
-    import sklearn.neighbors._quad_tree
-except Exception:
-    pass
-
-try:
-    import skimage
-except Exception:
-    pass
-
-try:
-    import imageio
-except Exception:
-    pass
-
-try:
-    import imageio_ffmpeg
-except Exception:
-    pass
 
 # ------------------------------------------------------------
 # Get the base directory
@@ -369,7 +406,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.5.15b"
+SW_VERSION = "Ver.: 0.0.6.0 (beta 8)"
 
 class displayOptions():
     displayROIs = True
@@ -384,6 +421,8 @@ g_edgeMethodSettings = edgeMethodsClass()
 g_featureMethodSettings = featureMethodsClass()
 
 g_modelSettings = modelSettingsClass()
+
+hyperparameterDlg = None
 
 # ======================================================================================================================
 # 2. DEEP LEARNING: DEFINE A CONVOLUTIONAL NETWORK
@@ -544,9 +583,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
         #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
 
-        self.setWindowTitle("GRIMe-AI: John E. Stranzl Jr.")
+        self.setWindowTitle("GRIME AI: John E. Stranzl Jr.")
         #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setupUi(self)
+
+        # Initialize a variable to hold the current NEON site information
+        self.current_site_info = ["No site info available."]
+        # Set the tooltip generator on your GRIME_QLabel widget(s). For example, if your widget is named NEON_labelLatestImage:
+        if 0:
+            if hasattr(self.NEON_labelLatestImage, "tooltipGenerator"):
+                self.NEON_labelLatestImage.tooltipGenerator = self.siteInfoTooltip
+            else:
+                print("Warning: NEON_labelLatestImage is not an instance of GRIME_QLabel.")
 
         # Set stylesheet for the tabs to change color when a tab is selected.
         self.tabWidget.setStyleSheet("""
@@ -617,9 +665,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.initROITable(self.greenness_index_list)
 
-
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-        # JES - REVISIT DOUBLE CLICKING ON IMAGES
+        #JES - REVISIT DOUBLE CLICKING ON IMAGES
         self.NEON_labelLatestImage.mouseDoubleClickEvent = NEON_labelMouseDoubleClickEvent
 
         self.NEON_labelLatestImage.installEventFilter(self)
@@ -649,8 +696,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_CompositeSlices.triggered.connect(self.menubarCompositeSlices)
         self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
         self.action_TriageImages.triggered.connect(self.toolbarButtonImageTriage_2)
+        self.action_Generate_Greenness_Test_Images.triggered.connect(self.menubar_Generate_Greenness_Test_Images)
 
         self.action_RefreshNEON.triggered.connect(self.menubar_RefreshNEON)
+        self.action_CreateJSON.triggered.connect(self.menubar_CreateJSON)
 
         # GRAPH TAB(S)
 
@@ -677,8 +726,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             self.myNIMS = USGS_NIMS()
 
-            cameraDictionary = self.myNIMS.getCameraDictionary()
-            cameraList = self.myNIMS.getCameraList()
+            cameraDictionary = self.myNIMS.get_camera_dictionary()
+            cameraList = self.myNIMS.get_camera_list()
             self.USGS_listboxSites.clear()
             self.USGS_listboxSites.addItems(cameraList)
             self.USGS_listboxSites.show()
@@ -688,7 +737,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             strCamID = self.USGS_listboxSites.currentItem().text()
 
-            cameraInfo = self.myNIMS.getCameraInfo(strCamID)
+            cameraInfo = self.myNIMS.get_camera_info(strCamID)
             self.listboxUSGSSiteInfo.addItems(cameraInfo)
 
             self.USGS_updateSiteInfo(1)
@@ -697,7 +746,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS Database!')
             response = msgBox.displayMsgBox()
 
-        #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIMe-AI\\Downloads\\USGS_Test")
+        #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIME-AI\\Downloads\\USGS_Test")
 
         # ------------------------------------------------------------------------------------------------------------------
         # USGS
@@ -748,7 +797,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.NEON_listboxSites.addItems(myList)
 
-            # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
+            #JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
             try:
                 self.NEON_listboxSites.setCurrentRow(2)
                 self.NEON_listboxSites.show()
@@ -758,6 +807,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.show()
 
+
+    def siteInfoTooltip(self):
+        """
+        This function returns the dynamic tooltip string for GRIME_QLabel.
+        It uses self.current_site_info (a list of strings) to create the tooltip.
+        """
+        if self.current_site_info:
+            return "NEON Site Info:\n" + "\n".join(self.current_site_info)
+        else:
+            return "No site info available."
 
     # ======================================================================================================================
     #
@@ -850,7 +909,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     def createToolBar(self):
         #--- CREATE EMPTY TOOLBAR
-        toolbar = QToolBar("GRIMe-AI Toolbar")
+        toolbar = QToolBar("GRIME-AI Toolbar")
         self.addToolBar(toolbar)
         toolbar.setIconSize(QtCore.QSize(48, 48))
 
@@ -919,7 +978,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         button_action = QAction(QIcon(icon_path), "Deep Learning", self)
         button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
         #button_action.triggered.connect(self.toolbarButtonDeepLearning)
-        button_action.triggered.connect(self.onMyToolBarBuildModel)
+        #JES button_action.triggered.connect(self.onMyToolBarBuildModel)
+        button_action.triggered.connect(self.menubar_CreateJSON)
         toolbar.addAction(button_action)
         print("Toolbar Initialization: Deep Learning (brain) icon path: ", icon_path)
 
@@ -963,7 +1023,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 print("Updating site info...")
 
                 start_time = time.time()
-                SITECODE = NEON_updateSiteInfo(self, item)
+                SITECODE = NEON_updateSiteInfo(self)
                 end_time = time.time()
                 print ("NEON Site Info Elapsed Time: ", end_time - start_time)
 
@@ -1081,7 +1141,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ======================================================================================================================
     def USGS_dateChangeMethod(self, date_widget, tableWidget):
-        imageCount = self.USGS_getImageCount()
+        imageCount = self.USGS_get_image_count()
 
         tableWidget.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
 
@@ -1091,7 +1151,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def USGS_FormatProductTable(self, tableProducts):
         maxRows = 1
 
-        # JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
+        #JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
         for i in range(tableProducts.rowCount()):
             tableProducts.removeRow(0)
 
@@ -1166,13 +1226,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             try:
                 self.listboxUSGSSiteInfo.clear()
-                self.listboxUSGSSiteInfo.addItems(self.myNIMS.getCameraInfo(strCamID))
-
+                self.listboxUSGSSiteInfo.addItems(self.myNIMS.get_camera_info(strCamID))
                 self.USGS_listboxSites.setCurrentRow(currentRow)
 
                 siteName = self.myNIMS.get_camId()
 
-                nErrorCode, self.USGS_latestImage = self.myNIMS.getLatestImage(siteName)
+                nErrorCode, self.USGS_latestImage = self.myNIMS.get_latest_image(siteName)
 
                 if nErrorCode == 404:
                     self.USGS_labelLatestImage.setText("No Images Available")
@@ -1199,7 +1258,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def USGS_SiteClicked(self, item):
         USGSSiteIndex = self.USGS_updateSiteInfo(item)
 
-        imageCount = self.USGS_getImageCount()
+        imageCount = self.USGS_get_image_count()
 
         self.table_USGS_Sites.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
 
@@ -1314,16 +1373,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # CALCULATE COLOR CLUSTERS FOR THE ROI AND SAVE THEM TO THE ROI LIST
             # ----------------------------------------------------------------------------------------------------------
             # EXTRACT THE ROI FROM THE ORIGINAL IMAGE
-            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-            rgb = extractROI(roiObj.getImageROI(), img1)
-
             roiObj.setNumColorClusters(roiParameters.numColorClusters)
 
             # EXTRACT DOMINANT RGB COLORS AND ADD THEM TO THE ROI OBJECT
-            qImg, clusterCenters, hist = myGRIME_Color.KMeans(rgb, roiObj.getNumColorClusters())
-            roiObj.setClusterCenters(clusterCenters, hist)
+            #JES - PROVISIONAL - RGB CLUSTERS ARE NOT CURRENTLY USED.
+            #JES qImg, clusterCenters, hist = myGRIME_Color.KMeans(rgb, roiObj.getNumColorClusters())
+            #JES roiObj.setClusterCenters(clusterCenters, hist)
 
             # EXTRACT DOMINANT HSV COLORS AND ADD THEM TO THE ROI OBJECT
+            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+            rgb = extractROI(roiObj.getImageROI(), img1)
             hist, colorClusters = myGRIME_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
             roiObj.setHSVClusterCenters(colorClusters, hist)
 
@@ -1334,10 +1393,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # ----------------------------------------------------------------------------------------------------------
             # DISPLAY IN FEATURE TABLE
             # ----------------------------------------------------------------------------------------------------------
-            # CREATE NEW ROW IN ROI TABLE
-            nRow = self.tableWidget_ROIList.rowCount()
-            self.tableWidget_ROIList.insertRow(nRow)
-
             #if (nRow == 0):
             #    numToAdd = 3
             #else:
@@ -1354,6 +1409,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
 
             # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
+            nRow = self.tableWidget_ROIList.rowCount()
+            self.tableWidget_ROIList.insertRow(nRow)
+
             self.label = QtWidgets.QLabel()
             self.label.setPixmap(QPixmap(qImg.scaled(100, 50)))
             self.tableWidget_ROIList.setCellWidget(nRow, 1, self.label)
@@ -1477,7 +1535,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def NEON_FormatProductTable(self, tableProducts):
         maxRows = 1
 
-        # JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
+        #JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
         for i in range(tableProducts.rowCount()):
             tableProducts.removeRow(0)
 
@@ -1572,7 +1630,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def USGS_getImageCount(self):
+    def USGS_get_image_count(self):
         currentRow = self.USGS_listboxSites.currentRow()
         if (currentRow > -1):
             site = self.USGS_listboxSites.currentItem().text()
@@ -1596,7 +1654,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             nwisID = self.myNIMS.get_nwisID()
 
-            imageCount = self.myNIMS.getImageCount(siteName=site, nwisID=nwisID, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            imageCount = self.myNIMS.get_image_count(siteName=site, nwisID=nwisID, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
         except Exception:
             imageCount = 0
 
@@ -1619,7 +1677,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if response == QMessageBox.Yes:
                 #USGS_download_file_path = os.path.expanduser('~')
                 #USGS_download_file_path = os.path.join(USGS_download_file_path, 'Documents')
-                #USGS_download_file_path = os.path.join(USGS_download_file_path, 'GRIMe-AI')
+                #USGS_download_file_path = os.path.join(USGS_download_file_path, 'GRIME-AI')
 
                 USGS_download_file_path = JsonEditor().getValue("USGS_Root_Folder")
 
@@ -1667,7 +1725,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             saveFolder = os.path.join(downloadsFilePath, "Images")
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
-            self.myNIMS.downloadImages(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            self.myNIMS.download_images(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
 
             saveFolder = os.path.join(downloadsFilePath, "Data")
             if not os.path.exists(saveFolder):
@@ -1675,6 +1733,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.myNIMS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
 
             #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
+
 
     # ==================================================================================================================
     #
@@ -1715,9 +1774,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         imageStats.setLabel('bad')
         self.imageStatsList.append(imageStats)
 
-    # ======================1===============================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def menubar_CreateJSON(self):
+        global hyperparameterDlg
+
+        # If it’s already alive, just raise & activate it
+        '''
+        if hyperparameterDlg is not None and hyperparameterDlg.isVisible():
+            hyperparameterDlg.raise_()
+            hyperparameterDlg.activateWindow()
+            return None
+        '''
+
+        hyperparameterDlg = GRIME_AI_HyperparametersDlg(frame)
+
+        hyperparameterDlg.ml_train_signal.connect(train_main)
+        hyperparameterDlg.ml_segment_signal.connect(load_model_main)
+
+        #hyperparameterDlg.accepted.connect(closehyperparameterDlg)
+        #hyperparameterDlg.rejected.connect(closehyperparameterDlg)
+
+        hyperparameterDlg.finished.connect(closehyperparameterDlg)
+
+        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+        site_configuration_file = os.path.normpath(os.path.join(settings_folder, "site_config.json"))
+        config = hyperparameterDlg.load_config_from_json(site_configuration_file)
+        hyperparameterDlg.initialize_dialog_from_config(config)
+
+        # Show the dialog and capture user response.
+        if hyperparameterDlg.exec_() == QDialog.Accepted:
+            hyperparameters = hyperparameterDlg.get_values()
+            #config = dialog.getValues()
+            print("Configuration Options:")
+            for key, value in hyperparameters.items():
+                print(f"  {key}: {value}")
+
+
     def menubar_RefreshNEON(self):
         # INITIALIZE GUI CONTROLS
         # frame.NEON_listboxSites.setCurrentRow(1)
@@ -1743,7 +1838,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.NEON_listboxSites.addItems(myList)
 
-            # JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
+            #JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
             try:
                 self.NEON_listboxSites.setCurrentRow(2)
                 self.NEON_listboxSites.show()
@@ -1804,6 +1899,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.compositeSliceDlg != None:
             self.compositeSliceDlg.close()
             self.compositeSliceDlg    = None
+
+    def menubar_Generate_Greenness_Test_Images(self):
+        # initialize with default settings
+
+        rootFolder = os.path.expanduser('~')
+        rootFolder = os.path.join(rootFolder, 'Documents', 'GRIME-AI', 'Test Images')
+        gen = GreenImageGenerator(out_dir=rootFolder)
+
+        # generate all images (solids, splotches, masks)
+        gen.generate_all()
 
     # ======================================================================================================================
     #
@@ -2245,6 +2350,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.imageNavigationDlg.accepted.connect(self.closeNavigationDlg)
                 self.imageNavigationDlg.rejected.connect(self.closeNavigationDlg)
 
+                self.imageNavigationDlg.setImageList(dailyImagesList.getVisibleList())
                 self.imageNavigationDlg.setImageIndex(currentImageIndex)
                 self.imageNavigationDlg.setImageCount(gFrameCount)
                 #self.imageNavigationDlg.reset()
@@ -2265,6 +2371,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         processLocalImage(self, imageIndex)
         self.refreshImage()
+
 
     # ==================================================================================================================
     #
@@ -2318,7 +2425,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.initROITable(self.greenness_index_list)
 
             processLocalImage(self, currentImageIndex)
-            self.refreshImage()
+            #JES - TROUBLESHOOT DISPLAY ISSUE
+            # self.refreshImage()
 
 
     # ==================================================================================================================
@@ -2514,7 +2622,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if 0:
             folder = self.buildModelDlg.get_images_folder()
-            images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+            VALID_EXTS = ('.jpg', '.jpeg')
+            images = [
+                f for f in os.listdir(folder)
+                if f.lower().endswith(VALID_EXTS)
+            ]
+
             for image in images:
                 image = Image.open(f"{folder}\\{image}").convert("RGB")
                 plt.figure(figsize=(10, 10))
@@ -2524,7 +2637,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 plt.show()
 
         folder = self.buildModelDlg.get_segmentation_images_folder()
-        images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+        VALID_EXTS = ('.jpg', '.jpeg')
+        images = [
+            f for f in os.listdir(folder)
+            if f.lower().endswith(VALID_EXTS)
+        ]
 
         progressBar.setRange(0, len(images) + 1)
 
@@ -3439,6 +3556,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.releaseNotesDlg != None:
             self.releaseNotesDlg.close()
 
+        global hyperparameterDlg
+        if hyperparameterDlg != None:
+            hyperparameterDlg.close()
+
         #webdriver.Chrome.quit()
 
         QMainWindow.closeEvent(self, event)
@@ -3453,8 +3574,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         try:
             global gFrameCount
+            global dailyImagesList
+
             self.onMyToolBarImageNavigation()
             self.imageNavigationDlg.setImageCount(gFrameCount)
+            self.imageNavigationDlg.setImageList(dailyImagesList.getVisibleList())
             self.imageNavigationDlg.reset()
         except Exception:
             pass
@@ -3493,7 +3617,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.NEON_listboxSiteProducts.show()
 
-        # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
+        #JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         itemNitrate = self.NEON_listboxSiteProducts.findItems('Nitrate', QtCore.Qt.MatchContains)
         nIndex = 0
@@ -3505,8 +3629,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             NEON_updateProductTable(self, nIndex)
 
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        # JES
-        # JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
+        #JES
+        #JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         item20002 = self.NEON_listboxSiteProducts.findItems('20002', QtCore.Qt.MatchContains)
         nIndex = 0
@@ -3517,7 +3641,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             NEON_updateProductTable(self, nIndex)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        # JES
+        #JES
 
         self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
 
@@ -3569,7 +3693,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # EXTRACT DOMINANT HSV COLORS
         # self.spinBoxColorClusters.value()
-        # JES - Replace with the value selected in the dialog box
+        #JES - Replace with the value selected in the dialog box
 
         hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(img, 4)
         colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
@@ -3649,7 +3773,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # DISPLAY THE PROGRESS WHEEL
         progressBar = QProgressWheel()
         progressBar.setRange(0, len(self.roiList) + 1)
-        # JES progressBar.show()
+        #JES progressBar.show()
 
         # ==============================================================================================================
         #  ROIs - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
@@ -3670,7 +3794,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # COLOR SEGMENTATION
                 # ------------------------------------------------------------------------------------------
                 # EXTRACT DOMINANT RGB COLORS
-                _, _, hist = GRIME_AI_Color.KMeans(rgb, roiObj.getNumColorClusters())
+                #JES - PROVISIONAL. NOT NEEDED AT THIS TIME. ALL COLOR DATA USES THE HSV COLOR SYSTEM
+                # _, _, hist = GRIME_AI_Color.KMeans(rgb, roiObj.getNumColorClusters())
 
                 # EXTRACT DOMINANT HSV COLORS
                 hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
@@ -3769,7 +3894,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 nErrorCode = -1
 
             # OVERLAY ROI BOUNDARY ON IMAGE
-            # JESif self.checkBoxDisplayROIs.isChecked():
+            #JESif self.checkBoxDisplayROIs.isChecked():
             if (1):
                 pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
                 painter.setPen(pen)
@@ -3834,15 +3959,15 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     # count the number of images that will potentially be processed and possibly saved with the specified extension
     # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
     # of images will help determine whether or not there is enough disk space to accomodate storing the images.
-    imageCount = GRIME_AI_Utils().getImageCount(filePath, extensions)
+    imageCount = GRIME_AI_Utils().get_image_count(filePath, extensions)
+
+    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
+    file_count, files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
 
     if bShow_GUI:
         progressBar = QProgressWheel()
-        progressBar.setRange(0, imageCount + 1)
+        progressBar.setRange(0, file_count + 1)
         progressBar.show()
-
-    # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
 
     # traverse all files in folder that meet the criteria for retrieval
     # 1. does the file have the specified file extension
@@ -3854,7 +3979,13 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     #    and also add the file's EXIF data to a CSV EXIF log file if the option is selected by the user. Last but
     #    not least, if the user selects the option to copy the image to a separate folder, then copy the file to
     #    the folder specified by the user
-    for image_index, file in enumerate(files):
+    print("File Count: ", file_count)
+
+    image_index = 0
+#    for file in files:
+    while image_index < file_count:
+        file = files[image_index]
+        print("Image Index: ", image_index)
         if bShow_GUI:
             progressBar.setWindowTitle(file)
             progressBar.setValue(image_index)
@@ -3918,6 +4049,8 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
                 # delete EXIFData object
                 del myEXIFData
 
+        image_index += 1
+
     dailyImagesList.setVisibleList(List)
 
     global gFrameCount
@@ -3951,7 +4084,7 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
     myGRIMe_Color = GRIME_AI_Color()
 
     # videoFilePath = Path(frameFolder)
-    ## JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
+    ##JES videoFileList = [str(pp) for pp in videoFilePath.glob("**/*.jpg")]
     # videoFileList = [str(pp) for pp in videoFilePath.glob("*.jpg")]
 
     global dailyImagesList
@@ -4069,11 +4202,16 @@ def processImage(self, myImage):
     return pix
 
 
-
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
+def closehyperparameterDlg():
+
+    global hyperparameterDlg
+    del hyperparameterDlg
+    hyperparameterDlg = None
+
+
 def resizeImage(image, scale_percent):
     # --------------------------------------------------------------------------------
     # reshape the image to be a list of pixels
@@ -4378,17 +4516,13 @@ def top_colors(image, n):
 # ======================================================================================================================
 # THIS FUNCTION UPDATES THE GUI WITH THE INFO FOR A NEON SITE SELECTED BY THE END-USER.
 # ======================================================================================================================
-def NEON_updateSiteInfo(self, item):
-    self.NEON_listboxSiteInfo.clear()
+def NEON_updateSiteInfo(self):
 
     # EXTRACT THE SITE ID FOR THE SELECTED ITEM
     siteID = self.NEON_listboxSites.currentItem().text()
 
     global SITECODE
     SITECODE = siteID.split(' - ')[0]
-
-    self.labelNEONSiteDetails.setText(SITECODE)
-
     siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     global DOMAINCODE
@@ -4399,13 +4533,43 @@ def NEON_updateSiteInfo(self, item):
     #JES self.labelNEONSite.setText(SITENAME)
 
     keys = siteInfo['data'].keys()
+    items = [f"{key}: {str(siteInfo['data'][key])}" for key in keys]
 
-    for key in keys:
-        tmp = key
-        tmpSiteInfo = str(siteInfo['data'][key])
-        self.NEON_listboxSiteInfo.addItem(tmp + ": " + tmpSiteInfo)
+    if 0:
+        self.current_site_info = items[0:9]
+
+    self.NEON_listboxSiteInfo.clear()
+    self.NEON_listboxSiteInfo.addItems(items)
+
+    self.labelNEONSiteDetails.setText(SITECODE)
 
     return (SITECODE)
+
+
+    def NEON_fetch_site_info(self):
+        # EXTRACT THE SITE ID FOR THE SELECTED ITEM
+        siteID = self.NEON_listboxSites.currentItem().text()
+
+        global SITECODE
+        SITECODE = siteID.split(' - ')[0]
+
+        siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
+
+        global DOMAINCODE
+        DOMAINCODE = siteInfo['data']['domainCode']
+
+        global SITENAME
+        SITENAME = siteInfo['data']['siteName']
+        #JES self.labelNEONSite.setText(SITENAME)
+
+        keys = siteInfo['data'].keys()
+        items = [f"{key}: {str(siteInfo['data'][key])}" for key in keys]
+
+        if 0:
+            self.current_site_info = items
+
+        return (items)
+
 
 # ======================================================================================================================
 # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
@@ -4413,7 +4577,7 @@ def NEON_updateSiteInfo(self, item):
 def NEON_updateProductTable(self, item):
     products = self.NEON_listboxSiteProducts.selectedItems()
 
-    # JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
+    #JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
     for i in range(self.NEON_tableProducts.rowCount()):
         self.NEON_tableProducts.removeRow(0)
 
@@ -4657,7 +4821,7 @@ def downloadProductDataFiles(self, item):
     myNEON_API = NEON_API()
 
     # ----------------------------------------------------------------------------------------------------
-    # SAVE DOWNLOADED DATA TO THE USER GRIMe-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
+    # SAVE DOWNLOADED DATA TO THE USER GRIME-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
     NEON_download_file_path = self.edit_NEONSaveFilePath.text()
@@ -4671,7 +4835,7 @@ def downloadProductDataFiles(self, item):
         if response == QMessageBox.Yes:
             #NEON_download_file_path = os.path.expanduser('~')
             #NEON_download_file_path = os.path.join(NEON_download_file_path, 'Documents')
-            #NEON_download_file_path = os.path.join(NEON_download_file_path, 'GRIMe-AI')
+            #NEON_download_file_path = os.path.join(NEON_download_file_path, 'GRIME-AI')
 
             NEON_download_file_path = JsonEditor().getValue("NEON_Root_Folder")
 
@@ -4765,7 +4929,7 @@ def downloadProductDataFiles(self, item):
         #     nitrateList = myNEON_API.parseNitrateCSV()
         #
         #     if len(nitrateList) > 0:
-        #         # JES - USE NITRATE DATA FOR DEVELOPING GENERIC CSV READING AND DATA GRAPHING CAPABILITIES
+        #         #JES - USE NITRATE DATA FOR DEVELOPING GENERIC CSV READING AND DATA GRAPHING CAPABILITIES
         #         scene = QGraphicsScene()
         #         self.scene = scene
         #         nWidth = self.graphicsView.width()
@@ -4923,7 +5087,7 @@ def NEON_labelMouseDoubleClickEvent(self, event):
 # ======================================================================================================================
 def retranslateUi(self, MainWindow):
     _translate = QtCore.QCoreApplication.translate
-    MainWindow.setWindowTitle(_translate("GRIMe-AI: John E. Stranzl Jr.", "GRIMe-AI: John E. Stranzl Jr."))
+    MainWindow.setWindowTitle(_translate("GRIME-AI: John E. Stranzl Jr.", "GRIME-AI: John E. Stranzl Jr."))
 
 # ======================================================================================================================
 # FIND THE MONTHS THAT DATA IS AVAILABLE FOR A PARTICULAR PRODUCT FOR A PARTICULAR SITE
@@ -5044,6 +5208,14 @@ def test(img):
 def run_gui():
     global frame
 
+    # If Hydra is already initialized, clear it
+    from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+
+    settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+    print(settings_folder)
+    hydra_working_folder = os.path.normpath(os.path.join(settings_folder, "MyHydraOutputs"))
+    sys.argv.append(f"hydra.run.dir={hydra_working_folder}")
+
     if 0:
         if hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
             hydra.core.global_hydra.GlobalHydra.instance().clear()
@@ -5115,6 +5287,15 @@ def my_main():
                               help="Width of the slice (in pixels).")
     slice_parser.add_argument("-f", "--folder", type=str, required=True, help="A folder must be specified.")
 
+    # COCO parser
+    coco_parser = subparsers.add_parser('coco', help='Generate COCO annotation file from images and masks')
+    coco_parser.add_argument("--folder", required=True,
+                             help="Folder containing image files (and optional masks).")
+    coco_parser.add_argument("--shared-mask", required=False,
+                             help="If provided, uses this single mask file for all images in the folder.")
+    coco_parser.add_argument("--output", required=False,
+                             help="(Optional) Override output JSON file path.")
+
     # Custom help handling
     if '-h' in sys.argv or '--help' in sys.argv:
         print("Global Help: CLI for GRIME AI")
@@ -5164,8 +5345,7 @@ def run_cli(args):
                              correct_alignment, save_poly_lines,
                              reference_image_filename, rotation_threshold)
 
-        strMessage = 'Image triage is complete!'
-        print(strMessage)
+        print('Image triage is complete!')
     elif args.command == 'slice':
         filenames = cli_fetchLocalImageList(args.folder)
 
@@ -5173,7 +5353,23 @@ def run_cli(args):
         compositeSlices.create_composite_image(filenames, args.folder+'\compositeSlices')
 
         print("Composite slice complete!")
-
+    elif args.command == "coco":
+        # Import your CocoGenerator class from coco_generator.py
+        from coco_generator import CocoGenerator
+        print("[INFO] Running COCO generation command...")
+        folder = Path(args.folder)
+        output_path = Path(args.output) if args.output else folder / "instances_default.json"
+        if args.shared_mask:
+            shared_mask = Path(args.shared_mask)
+            if not shared_mask.exists():
+                print(f"[ERROR] Shared mask file not found: {shared_mask}")
+                sys.exit(1)
+            # Instantiate in shared mask mode
+            generator = CocoGenerator(folder=folder, shared_mask=shared_mask, output_path=output_path)
+        else:
+            # Instantiate for one-to-one mode
+            generator = CocoGenerator(folder=folder, output_path=output_path)
+        generator.generate_annotations()
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -5186,7 +5382,7 @@ def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
     List = []
 
     # RECURSE AND TRAVERSE FROM THE SPECIFIED FOLDER DOWN TO DETERMINE THE DATE RANGE FOR THE IMAGES FOUND
-    files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
+    file_count, files = GRIME_AI_Utils().getFileList(filePath, extensions, bFetchRecursive)
 
     for image_index, file in enumerate(files):
         ext = os.path.splitext(file)[-1].lower()
@@ -5214,14 +5410,19 @@ print(myconfig_name)
 # ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name)
 def train_main(cfg: DictConfig) -> None:
-    # If Hydra is already initialized, clear it
+
+    print(myconfig_path)
+    print(myconfig_name)
+
     if GlobalHydra.instance().is_initialized():
         GlobalHydra.instance().clear()
     print("Hydra SAM2 training config:")
     print(OmegaConf.to_yaml(cfg))
 
     # Instantiate your SAM2 training object (assumed to accept cfg)
+    print("Instantiate ML_SAM training class/object...")
     myML_SAM = ML_SAM(cfg)
+    print("Execute ML_SAM training...")
     myML_SAM.ML_SAM_Main()
 
 
@@ -5251,8 +5452,20 @@ def load_model_main(cfg: DictConfig) -> None:
     print("Hydra SAM2 training config:")
     print(OmegaConf.to_yaml(cfg))
 
+    global hyperparameterDlg
+    if hyperparameterDlg != None:
+        copy_original_image = hyperparameterDlg.getCopyOriginalImage()
+        save_masks = hyperparameterDlg.getSaveMasks()
+        selected_label_categories = hyperparameterDlg.getSelectedLabelCategories()
+
+        hyperparameterDlg.close()
+
+        del hyperparameterDlg
+
+        hyperparameterDlg = None
+
     myLocalModel = ML_Load_Model(cfg)
-    myLocalModel.ML_Load_Model_Main()
+    myLocalModel.ML_Load_Model_Main(copy_original_image, save_masks, selected_label_categories)
 
 # ======================================================================================================================
 #
@@ -5273,6 +5486,7 @@ if __name__ == '__main__':
         view_segmentation_main()
     if 0:
         load_model_main()
+
 
     if 0:
         import matplotlib.pyplot as plt

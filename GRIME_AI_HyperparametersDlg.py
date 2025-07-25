@@ -274,6 +274,18 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self.horizontalListLayout.setStretch(1, 0)
         self.horizontalListLayout.setStretch(2, 1)
 
+        # Set stylesheet for the tabs to change color when a tab is selected.
+        self.tabWidget.setStyleSheet("""
+            QTabBar::tab {
+                background-color: white;
+                color: black;
+            }
+            QTabBar::tab:selected {
+                background-color: steelblue;
+                color: white;
+            }
+        """)
+
 
     def setup_connections(self):
         """Connect signals with their slot methods."""
@@ -1033,30 +1045,33 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         Validates label selections, updates configuration, runs segmentation,
         then post-processes outputs according to the two checkboxes.
         """
-        # Ensure that at least one label is selected
-        selected_labels = []
-        for idx in range(self.listWidget_labels.count()):
-            item = self.listWidget_labels.item(idx)
-            if item and item.isSelected():
-                selected_labels.append(item.text())
-
-        if not selected_labels:
-            QMessageBox.warning(self, "Segmentation Error",
-                                "Please select at least one label before segmenting images.")
-            return
-
-        # Populate selected_label_categories from selection
-        self.selected_label_categories = []
-        if self.categories_available == True:
+        if self.categories_available:
+            # Ensure that at least one label is selected
+            selected_labels = []
             for idx in range(self.listWidget_labels.count()):
-                item_text = self.listWidget_labels.item(idx).text().strip()
-                if item_text and item_text in selected_labels:
-                    self.selected_label_categories.append({
-                        "id": idx + 1,
-                        "name": item_text
-                    })
+                item = self.listWidget_labels.item(idx)
+                if item and item.isSelected():
+                    selected_labels.append(item.text())
 
-        print("Selected categories:", self.selected_label_categories)
+            if not selected_labels:
+                QMessageBox.warning(self, "Segmentation Error",
+                                    "Please select at least one label before segmenting images.")
+                return
+
+            # Populate selected_label_categories from selection
+            self.selected_label_categories = []
+            if self.categories_available == True:
+                for idx in range(self.listWidget_labels.count()):
+                    item_text = self.listWidget_labels.item(idx).text().strip()
+                    if item_text and item_text in selected_labels:
+                        self.selected_label_categories.append({
+                            "id": idx + 1,
+                            "name": item_text
+                        })
+
+            print("Selected categories:", self.selected_label_categories)
+        else:   # IF IT IS AN OLDER MODEL NOT CONTAINING LABELS, DEFAULT TO ID: 2, NAME: Water
+            self.selected_label_categories = [{"id": 2, "name": "water"}]
 
         # 1) Gather user settings
         settings = self.get_values()

@@ -13,737 +13,460 @@
   <property name="windowTitle">
    <string>Select Features</string>
   </property>
-  <widget class="QDialogButtonBox" name="buttonBox_Close">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>670</y>
-     <width>81</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>MS Shell Dlg 2</family>
-     <pointsize>8</pointsize>
-    </font>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::NoButton</set>
-   </property>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_ScalarOutputs">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>240</y>
-     <width>341</width>
-     <height>331</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>MS Shell Dlg 2</family>
-     <pointsize>8</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="title">
-    <string>Feature Calculations</string>
-   </property>
-   <property name="flat">
-    <bool>true</bool>
-   </property>
-   <widget class="QGroupBox" name="groupBox_14">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>20</y>
-      <width>321</width>
-      <height>65</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-      <weight>75</weight>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="toolTip">
-     <string>Choose whether to save stats for the ROI, for the Image, or both.</string>
-    </property>
-    <property name="title">
-     <string>Region Select</string>
-    </property>
-    <widget class="QCheckBox" name="checkBoxScalarRegion_WholeImage">
-     <property name="geometry">
-      <rect>
-       <x>21</x>
-       <y>20</y>
-       <width>220</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Whole Image</string>
-     </property>
-     <property name="checked">
-      <bool>false</bool>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="checkBoxScalarRegion_ROI">
-     <property name="geometry">
-      <rect>
-       <x>22</x>
-       <y>43</y>
-       <width>220</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>ROI</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </widget>
-   <widget class="QGroupBox" name="groupBox_15">
-    <property name="geometry">
-     <rect>
-      <x>0</x>
-      <y>90</y>
-      <width>340</width>
-      <height>251</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-      <weight>75</weight>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="title">
-     <string>Feature Select</string>
-    </property>
-    <property name="flat">
-     <bool>false</bool>
-    </property>
-    <widget class="QGroupBox" name="groupBox_16">
-     <property name="geometry">
-      <rect>
-       <x>20</x>
-       <y>110</y>
-       <width>311</width>
-       <height>131</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>75</weight>
-       <bold>true</bold>
-      </font>
-     </property>
-     <property name="title">
-      <string>Greenness</string>
-     </property>
-     <widget class="QCheckBox" name="checkBox_GCC">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>21</y>
-        <width>260</width>
-        <height>17</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>MS Shell Dlg 2</family>
-        <pointsize>8</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string>GCC (Greenness Index)</string>
-      </property>
-      <property name="checked">
-       <bool>true</bool>
-      </property>
-     </widget>
-     <widget class="QCheckBox" name="checkBox_ExG">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>63</y>
-        <width>260</width>
-        <height>17</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>MS Shell Dlg 2</family>
-        <pointsize>8</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>ExG (Excess Green Index)</string>
-      </property>
-     </widget>
-     <widget class="QCheckBox" name="checkBox_RGI">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>84</y>
-        <width>260</width>
-        <height>17</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>MS Shell Dlg 2</family>
-        <pointsize>8</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>RGI (Red-Green Index)</string>
-      </property>
-     </widget>
-     <widget class="QCheckBox" name="checkBox_NDVI">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>105</y>
-        <width>291</width>
-        <height>17</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>MS Shell Dlg 2</family>
-        <pointsize>8</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>False NDVI (Norm. Dif. Veg. Index using RGB)</string>
-      </property>
-     </widget>
-     <widget class="QCheckBox" name="checkBox_GLI">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>42</y>
-        <width>260</width>
-        <height>17</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>MS Shell Dlg 2</family>
-        <pointsize>8</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>GLI (Green Leaf Index)</string>
-      </property>
-     </widget>
-    </widget>
-    <widget class="QCheckBox" name="checkBox_Texture">
-     <property name="geometry">
-      <rect>
-       <x>30</x>
-       <y>83</y>
-       <width>160</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Texture</string>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="checkBox_ShannonEntropy">
-     <property name="geometry">
-      <rect>
-       <x>30</x>
-       <y>20</y>
-       <width>160</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Shannon Entropy</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="checkBox_Intensity">
-     <property name="geometry">
-      <rect>
-       <x>30</x>
-       <y>41</y>
-       <width>160</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Intensity</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="checkBoxColor_HSV">
-     <property name="geometry">
-      <rect>
-       <x>30</x>
-       <y>62</y>
-       <width>160</width>
-       <height>17</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>MS Shell Dlg 2</family>
-       <pointsize>8</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Color (HSV)</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_17">
-   <property name="geometry">
-    <rect>
-     <x>30</x>
-     <y>10</y>
-     <width>340</width>
-     <height>221</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>MS Shell Dlg 2</family>
-     <pointsize>8</pointsize>
-    </font>
-   </property>
-   <property name="title">
-    <string>Define ROI</string>
-   </property>
-   <widget class="QPushButton" name="pushButton_deleteAllROIs">
-    <property name="geometry">
-     <rect>
-      <x>120</x>
-      <y>176</y>
-      <width>94</width>
-      <height>28</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <property name="text">
-     <string>Delete All ROIs</string>
-    </property>
-   </widget>
-   <widget class="QGroupBox" name="groupBox_18">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>80</y>
-      <width>320</width>
-      <height>52</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <property name="title">
-     <string>Shape</string>
-    </property>
-    <widget class="QWidget" name="layoutWidget">
-     <property name="geometry">
-      <rect>
-       <x>33</x>
-       <y>25</y>
-       <width>251</width>
-       <height>24</height>
-      </rect>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout">
-      <item>
-       <widget class="QRadioButton" name="radioButton_ROIShapeRectangle">
-        <property name="font">
-         <font>
-          <family>MS Shell Dlg 2</family>
-          <pointsize>8</pointsize>
-         </font>
+  <!-- Top-level vertical layout to allow resizing -->
+  <layout class="QVBoxLayout" name="verticalLayout_Main">
+    <!-- Define ROI Section -->
+    <item>
+      <widget class="QGroupBox" name="groupBox_17">
+        <property name="title">
+          <string>Define ROI</string>
         </property>
-        <property name="text">
-         <string>Rectangle</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer_8">
-        <property name="font">
-         <font>
-          <family>MS Shell Dlg 2</family>
-          <pointsize>8</pointsize>
-         </font>
-        </property>
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>98</width>
-          <height>13</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QRadioButton" name="radioButton_ROIShapeEllipse">
-        <property name="font">
-         <font>
-          <family>MS Shell Dlg 2</family>
-          <pointsize>8</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Ellipse</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </widget>
-   <widget class="QLabel" name="label_roiName_4">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>24</y>
-      <width>160</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <property name="text">
-     <string>Name</string>
-    </property>
-   </widget>
-   <widget class="QSpinBox" name="spinBoxColorClusters">
-    <property name="geometry">
-     <rect>
-      <x>190</x>
-      <y>42</y>
-      <width>70</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="minimum">
-     <number>1</number>
-    </property>
-    <property name="maximum">
-     <number>8</number>
-    </property>
-    <property name="value">
-     <number>4</number>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_6">
-    <property name="geometry">
-     <rect>
-      <x>190</x>
-      <y>24</y>
-      <width>140</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <property name="text">
-     <string>Color Clusters</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButtonAddROI">
-    <property name="geometry">
-     <rect>
-      <x>274</x>
-      <y>42</y>
-      <width>61</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-      <weight>75</weight>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>Add</string>
-    </property>
-    <property name="default">
-     <bool>true</bool>
-    </property>
-   </widget>
-   <widget class="QLineEdit" name="lineEdit_roiName">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>42</y>
-      <width>161</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-   </widget>
-   <widget class="QWidget" name="layoutWidget_4">
-    <property name="geometry">
-     <rect>
-      <x>21</x>
-      <y>138</y>
-      <width>291</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <family>MS Shell Dlg 2</family>
-      <pointsize>8</pointsize>
-     </font>
-    </property>
-    <layout class="QGridLayout" name="gridLayout_4">
-     <item row="0" column="0">
-      <widget class="QCheckBox" name="checkBoxDisplayROIs">
-       <property name="font">
-        <font>
-         <family>MS Shell Dlg 2</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="text">
-        <string>Display ROIs</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
+        <layout class="QGridLayout" name="gridLayout_GroupBox17">
+          <item row="0" column="0">
+            <widget class="QLabel" name="label_roiName_4">
+              <property name="text">
+                <string>Name</string>
+              </property>
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <item row="0" column="1">
+            <widget class="QLabel" name="label_6">
+              <property name="text">
+                <string>Color Clusters</string>
+              </property>
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="0">
+            <widget class="QLineEdit" name="lineEdit_roiName">
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="1">
+            <widget class="QSpinBox" name="spinBoxColorClusters">
+              <property name="minimum">
+                <number>1</number>
+              </property>
+              <property name="maximum">
+                <number>8</number>
+              </property>
+              <property name="value">
+                <number>4</number>
+              </property>
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="2">
+            <widget class="QPushButton" name="pushButtonAddROI">
+              <property name="text">
+                <string>Add</string>
+              </property>
+              <property name="default">
+                <bool>true</bool>
+              </property>
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <!-- Embedded Shape Group Box -->
+          <item row="2" column="0" colspan="3">
+            <widget class="QGroupBox" name="groupBox_18">
+              <property name="title">
+                <string>Shape</string>
+              </property>
+              <layout class="QHBoxLayout" name="horizontalLayout_Shape">
+                <item>
+                  <widget class="QRadioButton" name="radioButton_ROIShapeRectangle">
+                    <property name="text">
+                      <string>Rectangle</string>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <spacer name="horizontalSpacer_8">
+                    <property name="orientation">
+                      <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                      <size>
+                        <width>98</width>
+                        <height>13</height>
+                      </size>
+                    </property>
+                  </spacer>
+                </item>
+                <item>
+                  <widget class="QRadioButton" name="radioButton_ROIShapeEllipse">
+                    <property name="text">
+                      <string>Ellipse</string>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
+            </widget>
+          </item>
+          <!-- Delete All ROIs Button -->
+          <item row="3" column="0" colspan="3">
+            <widget class="QPushButton" name="pushButton_deleteAllROIs">
+              <property name="text">
+                <string>Delete All ROIs</string>
+              </property>
+              <property name="font">
+                <font>
+                  <family>MS Shell Dlg 2</family>
+                  <pointsize>8</pointsize>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <!-- Layout for additional checkboxes -->
+          <item row="4" column="0" colspan="3">
+            <widget class="QWidget" name="layoutWidget_4">
+              <layout class="QGridLayout" name="gridLayout_4">
+                <item row="0" column="0">
+                  <widget class="QCheckBox" name="checkBoxDisplayROIs">
+                    <property name="text">
+                      <string>Display ROIs</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item row="0" column="2">
+                  <widget class="QCheckBox" name="checkBoxCalcColors">
+                    <property name="text">
+                      <string>Display ROI  Colors</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="toolTip">
+                      <string>Check this box to only train on colors when 'Add' is clicked.</string>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
+            </widget>
+          </item>
+        </layout>
       </widget>
-     </item>
-     <item row="0" column="1">
-      <spacer name="horizontalSpacer_9">
-       <property name="font">
-        <font>
-         <family>MS Shell Dlg 2</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item row="0" column="2">
-      <widget class="QCheckBox" name="checkBoxCalcColors">
-       <property name="font">
-        <font>
-         <family>MS Shell Dlg 2</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Check this box to only train on colors when 'Add' is clicked.</string>
-       </property>
-       <property name="text">
-        <string>Display ROI  Colors</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
+    </item>
+    <!-- Feature Calculations Section -->
+    <item>
+      <widget class="QGroupBox" name="groupBox_ScalarOutputs">
+        <property name="title">
+          <string>Feature Calculations</string>
+        </property>
+        <property name="flat">
+          <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_ScalarOutputs">
+          <!-- Region Select Subsection -->
+          <item>
+            <widget class="QGroupBox" name="groupBox_14">
+              <property name="title">
+                <string>Region Select</string>
+              </property>
+              <property name="toolTip">
+                <string>Choose whether to save stats for the ROI, for the Image, or both.</string>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_RegionSelect">
+                <item>
+                  <widget class="QCheckBox" name="checkBoxScalarRegion_WholeImage">
+                    <property name="text">
+                      <string>Whole Image</string>
+                    </property>
+                    <property name="checked">
+                      <bool>false</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QCheckBox" name="checkBoxScalarRegion_ROI">
+                    <property name="text">
+                      <string>ROI</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
+            </widget>
+          </item>
+          <!-- Feature Select Subsection -->
+          <item>
+            <widget class="QGroupBox" name="groupBox_15">
+              <property name="title">
+                <string>Feature Select</string>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_FeatureSelect">
+                <item>
+                  <widget class="QCheckBox" name="checkBox_ShannonEntropy">
+                    <property name="text">
+                      <string>Shannon Entropy</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QCheckBox" name="checkBox_Intensity">
+                    <property name="text">
+                      <string>Intensity</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QCheckBox" name="checkBoxColor_HSV">
+                    <property name="text">
+                      <string>Color (HSV)</string>
+                    </property>
+                    <property name="checked">
+                      <bool>true</bool>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QCheckBox" name="checkBox_Texture">
+                    <property name="text">
+                      <string>Texture</string>
+                    </property>
+                    <property name="font">
+                      <font>
+                        <family>MS Shell Dlg 2</family>
+                        <pointsize>8</pointsize>
+                      </font>
+                    </property>
+                  </widget>
+                </item>
+                <!-- Greenness Subgroup -->
+                <item>
+                  <widget class="QGroupBox" name="groupBox_16">
+                    <property name="title">
+                      <string>Greenness</string>
+                    </property>
+                    <layout class="QVBoxLayout" name="verticalLayout_Greenness">
+                      <item>
+                        <widget class="QCheckBox" name="checkBox_GCC">
+                          <property name="text">
+                            <string>GCC (Greenness Index)</string>
+                          </property>
+                          <property name="checked">
+                            <bool>true</bool>
+                          </property>
+                          <property name="font">
+                            <font>
+                              <family>MS Shell Dlg 2</family>
+                              <pointsize>8</pointsize>
+                            </font>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QCheckBox" name="checkBox_GLI">
+                          <property name="text">
+                            <string>GLI (Green Leaf Index)</string>
+                          </property>
+                          <property name="font">
+                            <font>
+                              <family>MS Shell Dlg 2</family>
+                              <pointsize>8</pointsize>
+                            </font>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QCheckBox" name="checkBox_ExG">
+                          <property name="text">
+                            <string>ExG (Excess Green Index)</string>
+                          </property>
+                          <property name="font">
+                            <font>
+                              <family>MS Shell Dlg 2</family>
+                              <pointsize>8</pointsize>
+                            </font>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QCheckBox" name="checkBox_RGI">
+                          <property name="text">
+                            <string>RGI (Red-Green Index)</string>
+                          </property>
+                          <property name="font">
+                            <font>
+                              <family>MS Shell Dlg 2</family>
+                              <pointsize>8</pointsize>
+                            </font>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QCheckBox" name="checkBox_NDVI">
+                          <property name="text">
+                            <string>False NDVI (Norm. Dif. Veg. Index using RGB)</string>
+                          </property>
+                          <property name="font">
+                            <font>
+                              <family>MS Shell Dlg 2</family>
+                              <pointsize>8</pointsize>
+                            </font>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </widget>
+                </item>
+              </layout>
+            </widget>
+          </item>
+        </layout>
       </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
-  <widget class="QPushButton" name="pushButton_Dlg_BuildFeatureFile">
-   <property name="geometry">
-    <rect>
-     <x>80</x>
-     <y>600</y>
-     <width>211</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Calibri</family>
-     <pointsize>10</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="autoFillBackground">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Build
+    </item>
+    <!-- Bottom buttons layout -->
+    <item>
+      <layout class="QHBoxLayout" name="horizontalLayout_Buttons">
+        <item>
+          <widget class="QPushButton" name="pushButton_Dlg_BuildFeatureFile">
+            <property name="text">
+              <string>Build
 Feature File</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton_Dlg_TEST">
-   <property name="geometry">
-    <rect>
-     <x>300</x>
-     <y>600</y>
-     <width>80</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <family>Calibri</family>
-     <pointsize>10</pointsize>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="text">
-    <string>TEST</string>
-   </property>
-  </widget>
+            </property>
+            <property name="autoFillBackground">
+              <bool>true</bool>
+            </property>
+            <property name="font">
+              <font>
+                <family>Calibri</family>
+                <pointsize>10</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+              </font>
+            </property>
+          </widget>
+        </item>
+        <item>
+          <widget class="QPushButton" name="pushButton_Dlg_TEST">
+            <property name="text">
+              <string>TEST</string>
+            </property>
+            <property name="font">
+              <font>
+                <family>Calibri</family>
+                <pointsize>10</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+              </font>
+            </property>
+          </widget>
+        </item>
+        <item>
+          <widget class="QDialogButtonBox" name="buttonBox_Close">
+            <property name="standardButtons">
+              <set>QDialogButtonBox::NoButton</set>
+            </property>
+            <property name="enabled">
+              <bool>false</bool>
+            </property>
+            <property name="font">
+              <font>
+                <family>MS Shell Dlg 2</family>
+                <pointsize>8</pointsize>
+              </font>
+            </property>
+          </widget>
+        </item>
+      </layout>
+    </item>
+  </layout>
  </widget>
- <tabstops>
-  <tabstop>lineEdit_roiName</tabstop>
-  <tabstop>pushButtonAddROI</tabstop>
-  <tabstop>checkBoxScalarRegion_WholeImage</tabstop>
-  <tabstop>checkBoxScalarRegion_ROI</tabstop>
-  <tabstop>checkBox_ShannonEntropy</tabstop>
-  <tabstop>checkBox_Intensity</tabstop>
-  <tabstop>checkBox_Texture</tabstop>
-  <tabstop>checkBoxColor_HSV</tabstop>
-  <tabstop>checkBox_GCC</tabstop>
-  <tabstop>checkBox_GLI</tabstop>
-  <tabstop>checkBox_ExG</tabstop>
-  <tabstop>checkBoxDisplayROIs</tabstop>
-  <tabstop>checkBox_RGI</tabstop>
-  <tabstop>checkBox_NDVI</tabstop>
-  <tabstop>pushButton_Dlg_BuildFeatureFile</tabstop>
-  <tabstop>checkBoxCalcColors</tabstop>
-  <tabstop>spinBoxColorClusters</tabstop>
-  <tabstop>pushButton_deleteAllROIs</tabstop>
-  <tabstop>radioButton_ROIShapeRectangle</tabstop>
-  <tabstop>radioButton_ROIShapeEllipse</tabstop>
- </tabstops>
  <resources/>
  <connections>
   <connection>
@@ -751,32 +474,12 @@ Feature File</string>
    <signal>accepted()</signal>
    <receiver>Dialog</receiver>
    <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>254</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>157</x>
-     <y>274</y>
-    </hint>
-   </hints>
   </connection>
   <connection>
    <sender>buttonBox_Close</sender>
    <signal>rejected()</signal>
    <receiver>Dialog</receiver>
    <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>316</x>
-     <y>260</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>286</x>
-     <y>274</y>
-    </hint>
-   </hints>
   </connection>
  </connections>
 </ui>

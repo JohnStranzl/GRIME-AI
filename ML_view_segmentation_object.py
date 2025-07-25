@@ -24,7 +24,12 @@ class ML_view_segmentation_object:
         dataset = {}
         for folder, annotation_file in zip(folders, annotation_files):
             water_category_id = None
-            images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
+            VALID_EXTS = ('.jpg', '.jpeg')
+            images = [
+                f for f in os.listdir(folder)
+                if f.lower().endswith(VALID_EXTS)
+            ]
+
             with open(annotation_file, 'r') as f:
                 annotations = json.load(f)
 
