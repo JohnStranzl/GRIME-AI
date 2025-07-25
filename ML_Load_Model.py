@@ -78,7 +78,51 @@ class ML_Load_Model:
         if self.SAM2_CHECKPOINT == "" or self.MODEL_CFG == "" or self.INPUT_DIR == "" or self.OUTPUT_DIR == "" or self.MODEL == "":
             print ("ERROR: Configuration file missing items.")
 
-        ### ADD CODE TO VERIFY THE EXISTENCE OF THESE FILES
+        self._check_for_required_files()
+
+
+    def _check_for_required_files(self):
+        nError = 0
+
+        # Collect all the critical paths you need to verify
+        paths_to_check = [
+            ("Input directory", self.INPUT_DIR),
+            ("Trained model file", self.MODEL),
+        ]
+        #("Model config file", self.MODEL_CFG),
+        #("SAM2 checkpoint", self.SAM2_CHECKPOINT),
+        #("Output directory", self.OUTPUT_DIR),
+
+        self.missing_items = []
+        for name, path in paths_to_check:
+            if not os.path.exists(path):
+                self.missing_items.append((name, path))
+
+        if self.missing_items:
+            nError = -1
+            self._show_missing_files_dialog(self.missing_items)
+
+        return nError
+
+
+    def _show_missing_files_dialog(self, missing_items):
+        """
+        Show a critical QMessageBox listing all missing files/dirs,
+        then terminate the application cleanly.
+        """
+        # Build a human-readable message
+        lines = [
+            f"{name}: {path}"
+            for name, path in missing_items
+        ]
+        full_msg = (
+            "The following files or directories are missing or have been moved:\n\n"
+            + "\n".join(lines) + "\n"
+        )
+
+        # Display the error box
+        msgBox = GRIME_AI_QMessageBox('Model Configuration Error', full_msg, QMessageBox.Close, icon=QMessageBox.Critical)
+        msgBox.displayMsgBox()
 
 
     def show_mask(self, mask, ax, random_color=False, borders=True):
@@ -154,6 +198,9 @@ class ML_Load_Model:
 
 
     def ML_Load_Model_Main(self, copy_original_image, save_masks, selected_label_categories):
+
+        if self.missing_items:
+            return
 
         global progress_bar_closed
         def on_progress_bar_closed(obj):
