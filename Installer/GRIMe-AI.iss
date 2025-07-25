@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.6.0 (beta 7)"
+#define MyAppVersion "0.0.6.0 (beta 8)"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -28,7 +28,7 @@ DiskSpanning=yes
 OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 7) Setup
+OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 8) Setup
 ;Password=C0rnHusk3r%
 Compression=lzma2
 SolidCompression=yes
@@ -77,7 +77,6 @@ Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{use
 Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
 Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
 Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{app}"
-Source: "C:\Users\johns\pycharmprojects\neonAI\shall-we-play-a-game.mp3"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
 ; documentation
 Source: "C:\Users\johns\pycharmprojects\neonAI\Documentation\GRIME-AI_v0059_v2.pdf"; DestDir: "{app}\Documentation"
