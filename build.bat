@@ -19,13 +19,59 @@ REM pyinstaller --clean --noconfirm main.spec
 @echo on
 
 REM Build the executable with PyInstaller
+  REM Hidden Imports by section:
+    REM Torch Core
+    REM TorchVision & Transforms
+    REM Torch NN Modules
+    REM Standard Library Helpers
+    REM Utility & Scientific Libraries
 pyinstaller --clean --noconfirm --onedir ^
---hidden-import=playsound ^
---hidden-import=imageio ^
---hidden-import=imageio_ffmpeg ^
---hidden-import=openpyxl ^
---hidden-import=scikit-image ^
---contents-directory "." main.py
+  --copy-metadata torch ^
+  --add-data="sam2_transforms.pt;." ^
+  --hidden-import=torch ^
+  --hidden-import=torch._C ^
+  --hidden-import=torch._utils ^
+  --hidden-import=torch.fx ^
+  --hidden-import=torch.fx.graph_module ^
+  --hidden-import=torch.jit ^
+  --hidden-import=torch.jit._recursive ^
+  --hidden-import=torch.jit._script ^
+  --hidden-import=torch.jit._script.RecursiveScriptModule ^
+  --hidden-import=torch.jit._script.ScriptClass ^
+  --hidden-import=torch.jit._script.ScriptFunction ^
+  --hidden-import=torch.jit._script.ScriptModule ^
+  --hidden-import=torch.jit._state ^
+  --hidden-import=torch.package ^
+  --hidden-import=torch._jit_internal ^
+  --hidden-import=torchvision.datasets ^
+  --hidden-import=torchvision.io ^
+  --hidden-import=torchvision.ops ^
+  --hidden-import=torchvision.transforms ^
+  --hidden-import=torchvision.transforms._functional_pil ^
+  --hidden-import=torchvision.transforms._functional_tensor ^
+  --hidden-import=torchvision.transforms.functional ^
+  --hidden-import=torchvision.transforms.functional_pil ^
+  --hidden-import=torchvision.transforms.functional_tensor ^
+  --hidden-import=torchvision.transforms.transforms ^
+  --hidden-import=torchvision.transforms.v2 ^
+  --hidden-import=torchvision.transforms.v2._utils ^
+  --hidden-import=torchvision.transforms.v2.functional ^
+  --hidden-import=torchvision.utils ^
+  --hidden-import=torch.nn.modules.activation ^
+  --hidden-import=torch.nn.modules.loss ^
+  --hidden-import=torch.nn.modules.upsampling ^
+  --hidden-import=enum ^
+  --hidden-import=inspect ^
+  --hidden-import=types ^
+  --hidden-import=imageio ^
+  --hidden-import=imageio_ffmpeg ^
+  --hidden-import=openpyxl ^
+  --hidden-import=playsound ^
+  --hidden-import=skimage.draw ^
+  --hidden-import=skimage.io ^
+  --hidden-import=skimage.transform ^
+  --hidden-import=yaml ^
+  --contents-directory "." main.py
 
 REM Ensure the distribution folder exists
 if not exist "dist\main" mkdir "dist\main"
@@ -38,7 +84,7 @@ copy "SplashScreen Images\GRIME-AI Logo.jpg" dist\main
 
 REM Copy additional required directories and files
 if not exist "dist\main\sam2" mkdir "dist\main\sam2"
-xcopy "venv\Lib\site-packages\sam2" "dist\main\sam2" /s /e || echo Error copying sam2 folder
+xcopy "venv\Lib\site-packages\sam2" "dist\main\sam2" /s /e /Y || echo Error copying sam2 folder
 
 if not exist "dist\main\ultralytics" mkdir "dist\main\ultralytics"
 if not exist "dist\main\ultralytics\cfg" mkdir "dist\main\ultralytics\cfg"

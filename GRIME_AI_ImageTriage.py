@@ -90,7 +90,7 @@ class GRIME_AI_ImageTriage():
         # count the number of images that will potentially be processed and possibly saved with the specified extension
         # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
         # of images will help determine whether or not there is enough disk space to accommodate storing the images.
-        imageCount = GRIME_AI_Utils().getImageCount(folder, extensions)
+        imageCount = GRIME_AI_Utils().get_image_count(folder, extensions)
 
         if self.show_gui:
             progressBar = QProgressWheel(0, imageCount + 1)

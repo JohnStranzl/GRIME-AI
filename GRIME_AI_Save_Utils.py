@@ -20,7 +20,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def get_models_folder(self):
-        models_file_path = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIMe-AI', 'Models')
+        models_file_path = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIME-AI', 'Models')
 
         if not os.path.exists(models_file_path):
             os.makedirs(models_file_path)
@@ -31,7 +31,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def get_settings_folder(self):
-        configFilePath = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIMe-AI', 'Settings')
+        configFilePath = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIME-AI', 'Settings')
 
         if not os.path.exists(configFilePath):
             os.makedirs(configFilePath)
@@ -43,7 +43,7 @@ class GRIME_AI_Save_Utils:
     # ------------------------------------------------------------------------------------------------------------------
     def read_config_file(self):
         configFilePath = self.get_settings_folder()
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
 
         config_object = configparser.ConfigParser()
         with open(configFile, "r") as file_object:
@@ -57,7 +57,7 @@ class GRIME_AI_Save_Utils:
         config = ConfigParser()
 
         configFilePath = self.get_settings_folder()
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
 
         with open(configFile, 'w+') as f:
             config.read(configFile)
@@ -85,7 +85,7 @@ class GRIME_AI_Save_Utils:
 
         config = ConfigParser()
 
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
         f = open(configFile, 'w+')
 
         config.read(configFile)
@@ -107,7 +107,7 @@ class GRIME_AI_Save_Utils:
 
         config = ConfigParser()
 
-        configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+        configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
         f = open(configFile, 'w+')
 
         config.read(configFile)
@@ -132,7 +132,7 @@ class GRIME_AI_Save_Utils:
 
             config = ConfigParser()
 
-            configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+            configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
             f = open(configFile, 'r')
 
             config.read(configFile)
@@ -159,7 +159,7 @@ class GRIME_AI_Save_Utils:
 
             config = ConfigParser()
 
-            configFile = os.path.join(configFilePath, 'GRIMe-AI.cfg')
+            configFile = os.path.join(configFilePath, 'GRIME-AI.cfg')
             f = open(configFile, 'r')
 
             config.read(configFile)
@@ -193,7 +193,7 @@ class JsonEditor():
 
     def update_json_entry(self, entry_key, new_value):
         try:
-            json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
+            json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIME-AI.json')
             json_file = os.path.normpath(json_file)
 
             with open(json_file, 'r') as file:
@@ -205,18 +205,18 @@ class JsonEditor():
                     json.dump(data, file, indent=4)
                 print(f'Entry {entry_key} updated to {new_value}')
             else:
-                print(f'Adding missing entry {entry_key} to GRIMe-AI.json')
+                print(f'Adding missing entry {entry_key} to GRIME-AI.json')
                 self.add_key_value_to_json(entry_key, new_value)
 
         except FileNotFoundError:
-            print('GRIMe-AI.json file not found')
+            print('GRIME-AI.json file not found')
         except Exception:
-            print(f'Adding missing entry {entry_key} to GRIMe-AI.json')
+            print(f'Adding missing entry {entry_key} to GRIME-AI.json')
             self.add_key_value_to_json(entry_key, new_value)
 
 
     def add_key_value_to_json(self, key, value):
-        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
+        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIME-AI.json')
 
         try:
             # Load the existing data from the JSON file
@@ -240,7 +240,7 @@ class JsonEditor():
 
 
     def getValue(self, key):
-        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIMe-AI.json')
+        json_file = os.path.join(GRIME_AI_Save_Utils().get_settings_folder(), 'GRIME-AI.json')
 
         try:
             # Load the existing data from the JSON file
