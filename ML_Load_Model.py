@@ -6,29 +6,29 @@ import sys
 import json
 import warnings
 import shutil
+from pathlib import Path
+
 
 import cv2
 from PIL import Image
+import matplotlib.pyplot as plt
 
 from omegaconf import OmegaConf, DictConfig
 
-import matplotlib.pyplot as plt
-from pathlib import Path
-
-from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
 # Append SAM2 folder to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 # We no longer use the legacy build_sam2 method.
 from sam2.modeling import sam2_base
+print(sam2_base.__file__)
 
 from PyQt5.QtWidgets import QMessageBox
 
 from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
+from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
-print(sam2_base.__file__)
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -125,19 +125,66 @@ class ML_Load_Model:
         msgBox.displayMsgBox()
 
 
-    def show_mask(self, mask, ax, random_color=False, borders=True):
-        if random_color:
-            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-        else:
-            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
+    def show_mask(self, mask, ax, category_id=None, borders=True):
+        color = self.get_color_for_category(category_id)
         h, w = mask.shape[-2:]
         mask = mask.astype(np.uint8)
-        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+        mask_image = np.zeros((h, w, 4), dtype=np.float32)
+        rgba_color = color.reshape((1, 1, -1))  # RGBA shape
+
+        mask_image += mask.reshape(h, w, 1) * rgba_color
+
         if borders:
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-            contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
-            mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                contour = contour.squeeze()
+
+                if contour.ndim != 2 or contour.shape[1] != 2:
+                    continue  # Skip invalid contours
+
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color="white")
+
         ax.imshow(mask_image)
+
+
+    def get_color_for_category(self, category_id):
+        color_map = {
+            0: np.array([1.0, 0.0, 0.0, 0.6]),  # Red
+            1: np.array([0.0, 1.0, 0.0, 0.6]),  # Green
+            2: np.array([0.0, 0.0, 1.0, 0.6]),  # Blue
+            3: np.array([1.0, 1.0, 0.0, 0.6]),  # Yellow
+            4: np.array([1.0, 0.0, 1.0, 0.6]),  # Magenta
+            5: np.array([0.0, 1.0, 1.0, 0.6]),  # Cyan
+            6: np.array([0.5, 0.0, 0.0, 0.6]),  # Dark Red
+            7: np.array([0.0, 0.5, 0.0, 0.6]),  # Dark Green
+            8: np.array([0.0, 0.0, 0.5, 0.6]),  # Navy
+            9: np.array([0.5, 0.5, 0.0, 0.6]),  # Olive
+            10: np.array([0.5, 0.0, 0.5, 0.6]),  # Purple
+            11: np.array([0.0, 0.5, 0.5, 0.6]),  # Teal
+            12: np.array([1.0, 0.5, 0.0, 0.6]),  # Orange
+            13: np.array([0.5, 1.0, 0.0, 0.6]),  # Lime
+            14: np.array([0.0, 1.0, 0.5, 0.6]),  # Spring Green
+            15: np.array([0.0, 0.5, 1.0, 0.6]),  # Azure
+            16: np.array([0.5, 0.0, 1.0, 0.6]),  # Violet
+            17: np.array([1.0, 0.0, 0.5, 0.6]),  # Rose
+            18: np.array([0.25, 0.25, 0.25, 0.6]),  # Charcoal Gray
+            19: np.array([0.7, 0.7, 0.7, 0.6]),  # Light Gray
+            20: np.array([1.0, 0.85, 0.8, 0.6]),  # Pink
+            21: np.array([0.3, 0.3, 1.0, 0.6]),  # Periwinkle
+            22: np.array([1.0, 0.9, 0.2, 0.6]),  # Gold
+            23: np.array([0.2, 0.8, 0.2, 0.6]),  # Fern
+            24: np.array([0.2, 0.4, 0.8, 0.6]),  # Denim
+            25: np.array([0.8, 0.2, 0.4, 0.6]),  # Crimson
+            26: np.array([0.4, 0.8, 0.8, 0.6]),  # Ice Blue
+            27: np.array([0.6, 0.3, 0.0, 0.6]),  # Rust
+            28: np.array([0.9, 0.6, 0.4, 0.6]),  # Apricot
+            29: np.array([0.3, 0.6, 0.1, 0.6]),  # Moss
+            30: np.array([0.6, 0.1, 0.6, 0.6]),  # Orchid
+            31: np.array([0.3, 0.7, 0.6, 0.6]),  # Seafoam
+        }
+
+        return color_map.get(category_id, np.array([0.5, 0.5, 0.5, 0.6]))  # Default: gray
+
 
     def show_points(self, coords, labels, ax, marker_size=375):
         pos_points = coords[labels == 1]
@@ -149,6 +196,7 @@ class ML_Load_Model:
                    color='red', marker='*', s=marker_size,
                    edgecolor='white', linewidth=1.25)
 
+
     def show_box(self, box, ax):
         x0, y0 = box[0], box[1]
         w, h = box[2] - box[0], box[3] - box[1]
@@ -158,26 +206,14 @@ class ML_Load_Model:
                                    lw=2))
 
 
-    def show_masks(self, output_file_with_path, image, mask, scores, point_coords=None, box_coords=None, input_labels=None,
-                   borders=True):
-        plt.figure(figsize=(10, 10))
-        plt.ioff()
-        plt.imshow(image)
-
-        self.show_mask(mask, plt.gca(), borders=borders)
-        if point_coords is not None:
-            assert input_labels is not None
-            self.show_points(point_coords, input_labels, plt.gca())
-        if box_coords is not None:
-            self.show_box(box_coords, plt.gca())
-
-        plt.axis('off')
-        plt.savefig(output_file_with_path, bbox_inches='tight', pad_inches=0)
-        plt.close()
-
-        if 0:
-            plt.axis('off')
-            plt.show()
+    def show_masks(self, output_file_with_path, image, mask, scores,
+                   point_coords=None, box_coords=None, input_labels=None,
+                   borders=True, category_id=None):
+        fig, ax = plt.subplots()
+        ax.imshow(image)
+        self.show_mask(mask, ax, category_id=category_id, borders=borders)
+        fig.savefig(output_file_with_path)
+        plt.close(fig)
 
 
     def mask_to_polygon(self, mask, min_contour_area=50):
@@ -198,11 +234,11 @@ class ML_Load_Model:
 
 
     def ML_Load_Model_Main(self, copy_original_image, save_masks, selected_label_categories):
-
         if self.missing_items:
             return
 
         global progress_bar_closed
+
         def on_progress_bar_closed(obj):
             global progress_bar_closed
             progress_bar_closed = True
@@ -214,13 +250,10 @@ class ML_Load_Model:
         progressBar.setValue(1)
         progressBar.show()
 
-        # Reconfirm device.
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {device}")
 
-        # Use a relative path for Hydra initialization.
         config_dir = os.path.join("sam2", "sam2", "configs", "sam2.1")
-        # Build the relative model config path.
         model_cfg_path = os.path.join(config_dir, os.path.basename(self.MODEL_CFG))
         print("Model config path:", model_cfg_path)
         print("Checkpoint path:", self.SAM2_CHECKPOINT)
@@ -228,75 +261,53 @@ class ML_Load_Model:
         from hydra import initialize, compose
         from hydra.utils import instantiate
 
-        # Initialize Hydra with a relative config_path.
         with initialize(config_path=config_dir, version_base=None):
             cfg_intern = compose(config_name=os.path.basename(model_cfg_path))
             raw_model_cfg = OmegaConf.to_container(cfg_intern.model, resolve=True)
-            # Remove keys that SAM2Base.__init__ does not expect.
             offending_keys = ["no_obj_embed_spatial", "use_signed_tpos_enc_to_obj_ptrs", "device"]
             for key in offending_keys:
                 raw_model_cfg.pop(key, None)
             new_cfg = OmegaConf.create(raw_model_cfg)
             model = instantiate(new_cfg, _recursive_=True)
 
-        # Move the instantiated model to the proper device.
         sam2_model = model.to(device)
         predictor = SAM2ImagePredictor(sam2_model)
 
-        # Load the weights (using an absolute path for the model file).
         dirname = os.path.dirname(__file__)
         model_path = os.path.join(dirname, self.MODEL)
-
         checkpoint = torch.load(model_path, map_location=device)
 
-        # Prepare a COCO-formatted dictionary to save prediction annotations.
         coco_data = {
             "images": [],
             "annotations": [],
             "categories": [],
-            "licenses": [{
-                "name": "",
-                "id": 0,
-                "url": ""
-            }],
+            "licenses": [{"name": "", "id": 0, "url": ""}],
             "info": {
-                "contributor": "",
-                "date_created": "",
-                "description": "",
-                "url": "",
-                "version": "",
-                "year": ""
+                "contributor": "", "date_created": "",
+                "description": "", "url": "",
+                "version": "", "year": ""
             },
         }
 
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             predictor.model.load_state_dict(checkpoint["model_state_dict"])
-
             coco_data["categories"].extend(selected_label_categories)
         else:
             predictor.model.load_state_dict(checkpoint)
-
-            categories = [{"id": 2, "name": "water"}]
-            coco_data["categories"].extend(categories)
+            fallback_category = {"id": 2, "name": "water"}
+            coco_data["categories"].extend([fallback_category])
 
         image_id = 1
         annotation_id = 1
-
         os.makedirs(self.OUTPUT_DIR, exist_ok=True)
 
-        # List all JPEG images from the configured input directory.
         VALID_EXTS = ('.jpg', '.jpeg')
-        images_list = [
-            f for f in os.listdir(self.INPUT_DIR)
-            if f.lower().endswith(VALID_EXTS)
-        ]
-
+        images_list = [f for f in os.listdir(self.INPUT_DIR) if f.lower().endswith(VALID_EXTS)]
         progressBar.setRange(0, len(images_list) + 1)
 
         for img_index, image in enumerate(images_list):
             if progress_bar_closed is False:
                 progressBar.setValue(img_index)
-
                 image_path = os.path.join(self.INPUT_DIR, image)
                 pil_image = Image.open(image_path).convert("RGB")
                 image_array = np.array(pil_image)
@@ -306,30 +317,35 @@ class ML_Load_Model:
                     point_labels=None,
                     multimask_output=True,
                 )
+
+                if len(masks) > 1:
+                    print(f"Multiple masks detected for image: {image} (Total: {len(masks)})")
+
                 sorted_ind = np.argmax(scores)
                 mask = masks[sorted_ind]
                 score = scores[sorted_ind]
 
-                # Display and save the predicted mask overlay.
-                os.makedirs(f"{self.OUTPUT_DIR}", exist_ok=True)
-                # ### SAVE OVERLAY
+                # === Select category_id
+                category_id = selected_label_categories[0]["id"] if selected_label_categories else 2
+
                 overlay_filename = os.path.splitext(image)[0] + "_overlay.png"
                 overlay_output_with_path = os.path.join(self.OUTPUT_DIR, overlay_filename)
-                self.show_masks(overlay_output_with_path, pil_image, mask, score, borders=True)
+                self.show_masks(
+                    overlay_output_with_path,
+                    pil_image,
+                    mask,
+                    score,
+                    borders=True,
+                    category_id=category_id
+                )
 
-                # ### SAVE MASK
                 if save_masks:
-                    # Create a new filename by appending '_mask' before the file extension.
                     mask_filename = os.path.splitext(image)[0] + "_mask.png"
                     mask_output_path = os.path.join(self.OUTPUT_DIR, mask_filename)
-
-                    # Convert the binary mask (values 0 or 1) to an 8-bit image (values 0 or 255)
                     mask_to_save = (mask.astype(np.uint8)) * 255
-
                     cv2.imwrite(mask_output_path, mask_to_save)
                     print(f"Mask saved to {mask_output_path}")
 
-                # === COPY ORIGINAL IMAGE TO OUTPUT_DIR IF ENABLED ===
                 if copy_original_image:
                     copied_image_path = os.path.join(self.OUTPUT_DIR, os.path.basename(image_path))
                     try:
@@ -339,7 +355,7 @@ class ML_Load_Model:
                         print(f"Failed to copy image '{image_path}': {e}")
 
                 height, width = image_array.shape[:2]
-                image_info = {
+                coco_data["images"].append({
                     "file_name": os.path.basename(image),
                     "height": height,
                     "width": width,
@@ -348,27 +364,23 @@ class ML_Load_Model:
                     "flickr_url": "",
                     "coco_url": "",
                     "date_captured": 0
-                }
-                coco_data["images"].append(image_info)
+                })
 
                 segmentation = self.mask_to_polygon(mask)
                 if not segmentation:
                     continue
 
                 pos = np.where(mask)
-                xmin = int(np.min(pos[1]))
-                xmax = int(np.max(pos[1]))
-                ymin = int(np.min(pos[0]))
-                ymax = int(np.max(pos[0]))
+                xmin, xmax = int(np.min(pos[1])), int(np.max(pos[1]))
+                ymin, ymax = int(np.min(pos[0])), int(np.max(pos[0]))
                 bbox = [xmin, ymin, xmax - xmin, ymax - ymin]
 
-                mask_uint8 = mask.astype(np.uint8)
                 annotation = {
                     "id": annotation_id,
                     "image_id": image_id,
-                    "category_id": 2,
+                    "category_id": category_id,
                     "segmentation": segmentation,
-                    "area": int(np.sum(mask_uint8)),
+                    "area": int(np.sum(mask.astype(np.uint8))),
                     "bbox": bbox,
                     "iscrowd": 0
                 }
@@ -376,12 +388,11 @@ class ML_Load_Model:
                 annotation_id += 1
                 image_id += 1
             else:
-                strMessage = 'You have cancelled the image segmentation currently in-progress. Not all images have been segmented.'
+                strMessage = 'Image segmentation was cancelled before completion.'
                 msgBox = GRIME_AI_QMessageBox('Image Segmentation Terminated', strMessage, QMessageBox.Close)
-                response = msgBox.displayMsgBox()
+                msgBox.displayMsgBox()
                 break
 
-        # close the progressBar only if the user did not close it (i.e., terminated image segmentation)
         if progress_bar_closed is False:
             progressBar.close()
         del progressBar

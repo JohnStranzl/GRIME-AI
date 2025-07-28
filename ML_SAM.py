@@ -6,7 +6,7 @@ _ = InterpolationMode.BILINEAR  # Ensures inclusion during PyInstaller freeze
 import os
 import sys
 from datetime import datetime
-import json  # Ensure json is imported since we use it later
+import json
 
 from utils.datasetutils import DatasetUtils
 
@@ -14,26 +14,21 @@ from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 
-if True:
-    import logging
-    logging.getLogger("root").setLevel(logging.WARNING)
-    logging.disable(logging.INFO)
+import logging
+logging.getLogger("root").setLevel(logging.WARNING)
+logging.disable(logging.INFO)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # HYDRA (for SAM2)
 # ----------------------------------------------------------------------------------------------------------------------
 from omegaconf import OmegaConf, DictConfig
-
 from torch.cuda.amp import GradScaler
-
-
 import hydra
 from hydra.core.global_hydra import GlobalHydra
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from sam2.modeling import sam2_base
-print(sam2_base.__file__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -45,52 +40,51 @@ class ML_SAM:
 
     def __init__(self, cfg: DictConfig = None):
         self.className = "ML_SAM"
-
         now = datetime.now()
         self.formatted_time = now.strftime('%d%m_%H_%M_%S')
 
+        # load site_config from Hydra or from saved JSON
         if cfg is None or "site_config" not in cfg:
             settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-            site_configuration_file = os.path.normpath(os.path.join(settings_folder, "site_config.json"))
+            site_configuration_file = os.path.normpath(
+                os.path.join(settings_folder, "site_config.json")
+            )
             print(site_configuration_file)
-
-            with open(site_configuration_file, 'r') as file:
-                self.site_config = json.load(file)
+            with open(site_configuration_file, 'r') as f:
+                self.site_config = json.load(f)
         else:
-            # Convert the Hydra DictConfig to a standard dict using OmegaConf.to_container.
             self.site_config = OmegaConf.to_container(cfg.site_config, resolve=True)
 
-        self.site_name = self.site_config['siteName']
-        self.learning_rates = self.site_config['learningRates']
-        self.optimizer_type = self.site_config['optimizer']
-        self.loss_function = self.site_config['loss_function']
-        self.weight_decay = self.site_config['weight_decay']
-        self.num_epochs = self.site_config['number_of_epochs']
-        self.save_model_frequency = self.site_config['save_model_frequency']
-        self.early_stopping = self.site_config['early_stopping']
-        self.patience = self.site_config['patience']
-        self.device = self.site_config.get('device', str(device))
+        # unpack common settings
+        self.site_name           = self.site_config['siteName']
+        self.learning_rates      = self.site_config['learningRates']
+        self.optimizer_type      = self.site_config['optimizer']
+        self.loss_function       = self.site_config['loss_function']
+        self.weight_decay        = self.site_config['weight_decay']
+        self.num_epochs          = self.site_config['number_of_epochs']
+        self.save_model_frequency= self.site_config['save_model_frequency']
+        self.early_stopping      = self.site_config['early_stopping']
+        self.patience            = self.site_config['patience']
+        self.device              = self.site_config.get('device', str(device))
 
-        self.dataset = {}
-
-        self.loss_values = []
-        self.val_loss_values = []
-        self.epoch_list = []
+        # placeholders for dataset, metrics, model, etc.
+        self.dataset             = {}
+        self.loss_values         = []
+        self.val_loss_values     = []
+        self.epoch_list          = []
         self.train_accuracy_values = []
-        self.val_accuracy_values = []
+        self.val_accuracy_values   = []
 
-        self.sam2_model = None
-        self.folders = None
-        self.annotation_files = None
-        self.all_folders = []
-        self.all_annotations = []
-        self.categories = []
+        self.sam2_model          = None
+        self.folders             = None
+        self.annotation_files    = None
+        self.all_folders         = []
+        self.all_annotations     = []
+        self.categories          = []
+        self.image_shape_cache   = {}
 
-        self.image_shape_cache = {}
-
-        # objects for other classes
-        self.dataset_util = DatasetUtils()
-
+        # defer DatasetUtils until we know the folders & annotation_files
+        self.dataset_util        = None
 
     def debug_print(self, msg):
         if DEBUG:
@@ -98,37 +92,26 @@ class ML_SAM:
 
     def find_best_water_points(self, image_path):
         """
-        Finds a water point by computing the centroid of the annotated water mask (true mask).
-        If no water region is found (or an error occurs), defaults to returning the center of the image.
-
-        Args:
-            image_path (str): Path to the input image.
-
-        Returns:
-            np.ndarray: A numpy array of shape (1, 2) containing the coordinate [x, y] of the water point.
+        Compute the centroid of the water mask, or fallback to image center.
         """
         try:
-            true_mask = self.dataset_util.load_true_mask(image_path, self.annotation_index)
+            true_mask = self.dataset_util.load_true_mask(image_path)
         except Exception as e:
             print(f"Error loading true mask for {image_path}: {e}")
             true_mask = None
 
         if true_mask is not None and true_mask.sum() > 0:
-            # Compute the centroid of the water region using nonzero indices
-            indices = np.argwhere(true_mask > 0)
-            centroid = indices.mean(axis=0)  # [row, col]
-            # Return in (x, y) order
+            coords = np.argwhere(true_mask > 0)
+            centroid = coords.mean(axis=0)  # [row, col]
             return np.array([[int(centroid[1]), int(centroid[0])]])
         else:
-            # Fallback: return the center of the image if no valid water region is found,
-            # using the cached dimensions if available.
             if image_path in self.image_shape_cache:
                 h, w = self.image_shape_cache[image_path]
             else:
-                image = cv2.imread(image_path)
-                if image is None:
+                img = cv2.imread(image_path)
+                if img is None:
                     raise FileNotFoundError(f"Image file {image_path} not found.")
-                h, w = image.shape[:2]
+                h, w = img.shape[:2]
                 self.image_shape_cache[image_path] = (h, w)
             return np.array([[w // 2, h // 2]])
 
@@ -168,7 +151,7 @@ class ML_SAM:
                     return
 
                 image = np.array(Image.open(image_file).convert("RGB"))
-                true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index)
+                true_mask = self.dataset_util.load_true_mask(image_file)
                 if true_mask is None:
                     print(f"No annotation found for image {image_file}, skipping.")
                     continue
@@ -263,7 +246,7 @@ class ML_SAM:
                             return
 
                         val_image = np.array(Image.open(val_image_file).convert("RGB"))
-                        val_true_mask = self.dataset_util.load_true_mask(val_image_file, self.annotation_index)
+                        val_true_mask = self.dataset_util.load_true_mask(val_image_file)
                         if val_true_mask is None:
                             print(f"No annotation for {val_image_file}, skipping.")
                             continue
@@ -315,6 +298,7 @@ class ML_SAM:
             progressBar.close()
         del progressBar
 
+
     def _terminate_training(self, progressBar):
         msg = "You have cancelled the model training currently in-progress. A model has not been generated."
         msgBox = GRIME_AI_QMessageBox('Model Training Terminated', msg, GRIME_AI_QMessageBox.Close)
@@ -330,16 +314,6 @@ class ML_SAM:
         if progressBar:
             progressBar.close()
         del progressBar
-
-
-    def _terminate_training(self, progressBar):
-        msg = "You have cancelled the model training currently in-progress. A model has not been generated."
-        msgBox = GRIME_AI_QMessageBox('Model Training Terminated', msg, GRIME_AI_QMessageBox.Close)
-        msgBox.displayMsgBox()
-        if progressBar:
-            progressBar.close()
-        del progressBar
-
 
     def save_config_to_text(self, output_text_file):
         with open(output_text_file, 'w') as text_file:
@@ -357,56 +331,80 @@ class ML_SAM:
             text_file.write(f"Folders: {self.folders}\n")
             text_file.write(f"Annotations: {self.annotation_files}\n")
 
+
     def ML_SAM_Main(self, cfg=None):
         now_start = datetime.now()
         print(f"Execution Started: {now_start.strftime('%y%m%d %H:%M:%S')}")
+
+        # ------------------------------------------------------------
+        # 1. Collect all image‐folders and annotation JSONs from site_config
+        # ------------------------------------------------------------
         all_folders = []
         all_annotations = []
-
         paths = self.site_config.get('Path', [])
         for path in paths:
-            # If site_name is mentioned as "all_sites" in the site_config.json, then all the sites are considered i.e., all the folders and annotatons listed under the Path in the json
-            if self.site_name == "all_sites":
-                directory_path = path['directoryPaths']
-                self.folders = directory_path.get('folders', [])
-                self.annotation_files = directory_path.get('annotations', [])
-                self.all_folders.extend(self.folders)
-                self.all_annotations.extend(self.annotation_files)
-            # If site_name is specific site then only the folders and annotatons of that particular site is considered for training. 
-            elif path['siteName'] == self.site_name:
-                directory_path = path['directoryPaths']
-                self.folders = directory_path.get('folders', [])
-                self.annotation_files = directory_path.get('annotations', [])
-                self.all_folders.extend(self.folders)
-                self.all_annotations.extend(self.annotation_files)
+            directory_path = path['directoryPaths']
+            folders = directory_path.get('folders', [])
+            annotation_files = directory_path.get('annotations', [])
 
-        self.dataset = self.dataset_util.load_images_and_annotations(self.all_folders, self.all_annotations)
-        self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
+            if self.site_name == "all_sites" or path.get('siteName') == self.site_name or self.site_name == "custom":
+                all_folders.extend(folders)
+                all_annotations.extend(annotation_files)
 
-        self.categories = self.build_unique_categories(self.all_annotations)
+        # ------------------------------------------------------------
+        # 2. Instantiate DatasetUtils (loads & indexes in __init__)
+        # ------------------------------------------------------------
+        self.dataset_util = DatasetUtils(
+            image_dirs=all_folders,
+            annotation_files=all_annotations
+        )
 
-        # Split dataset into train and validation sets
-        train_images, val_images = self.dataset_util.split_dataset(self.dataset)
-        self.dataset_util.save_split_dataset(train_images, val_images)
+        # expose dataset & index on self if you still rely on them elsewhere
+        self.dataset = self.dataset_util.dataset
+        self.annotation_index = self.dataset_util.annotation_index
+
+        # ------------------------------------------------------------
+        # 3. Build your categories if needed
+        # ------------------------------------------------------------
+        self.categories = self.build_unique_categories(all_annotations)
+
+        # ------------------------------------------------------------
+        # 4. Flatten image paths, split into train / val, and save them
+        # ------------------------------------------------------------
+        all_images = []
+        for entry in self.dataset.values():
+            all_images.extend(entry['images'])
+
+        train_images, val_images = self.dataset_util.split_dataset(
+            image_list=all_images,
+            train_split=0.9,
+            seed=42
+        )
+
+        self.dataset_util.save_split_dataset(
+            train_images=train_images,
+            val_images=val_images
+        )
 
         print(f"[DEBUG] train_images count: {len(train_images)}")
-        if len(train_images) == 0:
+        if not train_images:
             raise ValueError("No train images found!")
 
+        # ------------------------------------------------------------
+        # 5. Prepare SAM2 config & checkpoint
+        # ------------------------------------------------------------
         dirname = os.path.dirname(__file__)
-        # Build absolute path for the SAM2 YAML config file
-        model_cfg = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l.yaml")
-        model_cfg = os.path.normpath(model_cfg)
-        print("Model config path:", model_cfg)
+        model_cfg = os.path.normpath(os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l.yaml"))
+        sam2_checkpoint = os.path.normpath(os.path.join(dirname, "sam2", "checkpoints", "sam2.1_hiera_large.pt"))
 
-        # (Optionally, you might use sam2_checkpoint later to load weights.)
-        sam2_checkpoint = os.path.join(dirname, "sam2", "checkpoints", "sam2.1_hiera_large.pt")
-        sam2_checkpoint = os.path.normpath(sam2_checkpoint)
         assert os.path.isfile(model_cfg), f"Config file '{model_cfg}' does not exist."
+        assert os.path.isfile(sam2_checkpoint), f"Checkpoint '{sam2_checkpoint}' does not exist."
+        print("Model config path:", model_cfg)
         print("Checkpoint path:", sam2_checkpoint)
 
-        ### NEW: Instead of calling build_sam2(), we load and instantiate SAM2 model ourselves.
-        # Hydra requires that the config_path be relative.
+        # ------------------------------------------------------------
+        # 6. Initialize Hydra + instantiate SAM2 model + load weights
+        # ------------------------------------------------------------
         config_dir = os.path.join("sam2", "sam2", "configs", "sam2.1")
         print(f"Initializing Hydra with config_path: {config_dir}")
 
@@ -414,121 +412,108 @@ class ML_SAM:
         from hydra.utils import instantiate
         from omegaconf import OmegaConf
 
-        # GlobalHydra.instance().clear()
-        # Initialize Hydra explicitly with the relative path. (version_base can be None to suppress version warnings.)
         with initialize(config_path=config_dir, version_base=None):
-            # Use the config name without the ".yaml" extension.
-            cfg_intern = compose(config_name=os.path.splitext(os.path.basename(model_cfg))[0], overrides=[])
+            cfg_intern = compose(
+                config_name=os.path.splitext(os.path.basename(model_cfg))[0],
+                overrides=[]
+            )
             raw_model_cfg = OmegaConf.to_container(cfg_intern.model, resolve=True)
-            # Filter out keys that SAM2Base.__init__ does not expect.
-            offending_keys = [
-                "no_obj_embed_spatial",
-                "use_signed_tpos_enc_to_obj_ptrs",
-                "device"
-            ]
-            for key in offending_keys:
-                raw_model_cfg.pop(key, None)
-            # Recreate a DictConfig from the filtered dictionary.
+            for k in ("no_obj_embed_spatial",
+                      "use_signed_tpos_enc_to_obj_ptrs",
+                      "device"):
+                raw_model_cfg.pop(k, None)
             new_cfg = OmegaConf.create(raw_model_cfg)
-            # Instantiate the model without passing the extra keyword.
             model = instantiate(new_cfg, _recursive_=True)
-            checkpoint = torch.load(sam2_checkpoint, map_location=device)  # or 'cuda' if you prefer
+            checkpoint = torch.load(sam2_checkpoint, map_location=device)
 
-            # if model key is in checkpoint
             if "model" in checkpoint:
                 model.load_state_dict(checkpoint["model"], strict=False)
             else:
                 print("[INFO] Found raw state_dict checkpoint.")
                 model.load_state_dict(checkpoint, strict=False)
 
-        # Move the newly instantiated model to the proper device.
         self.sam2_model = model.to(device)
-
-        # Now create the predictor.
         predictor = SAM2ImagePredictor(self.sam2_model)
+        predictor.model.sam_mask_decoder.train(True)
+        predictor.model.sam_prompt_encoder.train(True)
 
-        predictor.model.sam_mask_decoder.train(True)  # enable training of mask decoder
-        predictor.model.sam_prompt_encoder.train(True)  # enable training of prompt encoder
+        # ------------------------------------------------------------
+        # 7. Training loop over learning rates
+        # ------------------------------------------------------------
+        for lr in self.learning_rates:
+            print(f"Training with learning rate: {lr}")
+            self.train_sam(
+                lr, self.weight_decay,
+                predictor,
+                train_images,
+                val_images,
+                epochs=self.num_epochs
+            )
 
-        # Iterate over learning rates and run training.
-        for learnrate in self.learning_rates:
-            print(f"Training with learning rate: {learnrate}")
-            self.train_sam(learnrate, self.weight_decay, predictor, train_images, val_images, epochs=self.num_epochs)
-
+            # synchronize epoch & loss lengths
             if len(self.epoch_list) != len(self.loss_values):
-                print(f"[WARNING] Mismatch detected! Epoch list contains {len(self.epoch_list)} entries, "
-                      f"but loss values only contain {len(self.loss_values)} entries.")
-                print(f"Epoch list: {self.epoch_list}")
-                print(f"Loss values: {self.loss_values}")
+                print(f"[WARNING] Epoch list has {len(self.epoch_list)} entries, "
+                      f"loss list has {len(self.loss_values)} entries.")
                 self.epoch_list = self.epoch_list[:len(self.loss_values)]
 
+            # plot loss
             plt.plot(self.epoch_list, self.loss_values, marker='*')
             plt.title('Epoch vs loss')
-            plt.xlabel('Epoch')
-            plt.ylabel('loss')
-            plt.savefig(f"{self.site_name}_EpochVsLoss_{learnrate}_{self.formatted_time}.png")
+            plt.xlabel('Epoch');
+            plt.ylabel('Loss')
+            plt.savefig(f"{self.site_name}_EpochVsLoss_{lr}_{self.formatted_time}.png")
             plt.close()
 
-
-            plt.plot(self.epoch_list, self.train_accuracy_values, label="Training Accuracy", marker='o')
-            plt.plot(self.epoch_list, self.val_accuracy_values, label="Validation Accuracy", marker='s')
-            plt.xlabel("Epoch")
+            # plot accuracy
+            plt.plot(self.epoch_list, self.train_accuracy_values, marker='o', label="Train Acc")
+            plt.plot(self.epoch_list, self.val_accuracy_values, marker='s', label="Val Acc")
+            plt.xlabel("Epoch");
             plt.ylabel("Accuracy")
-            plt.title("Training and Validation Accuracy Over Epochs")
+            plt.title("Training and Validation Accuracy")
             plt.legend()
-            plt.savefig(f"{self.site_name}_Accuracy_{learnrate}_{self.formatted_time}.png")
+            plt.savefig(f"{self.site_name}_Accuracy_{lr}_{self.formatted_time}.png")
             plt.close()
-        self.save_config_to_text(f"{self.site_name}_configuration_{self.formatted_time}.txt")
 
+        # ------------------------------------------------------------
+        # 8. Save final config & print timing
+        # ------------------------------------------------------------
+        self.save_config_to_text(f"{self.site_name}_configuration_{self.formatted_time}.txt")
         now_end = datetime.now()
-        print(f"Execution Started: {now_start.strftime('%y%m%d %H:%M:%S')}")
-        print(f"Execution Ended: {now_end.strftime('%y%m%d %H:%M:%S')}")
+        print(f"Execution Ended:   {now_end.strftime('%y%m%d %H:%M:%S')}")
 
 
     def build_unique_categories(self, annotation_files):
-        merged_categories = []
+        merged = []
         id_to_name = {}
         name_to_id = {}
 
-        for path in annotation_files:
+        for p in annotation_files:
             try:
-                with open(path, "r") as f:
-                    data = json.load(f)
-                    categories = data.get("categories", [])
+                data = json.load(open(p, 'r'))
+                cats = data.get('categories', [])
             except Exception as e:
-                print(f"Failed to load '{path}': {e}")
+                print(f"Failed loading '{p}': {e}")
                 continue
 
-            for cat in categories:
-                cat_id = cat.get("id")
-                cat_name = cat.get("name")
-
-                if cat_id is None or cat_name is None:
-                    print(f"Warning: Category in '{path}' missing 'id' or 'name': {cat}")
+            for cat in cats:
+                cid = cat.get('id'); cname = cat.get('name')
+                if cid is None or cname is None:
+                    print(f"Warning: bad category entry in '{p}': {cat}")
                     continue
 
-                # Check for ID–name consistency
-                if cat_id in id_to_name:
-                    if id_to_name[cat_id] != cat_name:
-                        print(f"⚠️ ID conflict in '{path}': ID {cat_id} is '{id_to_name[cat_id]}' but also used for '{cat_name}'")
-                        continue  # Skip conflicting entry
-                else:
-                    id_to_name[cat_id] = cat_name
+                # check ID↔name consistency
+                if cid in id_to_name and id_to_name[cid] != cname:
+                    print(f"⚠️ ID conflict: {cid} is '{id_to_name[cid]}' and '{cname}'")
+                    continue
+                id_to_name[cid] = cname
 
-                # Check for name–ID consistency
-                if cat_name in name_to_id:
-                    if name_to_id[cat_name] != cat_id:
-                        print(f"⚠️ Name conflict in '{path}': Name '{cat_name}' has ID {name_to_id[cat_name]} and also ID {cat_id}")
-                        continue  # Skip conflicting entry
-                else:
-                    name_to_id[cat_name] = cat_id
+                if cname in name_to_id and name_to_id[cname] != cid:
+                    print(f"⚠️ Name conflict: '{cname}' → {name_to_id[cname]} vs {cid}")
+                    continue
+                name_to_id[cname] = cid
 
-                # Safe to add
-                merged_categories.append({
-                    "id": cat_id,
-                    "name": cat_name
-                })
+                merged.append({"id": cid, "name": cname})
 
-        # Remove duplicates by ID–name pair
-        unique_categories = { (cat["id"], cat["name"]): cat for cat in merged_categories }
-        return list(unique_categories.values())
+        # dedupe
+        unique = {(c['id'], c['name']): c for c in merged}
+        return list(unique.values())
