@@ -4,8 +4,7 @@ from pathlib import Path
 from promptlib import Files
 
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
-from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtWidgets import (QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox, QComboBox)
 from PyQt5.uic import loadUi
 
@@ -15,7 +14,6 @@ matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Save_Utils import JsonEditor
 from coco_generator import CocoGenerator
-
 
 import torch
 
@@ -78,17 +76,22 @@ class GRIME_AI_HyperparametersDlg(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        import xml.etree.ElementTree as ET
-        ui_file = r"QDialog_Hyperparameters.ui"  # use the same path you printed above
-        tree = ET.parse(ui_file)
-        print("Widgets declared in this UI:")
-        for w in tree.getroot().iter('widget'):
-            cls = w.get('class')
-            name = w.get('name')
-            print(f"  {cls:12} → {name!r}")
-
         ui_file = r"QDialog_Hyperparameters.ui"  # use the same path you printed above
         loadUi(ui_file, self)
+
+        self._pendingThumbnails = []
+        self._batchSize = 10  # number of thumbs per batch
+        self._batchDelay = 50  # ms between batches
+        self._loadToken = 0  # to cancel stale batches
+
+        if 0:   #DIAGNOSTICS
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(ui_file)
+            print("Widgets declared in this UI:")
+            for w in tree.getroot().iter('widget'):
+                cls = w.get('class')
+                name = w.get('name')
+                print(f"  {cls:12} → {name!r}")
 
         # --- Filmstrip one‐row configuration ---
         filmstrip = self.listWidget_annotationFilmstrip
@@ -410,29 +413,65 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
     def populate_filmstrip(self, image_paths):
         """
-        Given a list of file paths, clear the filmstrip and add each
-        image as a thumbnail icon.
+        1) Clear old thumbnails.
+        2) Enqueue placeholders + paths.
+        3) Kick off _loadNextBatch via QTimer.
         """
-        # clear existing items
-        self.listWidget_filmstrip.clear()
+        lw = self.listWidget_filmstrip
+        lw.clear()
 
-        icon_size = self.listWidget_filmstrip.iconSize()
-        for idx, path in enumerate(image_paths):                      # <<< changed: enumerate
-            pixmap = QPixmap(path)
-            if pixmap.isNull():
-                continue  # skip invalid images
+        # Invalidate any previous loader
+        self._loadToken += 1
+        token = self._loadToken
+        self._pendingThumbnails.clear()
 
-            # scale to fit iconSize, keeping aspect ratio
-            thumb = pixmap.scaled(icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # Create one blank item per image path
+        iconSize = lw.iconSize()
+        for idx, path in enumerate(image_paths):
+            item = QListWidgetItem(QIcon(), "")
+            item.setData(Qt.UserRole, idx)
+            item.setSizeHint(iconSize)
+            lw.addItem(item)
+            self._pendingThumbnails.append((item, path, token))
 
-            item = QListWidgetItem()
+        # Highlight first by default
+        if lw.count():
+            lw.setCurrentRow(0)
+
+        # Schedule the first batch load
+        QTimer.singleShot(self._batchDelay, lambda: self._loadNextBatch(token))
+
+
+    def _loadNextBatch(self, token):
+        """
+        Pop up to self._batchSize thumbnails from self._pendingThumbnails,
+        assign icons, then reschedule if more remain.
+        """
+        # Cancel if stale
+        if token != self._loadToken:
+            return
+
+        lw = self.listWidget_filmstrip
+        iconSize = lw.iconSize()
+
+        for _ in range(min(self._batchSize, len(self._pendingThumbnails))):
+            item, path, _ = self._pendingThumbnails.pop(0)
+            if not os.path.exists(path):
+                continue
+            pix = QPixmap(path)
+            if pix.isNull():
+                continue
+
+            thumb = pix.scaled(
+                iconSize,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
             item.setIcon(QIcon(thumb))
-            item.setData(Qt.UserRole, idx)                           # <<< changed: store index
-            self.listWidget_filmstrip.addItem(item)
 
-        # highlight the first thumbnail by default
-        if self.listWidget_filmstrip.count():
-            self.listWidget_filmstrip.setCurrentRow(0)
+        # More to do?
+        if self._pendingThumbnails:
+            QTimer.singleShot(self._batchDelay, lambda: self._loadNextBatch(token))
 
 
     def browse_folder_new(self):
@@ -463,13 +502,15 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             QMessageBox.warning(self, "ROI Analyzer", "Unable to import ROI Analyzer module.")
             return
 
-        # 1) generate pairs + filmstrip
+        # 1) generate pairs + batched filmstrip population
         temp = GRIME_AI_ROI_Analyzer("", "")
         pairs = temp.generate_file_pairs(folder)
         if not pairs:
             QMessageBox.warning(self, "ROI Analyzer", "No image/mask pairs found.")
             return
         self._pairs = pairs
+
+        # Replace inline loop with batched loader
         image_paths = [orig for orig, _ in pairs]
         self.populate_filmstrip(image_paths)
 
@@ -486,9 +527,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             # fallback: load the original image manually
             img = cv2.imread(orig_path)
             if img is None or img.size == 0:
-                QMessageBox.warning(self, "ROI Analyzer",
-                                    f"Could not generate results pixmap or load original:\n{e}")
+                QMessageBox.warning(
+                    self,
+                    "ROI Analyzer",
+                    f"Could not generate results pixmap or load original:\n{e}"
+                )
                 return
+
             rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w = rgb.shape[:2]
             comp_pix = QPixmap.fromImage(
