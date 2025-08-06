@@ -115,6 +115,7 @@ class ML_SAM:
                 self.image_shape_cache[image_path] = (h, w)
             return np.array([[w // 2, h // 2]])
 
+
     def train_sam(self, learnrate, weight_decay, predictor, train_images, val_images, epochs=20):
         progress_bar_closed = False
 
@@ -336,9 +337,9 @@ class ML_SAM:
         now_start = datetime.now()
         print(f"Execution Started: {now_start.strftime('%y%m%d %H:%M:%S')}")
 
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # 1. Collect all image‐folders and annotation JSONs from site_config
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         all_folders = []
         all_annotations = []
         paths = self.site_config.get('Path', [])
@@ -354,10 +355,7 @@ class ML_SAM:
         # ------------------------------------------------------------
         # 2. Instantiate DatasetUtils (loads & indexes in __init__)
         # ------------------------------------------------------------
-        self.dataset_util = DatasetUtils(
-            image_dirs=all_folders,
-            annotation_files=all_annotations
-        )
+        self.dataset_util = DatasetUtils(image_dirs=all_folders, annotation_files=all_annotations)
 
         # expose dataset & index on self if you still rely on them elsewhere
         self.dataset = self.dataset_util.dataset
@@ -381,18 +379,15 @@ class ML_SAM:
             seed=42
         )
 
-        self.dataset_util.save_split_dataset(
-            train_images=train_images,
-            val_images=val_images
-        )
+        self.dataset_util.save_split_dataset( train_images=train_images, val_images=val_images)
 
         print(f"[DEBUG] train_images count: {len(train_images)}")
         if not train_images:
             raise ValueError("No train images found!")
 
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # 5. Prepare SAM2 config & checkpoint
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         dirname = os.path.dirname(__file__)
         model_cfg = os.path.normpath(os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l.yaml"))
         sam2_checkpoint = os.path.normpath(os.path.join(dirname, "sam2", "checkpoints", "sam2.1_hiera_large.pt"))
@@ -402,9 +397,9 @@ class ML_SAM:
         print("Model config path:", model_cfg)
         print("Checkpoint path:", sam2_checkpoint)
 
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # 6. Initialize Hydra + instantiate SAM2 model + load weights
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         config_dir = os.path.join("sam2", "sam2", "configs", "sam2.1")
         print(f"Initializing Hydra with config_path: {config_dir}")
 
@@ -437,9 +432,9 @@ class ML_SAM:
         predictor.model.sam_mask_decoder.train(True)
         predictor.model.sam_prompt_encoder.train(True)
 
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # 7. Training loop over learning rates
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         for lr in self.learning_rates:
             print(f"Training with learning rate: {lr}")
             self.train_sam(
@@ -474,9 +469,9 @@ class ML_SAM:
             plt.savefig(f"{self.site_name}_Accuracy_{lr}_{self.formatted_time}.png")
             plt.close()
 
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # 8. Save final config & print timing
-        # ------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         self.save_config_to_text(f"{self.site_name}_configuration_{self.formatted_time}.txt")
         now_end = datetime.now()
         print(f"Execution Ended:   {now_end.strftime('%y%m%d %H:%M:%S')}")

@@ -5,7 +5,7 @@ from PIL import Image
 
 from GRIME_AI_QProgressWheel import QProgressWheel
 
-class GRIME_AI_CompositeSlices():
+class GRIME_AI_CompositeSlices:
     def __init__(self, sliceCenter, sliceWidth, show_gui=True):
         """
         Initializes the object with the given slice center and slice width.

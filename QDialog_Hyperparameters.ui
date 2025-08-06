@@ -7,17 +7,20 @@
     <x>0</x>
     <y>0</y>
     <width>965</width>
-    <height>602</height>
+    <height>615</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Configure Settings</string>
   </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>1</number>
      </property>
      <widget class="QWidget" name="tabSegmentImages">
       <attribute name="title">
@@ -182,9 +185,9 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="tabParameters">
+     <widget class="QWidget" name="tabModelTraining">
       <attribute name="title">
-       <string>Model Training</string>
+       <string>Train Model</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalTabParametersLayout">
        <item>
@@ -624,7 +627,7 @@
      </widget>
      <widget class="QWidget" name="tabDataAnnotation">
       <attribute name="title">
-       <string>Data Annotation</string>
+       <string>Data Annotation (PROTOTYPE)</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutDataAnnotation">
        <item>
@@ -695,26 +698,6 @@
                 <property name="selectionMode">
                  <enum>QAbstractItemView::ContiguousSelection</enum>
                 </property>
-                <item>
-                 <property name="text">
-                  <string>Sky</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Water</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Snow</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Unknown</string>
-                 </property>
-                </item>
                </widget>
               </item>
              </layout>
@@ -761,6 +744,25 @@
                 <property name="text">
                  <string>Polyline - Drag</string>
                 </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_controls">
+                <property name="title">
+                 <string>ROI Controls</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_controls">
+                 <item>
+                  <widget class="QPushButton" name="pushButton_ROI_Reset">
+                   <property name="text">
+                    <string>Reset</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </widget>
               </item>
              </layout>
@@ -814,7 +816,7 @@
      </widget>
      <widget class="QWidget" name="tabCOCO">
       <attribute name="title">
-       <string>COCO Generation</string>
+       <string>COCO Generation (PROTOTYPE)</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutCOCO">
        <item>
@@ -869,9 +871,9 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="tabNewFolderBrowser">
+     <widget class="QWidget" name="tabROIAnalyzer">
       <attribute name="title">
-       <string>ROI Analyzer</string>
+       <string>ROI Analyzer (PROTOTYPE)</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutFolderBrowser">
        <item>
@@ -879,7 +881,7 @@
          <item>
           <widget class="QLineEdit" name="lineEdit_folderPathNew">
            <property name="placeholderText">
-            <string>Enter folder path...</string>
+            <string>Enter folder path…</string>
            </property>
           </widget>
          </item>
@@ -936,23 +938,151 @@
         </layout>
        </item>
        <item>
-        <widget class="QLabel" name="label_displayImages">
-         <property name="text">
-          <string>Image Preview</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="horizontalLayoutMetricsAndImage">
+         <item>
+          <widget class="QGroupBox" name="groupBox_metrics">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="title">
+            <string>Metrics</string>
+           </property>
+           <layout class="QFormLayout" name="formLayout_metrics">
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_intensity">
+              <property name="text">
+               <string>Intensity (I):</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLineEdit" name="lineEdit_intensity">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maxLength">
+               <number>8</number>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_entropy">
+              <property name="text">
+               <string>Entropy (E):</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="lineEdit_entropy">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maxLength">
+               <number>8</number>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_T">
+              <property name="text">
+               <string>T:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="lineEdit_Texture">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maxLength">
+               <number>8</number>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="label_GLI">
+              <property name="text">
+               <string>GLI:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QLineEdit" name="lineEdit_GLI">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maxLength">
+               <number>8</number>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="label_GCC">
+              <property name="text">
+               <string>GCC:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QLineEdit" name="lineEdit_GCC">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maxLength">
+               <number>8</number>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_displayImages">
+           <property name="text">
+            <string>Image Preview</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QPushButton" name="pushButton_analyze">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
          <property name="minimumSize">
           <size>
            <width>150</width>

@@ -992,13 +992,17 @@
     </property>
     <addaction name="action_CompositeSlices"/>
     <addaction name="action_TriageImages"/>
-    <addaction name="action_ExtractCOCOMasks"/>
     <addaction name="separator"/>
+    <addaction name="separator"/>
+    <addaction name="action_Generate_Greenness_Test_Images"/>
+    <addaction name="separator"/>
+    <addaction name="separator"/>
+    <addaction name="action_ExtractCOCOMasks"/>
+    <addaction name="action_Sync_JSON_Annotations"/>
+    <addaction name="action_CreateJSON"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="action_RefreshNEON"/>
-    <addaction name="action_CreateJSON"/>
-    <addaction name="action_Generate_Greenness_Test_Images"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuImage_Set"/>
@@ -1059,6 +1063,11 @@
   <action name="action_Generate_Greenness_Test_Images">
    <property name="text">
     <string>Generate Greenness Test Images</string>
+   </property>
+  </action>
+  <action name="action_Sync_JSON_Annotations">
+   <property name="text">
+    <string>Sync JSON Annotations</string>
    </property>
   </action>
  </widget>

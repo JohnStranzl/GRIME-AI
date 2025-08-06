@@ -171,7 +171,7 @@ from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog
+    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
 
 from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
@@ -241,6 +241,8 @@ from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
 from colorSegmentationParams import colorSegmentationParamsClass
 from GRIME_AI_GreenImageGenerator import GreenImageGenerator
+
+from GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -384,7 +386,6 @@ if 0:
 
 SITECODE = 'ARIK'
 DOMAINCODE = 'D10'
-SITENAME = ''
 originalImg = []
 dailyImagesList = dailyList([], [])
 currentImage = []
@@ -406,7 +407,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.6.0 (beta 9)"
+SW_VERSION = "Ver.: 0.0.6.0 (beta 10)"
 
 class displayOptions():
     displayROIs = True
@@ -580,9 +581,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.session = session
         self.ui = Ui_MainWindow()
 
-        #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
-        #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
-
         self.setWindowTitle("GRIME AI: John E. Stranzl Jr.")
         #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setupUi(self)
@@ -679,11 +677,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_USGS_BrowseImageFolder.clicked.connect(self.pushButton_USGS_BrowseImageFolder_Clicked)
         self.pushButton_NEON_BrowseImageFolder.clicked.connect(self.pushButton_NEON_BrowseImageFolder_Clicked)
 
-        #JES self.radioButton_ROIShapeRectangle.clicked.connect(self.ROIShapeClicked)
-        #JES self.radioButton_ROIShapeEllipse.clicked.connect(self.ROIShapeClicked)
-        #JES self.pushButton_TrainGood.clicked.connect(self.pushButtonTrainGoodTriggered)
-        #JES self.pushButton_TrainBad.clicked.connect(self.pushButtonTrainBadTriggered)
-
         # INITIALIZE WIDGETS
         maxRows = self.tableWidget_ROIList.rowCount()
         nCol = 0
@@ -694,12 +687,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_SaveSettings.triggered.connect(self.menubarSaveSettings)
         self.action_ReleaseNotes.triggered.connect(self.toolbarButtonReleaseNotes)
         self.action_CompositeSlices.triggered.connect(self.menubarCompositeSlices)
-        self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
         self.action_TriageImages.triggered.connect(self.toolbarButtonImageTriage_2)
         self.action_Generate_Greenness_Test_Images.triggered.connect(self.menubar_Generate_Greenness_Test_Images)
 
         self.action_RefreshNEON.triggered.connect(self.menubar_RefreshNEON)
+
         self.action_CreateJSON.triggered.connect(self.menubar_CreateJSON)
+        self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
+        self.action_Sync_JSON_Annotations.triggered.connect(self.menubar_sync_json_annotations)
 
         # GRAPH TAB(S)
 
@@ -1292,34 +1287,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         JsonEditor().update_json_entry("USGS_Root_Folder", folder)
 
 
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
-    def spinBoxOrbMaxFeaturesChanged(self):
-        self.refreshImage()
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
-    def clearoutImagePanels(self):
-        self.labelOriginalImage.clear()
-        self.labelEdgeImage.clear()
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
-    def getImageFolder(self):
-        imageFolder = self.lineEditHardDriveFolder.text()
-        if len(imageFolder) > 0:
-            if os.path.exists(imageFolder):
-                return imageFolder
-            else:
-                return ''
-        else:
-            return ''
-
     # ==================================================================================================================
     #
     # ==================================================================================================================
@@ -1529,56 +1496,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception:
              pass
 
-    # ======================================================================================================================
-    # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
-    # ======================================================================================================================
-    def NEON_FormatProductTable(self, tableProducts):
-        maxRows = 1
-
-        #JES: MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
-        for i in range(tableProducts.rowCount()):
-            tableProducts.removeRow(0)
-
-        tableProducts.insertRow(0)
-
-        for i in range(maxRows):
-            m = 0
-            tableProducts.setItem(i, m, QTableWidgetItem(''))
-
-            # CONFIGURE DATES FOR SPECIFIC PRODUCT
-            m += 1
-            date_widget = QtWidgets.QDateEdit()
-            date_widget.setDisabled(True)
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            m += 1
-            date_widget = QtWidgets.QDateEdit()
-            date_widget.setDisabled(True)
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            m += 1
-            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            date_widget.setDate(QtCore.QDate(2021, 12, 1))
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            m += 1
-            date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-            date_widget.setDate(QtCore.QDate(2022, 1, 1))
-            tableProducts.setCellWidget(i, m, date_widget)
-
-            # --------------------
-            # --------------------
-            m += 1
-            dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
-            dateTime.setFrame(False)
-            tableProducts.setCellWidget(i, m, dateTime)
-
-            m += 1
-            dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
-            dateTime.setFrame(False)
-            tableProducts.setCellWidget(i, m, dateTime)
 
     # ==================================================================================================================
     #
@@ -1617,15 +1534,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Set the stretch mode to adapt to any remaining space
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
 
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def ROIShapeClicked(self):
-        if self.radioButton_ROIShapeRectangle.isChecked() == True:
-            self.labelOriginalImage.setROIShape(ROIShape.RECTANGLE)
-        elif self.radioButton_ROIShapeEllipse.isChecked() == True:
-            self.labelOriginalImage.setROIShape(ROIShape.ELLIPSE)
 
     # ==================================================================================================================
     #
@@ -1751,28 +1659,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         nSecond = time.second()
 
         return nHour, nMinute, nSecond
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def pushButtonTrainGoodTriggered(self):
-        blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
-        imageStats = GRIME_AI_ImageStats()
-        imageStats.setBlurValue(blur)
-        imageStats.setBrightnessValue(intensity)
-        imageStats.setLabel('good')
-        self.imageStatsList.append(imageStats)
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def pushButtonTrainBadTriggered(self):
-        blur, intensity = GRIME_AI_ImageTriage.computeBlurAndBrightness(self.spinBoxShiftSize.value())
-        imageStats = GRIME_AI_ImageStats()
-        imageStats.setBlurValue(blur)
-        imageStats.setBrightnessValue(intensity)
-        imageStats.setLabel('bad')
-        self.imageStatsList.append(imageStats)
 
 
     # ==================================================================================================================
@@ -2030,6 +1916,58 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def rejected_COCODlg(self):
         pass
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def menubar_sync_json_annotations(self):
+        selected_dir = QFileDialog.getExistingDirectory(
+            parent=None,
+            caption="Select a Folder",
+            directory="C:/",  # initial directory
+            options=QFileDialog.ShowDirsOnly
+        )
+
+        if selected_dir:
+            util = GRIME_AI_COCO_Utils(selected_dir)
+            #util.process()
+            print("Selected folder:", selected_dir)
+
+            """Execute full validation and cleaning pipeline."""
+            util.find_json_file()
+            util.load_json()
+
+            present, missing = util.check_images()
+            if not missing:
+                print("All images in JSON are present.")
+                return
+            else:
+                # Create the message box
+                msg_box = QMessageBox()
+                msg_box.setWindowTitle("Confirmation")
+                msg_box.setText("Do you want to sync the JSON annotations with the available images?")
+
+                # Use Question icon and add buttons
+                msg_box.setIcon(QMessageBox.Question)
+                msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+
+                if msg_box.exec_() == QMessageBox.Yes:
+                    util.backup_original()
+                    cleaned = util.clean_data(present)
+                    util.write_json(cleaned)
+
+                    msg_box.setWindowTitle("Completion")
+                    msg_box.setText("JSON annotations sync'ed with the available images.")
+
+                    # Use Question icon and add buttons
+                    msg_box.setIcon(QMessageBox.Question)
+                    msg_box.setStandardButtons(QMessageBox.Ok)
+
+                    # Execute and capture response
+                    if msg_box.exec_() == QMessageBox.Ok:
+                        print("New JSON created for the images available in the folder.")
+
 
     # ==================================================================================================================
     # ==================================================================================================================
@@ -4212,268 +4150,11 @@ def closehyperparameterDlg():
     hyperparameterDlg = None
 
 
-def resizeImage(image, scale_percent):
-    # --------------------------------------------------------------------------------
-    # reshape the image to be a list of pixels
-    # --------------------------------------------------------------------------------
-    if scale_percent == 100.0:
-        return image
-    else:
-        width = int(image.shape[1] * scale_percent / 100)
-        height = int(image.shape[0] * scale_percent / 100)
-
-        dim = (width, height)
-
-        resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-
-        return resized
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def updateProductTableDateRange(productTable, nRow, startDate, endDate):
-
-    productTable.setItem(0, 1, QTableWidgetItem('Image Source: Hard Drive'))
-
-    # CONFIGURE DATES FOR SPECIFIC PRODUCT
-    for m in [2, 4]:
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(startDate.year, startDate.month, startDate.day))
-        productTable.setCellWidget(nRow, m, date_widget)
-
-        productTable.resizeColumnToContents(m)
-        if m == 2:
-            date_widget.setDisabled(True)
-        else:
-            date_widget.setDisabled(False)
-
-    for m in [3, 5]:
-        date_widget = QtWidgets.QDateEdit(QtCore.QDate(endDate.year, endDate.month, endDate.day))
-        if m == 3:
-            date_widget.setDisabled(True)
-        else:
-            date_widget.setDisabled(False)
-
-        productTable.setCellWidget(nRow, m, date_widget)
-
-        productTable.resizeColumnToContents(m)
-
-    productTable.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def compute_average_image_color(img):
-    width, height = img.size
-
-    r_total = 0
-    g_total = 0
-    b_total = 0
-
-    count = 0
-    for x in range(0, width):
-        for y in range(0, height):
-            r, g, b = img.getpixel((x, y))
-            r_total += r
-            g_total += g
-            b_total += b
-            count += 1
-
-    return (r_total / count, g_total / count, b_total / count)
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def checkColorMatch(painter, clusterCenters, hist, roiList):
-    global currentImage
-
-    refCluster, refhist = roiList[0].getClusterCenters()
-    refLab = rgb2lab(refCluster[0])
-
-    if len(roiList) > 0:
-        for referenceROI in roiList:
-            lab0 = rgb2lab(clusterCenters[0])
-
-            pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
-            painter.setPen(pen)
-            font = painter.font()
-            font.setPointSize(font.pointSize())
-            painter.setFont(font)
-            if lab0[0] > refLab[0]:
-                label = referenceROI.getROIName()[2:len(referenceROI.getROIName())]
-            else:
-                label = referenceROI.getROIName()
-
-            # delta_e_76 = delta_e_cie1976(refLab, lab0)
-
-            # DRAW TEXT WITH L*a*b* VALUES FOR THE REFERENCE IMAGE
-            #painter.drawText(QtCore.QRect(1, 1, 1200, 200), QtCore.Qt.AlignLeft, "Ref. Values")
-            #painter.drawText(QtCore.QRect(1800, 300, 1200, 200), QtCore.Qt.AlignLeft, 'L: ' + refLab[0].__str__())
-            #painter.drawText(QtCore.QRect(1800, 500, 1200, 200), QtCore.Qt.AlignLeft, 'a*: ' + refLab[1].__str__())
-            #painter.drawText(QtCore.QRect(1800, 700, 1200, 200), QtCore.Qt.AlignLeft, 'b*: ' + refLab[2].__str__())
-
-            # DRAW TEXT WITH L*a*b* VALUE FOR THE CURRENT IMAGE
-            #painter.drawText(QtCore.QRect(referenceROI.getDisplayROI().x, referenceROI.getDisplayROI().y, 1200, 200), QtCore.Qt.AlignLeft, label)
-            #painter.drawText(QtCore.QRect(referenceROI.getDisplayROI().x, referenceROI.getDisplayROI().y+200, 1200, 200), QtCore.Qt.AlignLeft, 'L: ' + lab0[0].__str__())
-            #painter.drawText(QtCore.QRect(referenceROI.getDisplayROI().x, referenceROI.getDisplayROI().y+400, 1200, 200), QtCore.Qt.AlignLeft, 'a*: ' + lab0[1].__str__())
-            #painter.drawText(QtCore.QRect(referenceROI.getDisplayROI().x, referenceROI.getDisplayROI().y+600, 1200, 200), QtCore.Qt.AlignLeft, 'b*: ' + lab0[2].__str__())
-
-            # painter.end()
-    else:
-        lab0 = rgb2lab(clusterCenters[0])
-
-        # painter = QPainter(currentImage)
-        pen = QPen(QtCore.Qt.red, 2, QtCore.Qt.SolidLine)
-        painter.setPen(pen)
-        font = painter.font()
-        font.setPointSize(font.pointSize() * 15)
-        painter.setFont(font)
-        painter.drawText(QtCore.QRect(100, 300, 1200, 200), QtCore.Qt.AlignLeft, 'L: ' + lab0[0].__str__())
-        painter.drawText(QtCore.QRect(100, 600, 1200, 200), QtCore.Qt.AlignLeft, 'a*: ' + lab0[1].__str__())
-        painter.drawText(QtCore.QRect(100, 600, 1200, 200), QtCore.Qt.AlignLeft, 'a*: ' + lab0[1].__str__())
-        painter.drawText(QtCore.QRect(100, 900, 1200, 200), QtCore.Qt.AlignLeft, 'b*: ' + lab0[2].__str__())
-
-        painter.end()
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def featureMatch():
-
-    # Read the query image as query_img
-    # and train image This query image
-    # is what you need to find in train image
-    # Save it in the same directory
-    # with the name image.jpg
-    query_img = cv2.imread('F://000 - University of Nebraska//0000 - Hydrology Images//PBT//Oxbow//Temp//A.jpg')
-    train_img = cv2.imread('F://000 - University of Nebraska//0000 - Hydrology Images//PBT//Oxbow//Temp//B.jpg')
-
-    # Convert it to grayscale
-    query_img_bw = cv2.cvtColor(query_img, cv2.COLOR_BGR2GRAY)
-    train_img_bw = cv2.cvtColor(train_img, cv2.COLOR_BGR2GRAY)
-
-    #query_img_bw = cv2.GaussianBlur(query_img_bw, (21, 21), 0)
-    #train_img_bw = cv2.GaussianBlur(train_img_bw, (21, 21), 0)
-
-    #query_img_bw = cv2.Canny(query_img_bw, 100, 150)
-    #train_img_bw = cv2.Canny(train_img_bw, 100, 150)
-
-    # Initialize the ORB detector algorithm
-    orb = cv2.ORB_create()
-    #orb.setEdgeThreshold(50)
-    #orb.setNLevels(10)
-    #orb.setPatchSize(30)
-    #orb.setMaxFeatures(8000)
-
-    #kp = orb.detect(train_img, None)
-    #kp, des = orb.compute(train_img, kp)
-
-    #edges = cv2.drawKeypoints(train_img, kp, None, color=(0, 255, 0), flags=0)
-
-    # Now detect the keypoints and compute the descriptors for the query image and train image
-    queryKeypoints, queryDescriptors = orb.detectAndCompute(query_img_bw, None)
-    trainKeypoints, trainDescriptors = orb.detectAndCompute(train_img_bw, None)
-
-    # Initialize the Matcher for matching the keypoints and then match the keypoints
-    matcher = cv2.BFMatcher()
-    matches = matcher.match(queryDescriptors, trainDescriptors)
-    #matches = sorted(matches, key=lambda x:x.distance)
-
-    # draw the matches to the final image containing both the images the drawMatches()
-    # function takes both images and keypoints and outputs the matched query image with its train image
-    final_img = cv2.drawMatches(query_img_bw, queryKeypoints,
-                                train_img_bw, trainKeypoints, matches[:20], None)
-
-    final_img = cv2.resize(final_img, (1500, 1150))
-
-    # Show the final image
-    cv2.imshow("Matches", final_img)
-    cv2.waitKey(0)
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
 def extractROI(rect, image):
     return(image[rect.y():rect.y() + rect.height(), rect.x():rect.x() + rect.width()])
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def url_to_image(url):
-    # download the image, convert it to a NumPy array, and then read it into OpenCV format
-    ssl._create_default_https_context = ssl._create_unverified_context
-    resp = urlopen(url)
-
-    image = np.asarray(bytearray(resp.read()), dtype="uint8")
-
-    image = cv2.imdecode(image, cv2.IMREAD_COLOR)
-
-    return image
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def isColor(r, g, b):
-    return (r != g != b)
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def rgb2lab(inputColor):
-    num = 0
-    RGB = [0, 0, 0]
-
-    for value in inputColor:
-        value = float(value) / 255
-
-        if value > 0.04045:
-            value = ((value + 0.055) / 1.055) ** 2.4
-        else:
-            value = value / 12.92
-
-        RGB[num] = value * 100
-        num = num + 1
-
-    XYZ = [0, 0, 0, ]
-
-    X = RGB[0] * 0.4124 + RGB[1] * 0.3576 + RGB[2] * 0.1805
-    Y = RGB[0] * 0.2126 + RGB[1] * 0.7152 + RGB[2] * 0.0722
-    Z = RGB[0] * 0.0193 + RGB[1] * 0.1192 + RGB[2] * 0.9505
-    XYZ[0] = round(X, 4)
-    XYZ[1] = round(Y, 4)
-    XYZ[2] = round(Z, 4)
-
-    XYZ[0] = float(XYZ[0]) / 95.047  # ref_X =  95.047   Observer= 2°, Illuminant= D65
-    XYZ[1] = float(XYZ[1]) / 100.0  # ref_Y = 100.000
-    XYZ[2] = float(XYZ[2]) / 108.883  # ref_Z = 108.883
-
-    num = 0
-    for value in XYZ:
-
-        if value > 0.008856:
-            value = value ** (0.3333333333333333)
-        else:
-            value = (7.787 * value) + (16 / 116)
-
-        XYZ[num] = value
-        num = num + 1
-
-    Lab = [0, 0, 0]
-
-    L = (116 * XYZ[1]) - 16
-    a = 500 * (XYZ[0] - XYZ[1])
-    b = 200 * (XYZ[1] - XYZ[2])
-
-    Lab[0] = round(L, 4)
-    Lab[1] = round(a, 4)
-    Lab[2] = round(b, 4)
-
-    return Lab
 
 
 # ======================================================================================================================
@@ -4528,10 +4209,6 @@ def NEON_updateSiteInfo(self):
     global DOMAINCODE
     DOMAINCODE = siteInfo['data']['domainCode']
 
-    global SITENAME
-    SITENAME = siteInfo['data']['siteName']
-    #JES self.labelNEONSite.setText(SITENAME)
-
     keys = siteInfo['data'].keys()
     items = [f"{key}: {str(siteInfo['data'][key])}" for key in keys]
 
@@ -4544,31 +4221,6 @@ def NEON_updateSiteInfo(self):
     self.labelNEONSiteDetails.setText(SITECODE)
 
     return (SITECODE)
-
-
-    def NEON_fetch_site_info(self):
-        # EXTRACT THE SITE ID FOR THE SELECTED ITEM
-        siteID = self.NEON_listboxSites.currentItem().text()
-
-        global SITECODE
-        SITECODE = siteID.split(' - ')[0]
-
-        siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
-
-        global DOMAINCODE
-        DOMAINCODE = siteInfo['data']['domainCode']
-
-        global SITENAME
-        SITENAME = siteInfo['data']['siteName']
-        #JES self.labelNEONSite.setText(SITENAME)
-
-        keys = siteInfo['data'].keys()
-        items = [f"{key}: {str(siteInfo['data'][key])}" for key in keys]
-
-        if 0:
-            self.current_site_info = items
-
-        return (items)
 
 
 # ======================================================================================================================
@@ -4787,27 +4439,6 @@ def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_t
 
 
 # ======================================================================================================================
-#
-# ======================================================================================================================
-def downloadPBTImageFiles(self):
-    GRIME_AI_ProductTableObj = GRIME_AI_ProductTable()
-    GRIME_AI_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
-
-    start_date = GRIME_AI_ProductTableObj.getStartDate()
-    strStartDate = GRIME_AI_ProductTableObj.getStartDate()
-
-    end_date = GRIME_AI_ProductTableObj.getEndDate()
-    strEndDate = GRIME_AI_ProductTableObj.getEndDate()
-
-    startTime = GRIME_AI_ProductTableObj.getStartTime()
-    endTime = GRIME_AI_ProductTableObj.getEndTime()
-
-    delta = GRIME_AI_ProductTableObj.getDelta()
-
-    start_date += datetime.timedelta(days=1)
-
-
-# ======================================================================================================================
 # DOWNLOAD THE PRODUCT FILES SELECTED IN THE GUI BY THE END-USER.
 # ======================================================================================================================
 def downloadProductDataFiles(self, item):
@@ -4957,55 +4588,6 @@ def downloadProductDataFiles(self, item):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def labelEdgeImageDoubleClickEvent(self):
-    global currentImage
-
-    # CONVERT IMAGE FROM QImage FORMAT TO Mat FORMAT
-    img = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-    edges = []
-
-    if self.radioButtonCanny.isChecked():
-        # EDGE DETECTION: CANNY
-        edges = cv2.Canny(img, 100, 200)
-    elif self.radioButtonSIFT.isChecked():
-        # CONVERT COLOR IMAGE TO GRAY SCALE
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-        # REMOVE NOISE FROM THE IMAGE
-        if len(gray) != 0:
-            gray = cv2.GaussianBlur(gray, (3, 3), 0)
-
-        sift = cv2.SIFT_create()
-        kp, des = sift.detectAndCompute(gray, None)
-        edges = cv2.drawKeypoints(gray, kp, img)
-    elif self.radioButtonORB.isChecked():
-        value = self.spinBoxOrbMaxFeatures.value()
-        edges = calcOrb(img, value)
-    elif self.radioButtonSobelX.isChecked() or self.radioButtonSobelY or self.radioButtonSobelXY:
-        mySobel = sobelData()
-        sobelKernelSize = self.spinBoxSobelKernel.value()
-        mySobel.setSobelX(cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=sobelKernelSize))
-        mySobel.setSobelY(cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=sobelKernelSize))
-        mySobel.setSobelXY(cv2.Sobel(img, cv2.CV_64F, 1, 1, ksize=sobelKernelSize))
-        if self.radioButtonSobelX.isChecked():
-            edges = (mySobel.getSobelX() * 255 / mySobel.getSobelX().max()).astype(np.uint8)
-        elif self.radioButtonSobelY.isChecked():
-            edges = (mySobel.getSobelY() * 255 / mySobel.getSobelY().max()).astype(np.uint8)
-        elif self.radioButtonSobelXY.isChecked():
-            edges = (mySobel.getSobelXY() * 255 / mySobel.getSobelXY().max()).astype(np.uint8)
-
-    if not edges == []:
-        cv2.namedWindow('Output', cv2.WINDOW_NORMAL)
-        imS = cv2.resize(edges, (960, 540))
-        cv2.imshow('Output', imS)
-
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
 def NEON_labelOriginalImageDoubleClickEvent(self):
     global currentImage
 
@@ -5128,81 +4710,6 @@ def maxGrayLevel(img):
                 print("max_gray_level:", max_gray_level)
 
     return max_gray_level + 1
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def getGlcm(input, d_x, d_y):
-    srcdata = input.copy()
-
-    ret = [[0.0 for i in range(gray_level)] for j in range(gray_level)]
-    (height, width) = input.shape
-
-    max_gray_level = maxGrayLevel(input)
-
-    # If the number of gray levels is greater than gray_level, the gray level of the image is reduced to gray_level, reduce the size of the gray-level co-occurrence matrix
-    if max_gray_level > gray_level:
-        for j in range(height):
-            for i in range(width):
-                srcdata[j][i] = srcdata[j][i] * gray_level / max_gray_level
-
-    for j in range(height - d_y):
-        for i in range(width - d_x):
-            rows = srcdata[j][i]
-            cols = srcdata[j + d_y][i + d_x]
-            ret[rows][cols] += 1.0
-
-    for i in range(gray_level):
-        for j in range(gray_level):
-            ret[i][j] /= float(height * width)
-
-    return ret
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def feature_computer(p):
-    # con:Contrast reflects the sharpness of the image and the depth of the grooves of the texture. The sharper the texture, the greater the contrast, the greater the contrast.
-    # eng:Entropy,ENT) measures the randomness of the amount of information contained in the image and expresses the complexity of the image. When all the values in the co-occurrence matrix are equal or the pixel values show the greatest randomness, the entropy is the largest.
-    # agm:Angle second-order moment (energy), a measure of the uniformity of image gray distribution and texture thickness. When the image texture is uniform and regular, the energy value is large; on the contrary, the element values of the gray-level co-occurrence matrix are similar, and the energy value is small.
-    # idm:The inverse difference matrix is also called the inverse variance, which reflects the clarity and regularity of the texture. The texture is clear, regular, easy to describe, and has a larger value.
-    Con = 0.0
-    Eng = 0.0
-    Asm = 0.0
-    Idm = 0.0
-
-    for i in range(gray_level):
-        for j in range(gray_level):
-            Con += (i - j) * (i - j) * p[i][j]
-            Asm += p[i][j] * p[i][j]
-            Idm += p[i][j] / (1 + (i - j) * (i - j))
-            if p[i][j] > 0.0:
-                Eng += p[i][j] * math.log(p[i][j])
-
-    return Asm, Con, -Eng, Idm
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-def test(img):
-    img_shape = img.shape
-
-    # If you use &#39;/&#39;Will report TypeError: integer argument expected, got float
-    # In fact, the main error is because of cv2.The parameter in resize is required to be an integer
-    img = cv2.resize(img, (img_shape[1] // 2, img_shape[0] // 2), interpolation=cv2.INTER_CUBIC)
-
-    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-    glcm_0 = getGlcm(img_gray, 1, 0)
-    # glcm_1=getGlcm(src_gray,0,1)
-    # glcm_2=getGlcm(src_gray,1,1)
-    # glcm_3=getGlcm(src_gray,-11)print(glcm_0)
-
-    asm, con, eng, idm = feature_computer(glcm_0)
-    return [asm, con, eng, idm]
 
 
 def run_gui():
@@ -5467,77 +4974,12 @@ def load_model_main(cfg: DictConfig) -> None:
     myLocalModel = ML_Load_Model(cfg)
     myLocalModel.ML_Load_Model_Main(copy_original_image, save_masks, selected_label_categories)
 
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
 if __name__ == '__main__':
 
-    if 1:
-        my_main()
+    my_main()
 
-    # ###
-    # THIS SECTION IS TO TEST NEW FUNCTIONALITY OR EXTENSIVE CODE CHANGES BEFORE INTEGRATING INTO THE MAIN BODY OF CODE
-    # OR THE MAIN TRUNK IN GITHUB.
-    # ###
-
-    if 0:
-        train_main()
-    if 0:
-        view_segmentation_main()
-    if 0:
-        load_model_main()
-
-
-    if 0:
-        import matplotlib.pyplot as plt
-        from GRIME_AI_Texture import GLCMTexture, LBPTexture, GaborTexture, WaveletTexture, FourierTexture
-
-        # Create a synthetic grayscale image for demonstration
-        image = np.random.rand(256, 256)
-
-        # Instantiate our texture measurement classes:
-        glcm_obj = GLCMTexture()
-        gabor_obj = GaborTexture()
-        lbp_obj = LBPTexture()
-        wavelet_obj = WaveletTexture()
-        fourier_obj = FourierTexture()
-
-        # Compute features using each method
-        glcm_features = glcm_obj.compute_features(image)
-        gabor_features = gabor_obj.compute_features(image)
-        lbp_features = lbp_obj.compute_features(image)
-        wavelet_features = wavelet_obj.compute_features(image)
-        fourier_features = fourier_obj.compute_features(image)
-        laws_features = laws_texture_features(image)
-        haralick_features_dict = haralick_features(image)
-
-        print("Laws Texture Features:")
-        print(laws_features)
-        print("\nHaralick Features:")
-        print(haralick_features_dict)
-
-        # Print out the extracted features
-        print("GLCM Features:")
-        print(glcm_features)
-        print("\nGabor Features:")
-        print(gabor_features)
-        print("\nLBP Features (Histogram):")
-        print(lbp_features)
-        print("\nWavelet Features:")
-        print(wavelet_features)
-        print("\nFourier Radial Profile:")
-        print(fourier_features)
-        print("Laws Texture Features:")
-        print(laws_features)
-        print("\nHaralick Features:")
-        print(haralick_features_dict)
-
-        # Plot the Fourier radial profile as an example
-        plt.figure(figsize=(6, 4))
-        plt.plot(fourier_features, marker='o')
-        plt.title("Fourier Radial Profile")
-        plt.xlabel("Radial Bin")
-        plt.ylabel("Average Magnitude")
-        plt.grid(True)
-        plt.show()
 

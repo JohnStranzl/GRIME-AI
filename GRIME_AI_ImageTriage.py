@@ -10,7 +10,7 @@ from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from datetime import datetime
 
-class GRIME_AI_ImageTriage():
+class GRIME_AI_ImageTriage:
 
     def __init__(self, show_gui=True):
         self.className = "GRIME_AI_ImageTriage"

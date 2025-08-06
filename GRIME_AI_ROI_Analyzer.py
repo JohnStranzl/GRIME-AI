@@ -1,12 +1,15 @@
+import os
+import sys
+from io import BytesIO
+
 import cv2
 import numpy as np
-from io import BytesIO
-import sys
-import os
+
+from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+
 from PyQt5.QtGui import QImage, QPixmap
-from sklearn.cluster import KMeans
 
 
 class GRIME_AI_ROI_Analyzer:
@@ -29,6 +32,7 @@ class GRIME_AI_ROI_Analyzer:
         self.dominant_hsv_list = []
         self.dominant_rgb_list = []
         self.percentages_list = []
+
 
     def generate_file_pairs(self, folder):
         """
@@ -74,6 +78,7 @@ class GRIME_AI_ROI_Analyzer:
 
         return pairs
 
+
     def load_data(self):
         if not os.path.exists(self.image_filename):
             print(f"Error: Image file not found: {self.image_filename}")
@@ -98,6 +103,7 @@ class GRIME_AI_ROI_Analyzer:
         # Create binary mask.
         ret, self.mask_bin = cv2.threshold(self.mask, 1, 255, cv2.THRESH_BINARY)
 
+
     def compute_composite(self):
         # Convert image to BGRA.
         image_bgra = cv2.cvtColor(self.image, cv2.COLOR_BGR2BGRA)
@@ -114,6 +120,7 @@ class GRIME_AI_ROI_Analyzer:
         self.composite = (image_bgra.astype(np.float32) * alpha_4 +
                           white_bg.astype(np.float32) * (1 - alpha_4)).astype(np.uint8)
 
+
     @staticmethod
     def calculate_shannon_entropy(gray_roi):
         hist, _ = np.histogram(gray_roi, bins=256, range=(0, 256))
@@ -123,6 +130,7 @@ class GRIME_AI_ROI_Analyzer:
         probs = hist.astype(np.float32) / hist_sum
         entropy = -np.sum(probs[probs > 0] * np.log2(probs[probs > 0]))
         return entropy
+
 
     def analyze_roi(self):
         gray_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
@@ -136,6 +144,7 @@ class GRIME_AI_ROI_Analyzer:
         roi_grad = grad_magnitude[self.mask_bin > 0]
         self.roi_texture = np.mean(roi_grad)
 
+
     def compute_greenness(self):
         roi_pixels_color = self.image[self.mask_bin > 0].astype(np.float32)
         B = roi_pixels_color[:, 0]
@@ -146,6 +155,7 @@ class GRIME_AI_ROI_Analyzer:
         self.mean_gli = np.mean(gli_values)
         gcc_values = G / (R + G + B + eps)
         self.mean_gcc = np.mean(gcc_values)
+
 
     def extract_dominant_colors(self):
         hsv_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
@@ -179,14 +189,8 @@ class GRIME_AI_ROI_Analyzer:
             self.dominant_rgb_list.append(tuple(int(x) for x in center_rgb))
             self.percentages_list.append(percentages[idx])
 
-    def get_results_pixmap(self):
-        import os
-        import matplotlib.pyplot as plt
-        from io import BytesIO
-        from PyQt5.QtGui import QImage, QPixmap
-        import cv2, numpy as np
-        from matplotlib.patches import Rectangle
 
+    def get_results_pixmap(self):
         # 1) Prepare images
         orig_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         composite_rgba = cv2.cvtColor(self.composite, cv2.COLOR_BGRA2RGBA)

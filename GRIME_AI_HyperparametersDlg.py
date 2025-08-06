@@ -1,12 +1,16 @@
 import os
+import getpass
 import json
+import cv2
 from pathlib import Path
 from promptlib import Files
+from typing import List, Tuple, Dict
 
-from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor, QImage
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtWidgets import (QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox
 from PyQt5.uic import loadUi
+from PyQt5 import QtCore, QtWidgets
 
 import matplotlib
 matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
@@ -14,8 +18,78 @@ matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
 from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Save_Utils import JsonEditor
 from coco_generator import CocoGenerator
+from GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
 
 import torch
+
+
+# ======================================================================================================================
+# ======================================================================================================================
+#  =====     =====     =====     =====     =====   MODULE LEVEL HELPERS    =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+def _check_folder(folder: Path) -> Tuple[bool, List[str]]:
+    """
+    Validates a single folder by:
+      1. Finding at least one .json COCO file and some .jpg/.jpeg images.
+      2. Parsing the JSON’s "images" list of dicts to pull out file_name.
+      3. Verifying every listed file_name exists in that folder.
+
+    Returns (is_valid, missing_files_list).
+    """
+    # 1) List JSONs and JPGs via os.scandir
+    jsons = [e.name for e in os.scandir(folder)
+             if e.is_file() and e.name.lower().endswith(".json")]
+    jpgs  = {e.name for e in os.scandir(folder)
+             if e.is_file() and e.name.lower().endswith((".jpg", ".jpeg"))}
+
+    print(f"Scanning `{folder}` -> JSONs: {jsons}, JPGs: {list(jpgs)[:5]}…")  # debug
+
+    if not jsons or not jpgs:
+        return False, []
+
+    # 2) Load the first JSON file
+    path_json = folder / jsons[0]
+    try:
+        data = json.loads(path_json.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, [f"Cannot parse {jsons[0]}: {e}"]
+
+    # 3) Extract expected filenames from COCO "images" list
+    raw_images = data.get("images")
+    if not isinstance(raw_images, list):
+        return False, [f"'images' key missing or not a list in {jsons[0]}"]
+
+    expected_files = []
+    for item in raw_images:
+        if isinstance(item, dict):
+            fname = item.get("file_name") or item.get("filename")
+            if not fname:
+                return False, [f"Missing 'file_name' in entry: {item}"]
+            expected_files.append(Path(fname).name)
+        elif isinstance(item, str):
+            expected_files.append(item)
+        else:
+            return False, [f"Unsupported image entry type: {type(item)}"]
+
+    # 4) Compare against the actual JPGs on disk
+    missing = [f for f in expected_files if f not in jpgs]
+    if missing:
+        return False, missing
+
+    return True, []
+
+
+def _iter_dirs(root: Path):
+    """
+    Recursively yield every subdirectory under root using os.scandir.
+    """
+    for entry in os.scandir(root):
+        if entry.is_dir():
+            sub = Path(entry.path)
+            yield sub
+            yield from _iter_dirs(sub)
+
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -84,14 +158,17 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self._batchDelay = 50  # ms between batches
         self._loadToken = 0  # to cancel stale batches
 
-        if 0:   #DIAGNOSTICS
-            import xml.etree.ElementTree as ET
-            tree = ET.parse(ui_file)
-            print("Widgets declared in this UI:")
-            for w in tree.getroot().iter('widget'):
-                cls = w.get('class')
-                name = w.get('name')
-                print(f"  {cls:12} → {name!r}")
+        ###JES hide GRIME AI annotation/labeling; users must use CVAT
+        if getpass.getuser() != "johns":
+            tb = self.tabWidget.tabBar()
+            is_visible = tb.isTabVisible(3)
+            tb.setTabVisible(3, not is_visible)
+
+        # Initialize per-image annotation store
+        # Keys: full image path, Values: list of {type, points}
+        self.annotation_store: Dict[str, List[Dict]] = {}
+
+        self.pushButton_analyze.clicked.connect(self.analyze_roi)
 
         # --- Filmstrip one‐row configuration ---
         filmstrip = self.listWidget_annotationFilmstrip
@@ -103,8 +180,8 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         filmstrip.setMovement(QtWidgets.QListView.Static)
 
         # 2. Scroll bars: only horizontal
-        filmstrip.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        filmstrip.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        filmstrip.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        filmstrip.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         # 3. Fix height to exactly one icon row
         icon_h = filmstrip.iconSize().height()
@@ -179,9 +256,48 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self.label_imageAnnotation.installEventFilter(self)
 
 
+    # ─── Debug helper: dump all stored annotations ───
+    def print_all_annotations(self):
+        """
+        Prints every image path and the count/details of shapes stored
+        in self.annotation_store for debugging.
+        """
+        if not self.annotation_store:
+            print("No annotations have been recorded yet.")
+            return
+
+
+        for img_path, shapes in self.annotation_store.items():
+            print(f"\nAnnotations for {img_path}:")
+            for idx, shape in enumerate(shapes, start=1):
+                pts = shape['points']
+                print(f"  {idx}. {shape['type']} with {len(pts)} points → {pts}")
+
+
+    def load_labels_from_annotation(self, folder_path):
+        annotation_file = os.path.join(folder_path, "instances_default.json")
+        if not os.path.exists(annotation_file):
+            return []
+
+        with open(annotation_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        labels = set()
+        if "annotations" in data and "categories" in data:
+            for cat in data["categories"]:
+                labels.add(f"{cat['id']} - {cat['name']}")
+        return sorted(labels)
+
+
+    def update_annotation_listbox(self, listbox_widget, folder_path):
+        labels = self.load_labels_from_annotation(folder_path)
+        listbox_widget.clear()
+        listbox_widget.addItems(labels)
+
+
     def _add_category(self, lineedit, listwidget):
         text = lineedit.text().strip()
-        if text and not listwidget.findItems(text, QtCore.Qt.MatchExactly):
+        if text and not listwidget.findItems(text, Qt.MatchExactly):
             listwidget.addItem(text)
         lineedit.clear()
 
@@ -189,18 +305,236 @@ class GRIME_AI_HyperparametersDlg(QDialog):
     def _openAnnotator(self):
         pm = self.label_imageAnnotation.pixmap()
         if pm is None:
-            QtWidgets.QMessageBox.warning(self, "No Image",
-                                          "No image is loaded in the annotation label.")
+            QMessageBox.warning(self, "No Image", "No image is loaded.")
             return
 
-        # pick mode based on some UI switch if you have one
-        mode = 'click'  # or 'drag'
-        dlg = ImageAnnotatorDialog(pm, mode=mode, parent=self)
-        if dlg.exec_():
-            annos = dlg.getAnnotations()
-            print("Captured polygons:", annos)
+        # Determine drawing mode
+        if self.radioButton_boundingBox.isChecked():
+            mode = 'bbox'
+        elif self.radioButton_polylineClick.isChecked():
+            mode = 'click'
         else:
-            print("Annotator canceled.")
+            mode = 'drag'
+
+        # Figure out which category is selected in your Annotation tab
+        current = self.listWidget_annotationCategories.currentItem()
+        if current:
+            name = current.text()
+            idx  = self.listWidget_annotationCategories.currentRow() + 1
+        else:
+            name = "<unknown>"
+            idx  = -1
+
+        # Load any existing shapes from disk
+        current_item = self.listWidget_annotationFilmstrip.currentItem()
+        img_idx = current_item.data(Qt.UserRole)
+        img_path = self._annotation_image_paths[img_idx]
+        img_path = os.path.normpath(img_path)  # normalizes slashes
+        img_path = img_path.replace("\\", "/")  # force-forward slashes
+
+        # DEBUG: Print resolved image path and store state
+        print(f"[DEBUG] Current image index: {img_idx}")
+        print(f"[DEBUG] Resolved image path:\n  {img_path}")
+        print(f"[DEBUG] Annotation store keys:\n  {list(self.annotation_store.keys())}")
+
+        ###JES self.load_annotations_for_image(img_path)
+
+        # Launch dialog, passing along the label ID & name
+        dlg = ImageAnnotatorDialog(
+            pm,
+            mode=mode,
+            label={"id": idx, "name": name},
+            parent=self
+        )
+
+        # Preload into the annotator
+        existing = self.annotation_store.get(img_path)
+        print(f"[DEBUG] Loaded {len(existing) if existing else 0} shapes for this image.")
+        print(f"[DEBUG] Opening image: {img_path}")
+        print(f"[DEBUG] Stored shapes: {len(existing) if existing else 0}")
+        if existing:
+            dlg.setAnnotations(existing)
+
+        if dlg.exec_():
+            shapes = dlg.getAnnotations()
+            self.annotation_store[img_path] = shapes
+            self.save_annotations_for_image(img_path)
+            print(f"[DEBUG] Saved {len(shapes)} shapes for {img_path}")
+
+
+    def save_annotations_for_image(self, img_path: str):
+        """
+        Writes the annotation JSON for a single image into
+        an 'annotations/' subfolder next to the image.
+        """
+        shapes = self.annotation_store.get(img_path, [])
+        if not shapes:
+            return
+
+        img_p = Path(img_path)
+        ann_folder = img_p.parent / "annotations"
+        try:
+            ann_folder.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"Could not create annotation folder {ann_folder}: {e}")
+
+        ann_file = ann_folder / f"{img_p.stem}.anno.json"
+        try:
+            with open(ann_file, "w", encoding="utf-8") as f:
+                json.dump(shapes, f, indent=2)
+            print(f"Saved annotations to {ann_file}")
+        except Exception as e:
+            print(f"Failed to save annotations to {ann_file}: {e}")
+
+
+    def load_annotations_for_image(self, img_path: str):
+        """
+        Loads the annotation JSON for a single image from
+        the 'annotations/' subfolder, if it exists.
+        """
+        img_p = Path(img_path)
+        ann_file = img_p.parent / "annotations" / f"{img_p.stem}.anno.json"
+        if not ann_file.exists():
+            return
+
+        try:
+            with open(ann_file, "r", encoding="utf-8") as f:
+                shapes = json.load(f)
+            # store under the image key (string)
+            self.annotation_store[img_path] = shapes
+            print(f"Loaded annotations from {ann_file}")
+        except Exception as e:
+            print(f"Failed to load annotations from {ann_file}: {e}")
+
+
+
+    def _refresh_annotation_categories(self):
+        """
+        Scan self.annotation_store for all loaded shapes,
+        extract unique (id, name) pairs and populate the category list.
+        """
+        unique = {}
+        for shapes in self.annotation_store.values():
+            for s in shapes:
+                lab = s.get("label", {})
+                cid = lab.get("id", None)
+                name = lab.get("name", None)
+                if cid is not None and name:
+                    unique[cid] = name
+
+        self.listWidget_annotationCategories.clear()
+        for cid, name in sorted(unique.items()):
+            self.listWidget_annotationCategories.addItem(name)
+
+
+    def save_coco_for_all_images(self, base_image_folder: str):
+        """
+        Walks through the annotation_store for every image,
+        builds a single COCO 1.0 JSON, and writes it to
+        'annotations/coco_all.json' under base_image_folder.
+        """
+        # Prepare output folder
+        base_p = Path(base_image_folder)
+        ann_folder = base_p / "annotations"
+        ann_folder.mkdir(parents=True, exist_ok=True)
+
+        coco = {
+            "info": {
+                "description": "Combined dataset",
+                "version": "1.0",
+                "year": 2025
+            },
+            "licenses": [],
+            "images": [],
+            "annotations": [],
+            "categories": []
+        }
+
+        image_id_map = {}  # map image path -> image_id
+        category_map = {}  # map cat_id -> cat_name
+        ann_id = 1
+
+        # Helper to compute polygon area via shoelace
+        def polygon_area(coords):
+            area = 0.0
+            n = len(coords)
+            for i in range(n):
+                x1, y1 = coords[i]
+                x2, y2 = coords[(i + 1) % n]
+                area += x1 * y2 - x2 * y1
+            return abs(area) * 0.5
+
+        # 1) Iterate through every image in your store
+        for idx, (img_path, shapes) in enumerate(self.annotation_store.items(), start=1):
+            if not shapes:
+                continue
+
+            img_p = Path(img_path)
+            # assign a unique image_id
+            image_id = idx
+            image_id_map[img_path] = image_id
+
+            # read size
+            img = cv2.imread(str(img_p))
+            if img is None:
+                print(f"Warning: cannot load {img_p}, skipping.")
+                continue
+            h, w = img.shape[:2]
+
+            # append image entry
+            coco["images"].append({
+                "id": image_id,
+                "file_name": img_p.name,
+                "width": w,
+                "height": h
+            })
+
+            # collect categories seen in this image
+            for shape in shapes:
+                cid = shape["label"]["id"]
+                cname = shape["label"]["name"]
+                category_map[cid] = cname
+
+            # build annotation entries
+            for shape in shapes:
+                pts = shape["points"]
+                # segmentation: flatten [x1,y1,x2,y2,...]
+                seg = []
+                for p in pts:
+                    seg.extend([p.x(), p.y()])
+
+                xs = [p.x() for p in pts]
+                ys = [p.y() for p in pts]
+                x_min, x_max = min(xs), max(xs)
+                y_min, y_max = min(ys), max(ys)
+                bbox = [x_min, y_min, x_max - x_min, y_max - y_min]
+                area = polygon_area([(p.x(), p.y()) for p in pts])
+
+                coco["annotations"].append({
+                    "id": ann_id,
+                    "image_id": image_id,
+                    "category_id": shape["label"]["id"],
+                    "segmentation": [seg],
+                    "bbox": bbox,
+                    "area": area,
+                    "iscrowd": 0
+                })
+                ann_id += 1
+
+        # 2) Finalize category list
+        coco["categories"] = [
+            {"id": cid, "name": cname, "supercategory": ""}
+            for cid, cname in category_map.items()
+        ]
+
+        # 3) Write out the combined COCO JSON
+        out_file = ann_folder / "coco_all.json"
+        try:
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(coco, f, indent=2)
+            print(f"Saved global COCO file to {out_file}")
+        except Exception as e:
+            print(f"Failed to write global COCO JSON: {e}")
 
 
     def setup_from_config_file(self):
@@ -354,6 +688,8 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self.pushButton_browseFolderNew.clicked.connect(self.browse_folder_new)
         self.pushButton_browseFolderNew.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
+        self.lineEdit_folderPathNew.editingFinished.connect(self._on_roi_folder_changed)
+
         self.pushButton_analyze.clicked.connect(self.analyze_roi)
         self.pushButton_analyze.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
@@ -401,6 +737,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         from GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
         analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
         analyzer.run_analysis()
+
+        # ─── populate metric fields ───
+        self.lineEdit_intensity.setText(f"{analyzer.roi_intensity:.2f}")
+        self.lineEdit_entropy.setText(f"{analyzer.roi_entropy:.4f}")
+        self.lineEdit_Texture.setText(f"{analyzer.roi_texture:.4f}")
+        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.2f}")
+        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.2f}")
 
         # Display composite+metrics plot
         composite_pix = analyzer.get_results_pixmap()
@@ -475,13 +818,27 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
 
     def browse_folder_new(self):
-        """
-        Open a folder chooser dialog and set the text of lineEdit_folderPathNew
-        with the selected folder path.
-        """
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
-        if folder:
-            self.lineEdit_folderPathNew.setText(folder)
+        if not folder:
+            return
+        self.lineEdit_folderPathNew.setText(folder)
+
+        self._on_roi_folder_changed()
+
+
+    def _on_roi_folder_changed(self):
+        folder = self.lineEdit_folderPathNew.text().strip()
+        if not folder or not os.path.isdir(folder):
+            return
+
+        from GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
+        temp = GRIME_AI_ROI_Analyzer("", "")
+        pairs = temp.generate_file_pairs(folder)
+        if not pairs:
+            return
+
+        self._pairs = pairs
+        self.populate_filmstrip([orig for orig, _ in pairs])
 
 
     def analyze_roi(self):
@@ -541,6 +898,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             )
 
         self.label_displayImages.setPixmap(comp_pix)
+
+        # ─── populate metric fields ───
+        self.lineEdit_intensity.setText(f"{analyzer.roi_intensity:.2f}")
+        self.lineEdit_entropy.setText(f"{analyzer.roi_entropy:.4f}")
+        self.lineEdit_Texture.setText(f"{analyzer.roi_texture:.4f}")
+        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.2f}")
+        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.2f}")
 
         # 4) overlay the top-3 swatches
         swatches = getattr(analyzer, "dominant_rgb_list", [])[:3]
@@ -683,68 +1047,60 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             print("No 'COCO Products' folder found under", root_folder)
         return found
 
-
     def populate_available_folders(self):
-        """
-        Search for valid COCO Products subfolders and add them (relative to the root) to the available list.
-        """
-        root_folder = os.path.abspath(self.lineEdit_folderPath.text().strip())
+        root = Path(self.lineEdit_folderPath.text().strip()).resolve()
         self.listWidget_availableFolders.clear()
-        if not os.path.isdir(root_folder):
-            print("The provided root folder is not valid:", root_folder)
+
+        if not root.is_dir():
+            QMessageBox.warning(
+                self,
+                "Invalid Folder",
+                f"The selected path is not a directory:\n{root}"
+            )
             return
-        print(f"Starting recursive search for 'COCO Products' under: {root_folder}")
-        coco_products_folders = self.find_coco_products(root_folder)
-        valid_folders = []
-        for coco_products_path in coco_products_folders:
-            if os.path.abspath(coco_products_path) == root_folder:
-                print(f"Skipping 'COCO Products' folder equal to root folder: {coco_products_path}")
-                continue
-            print(f"Processing COCO Products folder: {coco_products_path}")
-            try:
-                for subfolder in os.listdir(coco_products_path):
-                    subfolder_path = os.path.join(coco_products_path, subfolder)
-                    abs_subfolder = os.path.abspath(subfolder_path)
-                    if os.path.isdir(subfolder_path):
-                        images_path = os.path.join(subfolder_path, "Images", "default")
-                        annotations_path = os.path.join(subfolder_path, "annotations")
-                        print(f"  Checking subfolder: {subfolder_path}")
-                        images_exist = False
-                        annotations_exist = False
-                        if os.path.isdir(images_path):
-                            image_files = [f for f in os.listdir(images_path)
-                                           if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-                            images_exist = len(image_files) > 0
-                            print(f"    Images folder at '{images_path}' contains {len(image_files)} image(s)")
-                        else:
-                            print(f"    Images folder missing at: {images_path}")
-                        if os.path.isdir(annotations_path):
-                            json_files = [f for f in os.listdir(annotations_path)
-                                          if f.lower().endswith('.json')]
-                            annotations_exist = len(json_files) > 0
-                            print(f"    Annotations folder at '{annotations_path}' contains {len(json_files)} JSON file(s)")
-                        else:
-                            print(f"    Annotations folder missing at: {annotations_path}")
-                        if images_exist and annotations_exist:
-                            if abs_subfolder == root_folder:
-                                print(f"    --> Skipping candidate equal to root folder: {subfolder_path}")
-                                continue
-                            print(f"    --> Valid folder found: {subfolder_path}")
-                            valid_folders.append(subfolder_path)
-                        else:
-                            print("    --> Folder skipped (does not meet criteria).")
-            except Exception as e:
-                print("Error scanning inside 'COCO Products' folder:", e)
-        if not valid_folders:
-            print("No valid subfolders found.")
+
+        valid: List[Path] = []
+        incomplete: Dict[str, List[str]] = {}
+
+        # ––– NEW: test the root itself
+        ok, missing = _check_folder(root)
+        print(f"_check_folder on ROOT {root}: ok={ok}, missing={missing}")  # debug
+        if ok:
+            valid.append(root)
+        elif missing:
+            incomplete[str(root)] = missing
+
+        # ––– Now recurse into subfolders as before
+        for folder in _iter_dirs(root):
+            ok, missing = _check_folder(folder)
+            print(f"_check_folder on {folder}: ok={ok}, missing={missing}")  # debug
+            if ok:
+                valid.append(folder)
+            elif missing:
+                incomplete[str(folder)] = missing
+
+        # ––– Populate or alert “no valid”
+        if valid:
+            for vf in sorted(set(valid)):
+                self.listWidget_availableFolders.addItem(str(vf.relative_to(root)))
         else:
-            print("Valid folders found:")
-            for folder in valid_folders:
-                print("  ", folder)
-        self.original_folders = valid_folders.copy()
-        for folder in valid_folders:
-            rel_folder = os.path.relpath(folder, root_folder)
-            self.listWidget_availableFolders.addItem(rel_folder)
+            QMessageBox.information(
+                self,
+                "No Valid Training Sets",
+                "No folders were found containing a COCO JSON and all its images."
+            )
+
+        # ––– Incomplete sets popup
+        if incomplete:
+            lines = ["Folders missing files:"]
+            for fld, miss in incomplete.items():
+                lines.append(f"\n" + fld + "\n  Missing:")
+                lines += [f"    • {m}" for m in miss]
+            QMessageBox.information(
+                self,
+                "Incomplete Training Sets",
+                "\n".join(lines)
+            )
 
 
     def move_to_right(self):
@@ -790,10 +1146,10 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         Process drag-and-drop events on the selected folders list.
         """
         if source == self.listWidget_selectedFolders:
-            if event.type() in (QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove):
+            if event.type() in (QtCore.QEvent.Type.DragEnter, QtCore.QEvent.Type.DragMove):
                 event.accept()
                 return True
-            elif event.type() == QtCore.QEvent.Drop:
+            elif event.type() == QtCore.QEvent.Type.Drop:
                 if event.mimeData().hasText():
                     mime_text = event.mimeData().text()
                     dragged_items = [txt.strip() for txt in mime_text.splitlines() if txt.strip()]
@@ -811,23 +1167,11 @@ class GRIME_AI_HyperparametersDlg(QDialog):
                 self.updateTrainButtonState()
                 return True
 
-        if source == self.label_imageAnnotation and event.type() == QtCore.QEvent.MouseButtonDblClick:
+        if source == self.label_imageAnnotation and event.type() == QtCore.QEvent.Type.MouseButtonDblClick:
             self._openAnnotator()
             return True
 
         return super().eventFilter(source, event)
-
-
-    def reset_lists(self):
-        """
-        Clear both list boxes and restore available folders from the original list.
-        """
-        self.listWidget_availableFolders.clear()
-        self.listWidget_selectedFolders.clear()
-        self.transferred_items.clear()
-        for folder in self.original_folders:
-            self.listWidget_availableFolders.addItem(QListWidgetItem(folder))
-        self.updateTrainButtonState()
 
 
     def get_values(self):
@@ -921,8 +1265,11 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             new_annotations = []
             for folder in selected_folders:
                 folder_fwd = folder.replace("\\", "/")
-                new_folders.append(root_folder + "/" + folder_fwd + "/images/default")
-                new_annotations.append(root_folder + "/" + folder_fwd + "/annotations/instances_default.json")
+                #JES WE NO LONGER WHAT TO USE THE EXTREMELY LAYERED FOLDER CONVENTION USED BY CVAT
+                #JES new_folders.append(root_folder + "/" + folder_fwd + "/images/default")
+                #JES new_annotations.append(root_folder + "/" + folder_fwd + "/annotations/instances_default.json")
+                new_folders.append(root_folder + "/" + folder_fwd)
+                new_annotations.append(root_folder + "/" + folder_fwd + "/instances_default.json")
             values["Path"] = [{
                 "siteName": "custom",
                 "directoryPaths": {
@@ -959,25 +1306,6 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         Called when the Train button is clicked.
         Validates model path, images folder, label selections, and image presence.
         """
-        model_path = self.lineEdit_segmentation_model_file.text().strip()
-        image_folder = self.lineEdit_segmentation_images_folder.text().strip()
-
-        # Validate model path
-        if not model_path or not os.path.isfile(model_path):
-            QMessageBox.warning(self, "Validation Error", f"Model file not found:\n{model_path}")
-            return
-
-        # Validate image folder
-        if not image_folder or not os.path.isdir(image_folder):
-            QMessageBox.warning(self, "Validation Error", f"Image folder not found:\n{image_folder}")
-            return
-
-        # Check for JPG files
-        jpg_files = [f for f in os.listdir(image_folder) if f.lower().endswith(".jpg")]
-        if not jpg_files:
-            QMessageBox.warning(self, "Validation Error", f"No JPG images found in:\n{image_folder}")
-            return
-
         # Label validation if categories were expected
         if self.categories_available:
             selected_labels = []
@@ -1006,6 +1334,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             "",
             "Torch Model Files (*.torch)"
         )
+
 
         if model_file:
             print("Segmentation model selected:", model_file)
@@ -1129,7 +1458,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
         # 4) Close dialog as “Accepted”
         QtCore.QMetaObject.invokeMethod(
-            self, 'done', QtCore.Qt.QueuedConnection,
+            self, 'done', Qt.QueuedConnection,
             QtCore.Q_ARG(int, QDialog.Accepted)
         )
 
@@ -1273,6 +1602,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         )
         self.label_displayImages.setPixmap(scaled)
 
+
     def browse_annotation_folder(self):
         """
         Open dialog, select a folder, populate line edit and filmstrip.
@@ -1286,7 +1616,75 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             return
 
         self.lineEdit_annotationFolder.setText(folder)
+
+        labels = self.load_labels_from_annotation(folder)
+        self.listWidget_annotationCategories.clear()
+        if labels:
+            self.listWidget_annotationCategories.addItems(labels)
+            print(f"Loaded {len(labels)} label(s) from annotations.json.")
+
+        # Load annotations into internal store
+
+        self.preload_annotation_store_from_coco(folder)
+
         self.populate_annotation_filmstrip(folder)
+
+    def preload_annotation_store_from_coco(self, folder: str):
+        """
+        Reads instances_default.json from `folder` and populates self.annotation_store.
+        Structure:
+            self.annotation_store[full_image_path] = [shape1, shape2, ...]
+        Each shape includes 'type', 'points', and 'label'.
+        """
+        json_path = os.path.join(folder, "instances_default.json")
+        if not os.path.exists(json_path):
+            print(f"No annotation file found at {json_path}")
+            return
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"Error reading {json_path}: {e}")
+            return
+
+        image_id_map = {
+            img["id"]: os.path.normpath(os.path.join(folder, img["file_name"])).replace("\\", "/")
+            # ← 🔧 patched path normalization
+            for img in data.get("images", [])
+        }
+        category_map = {cat["id"]: cat["name"] for cat in data.get("categories", [])}
+
+        self.annotation_store.clear()
+
+        for ann in data.get("annotations", []):
+            img_id = ann.get("image_id")
+            cat_id = ann.get("category_id")
+            segmentation = ann.get("segmentation", [[]])[0]
+
+            if img_id not in image_id_map or cat_id not in category_map or not segmentation:
+                continue
+
+            img_path = image_id_map[img_id]
+            label = {"id": cat_id, "name": category_map[cat_id]}
+
+            pts = []
+            for i in range(0, len(segmentation), 2):
+                x, y = segmentation[i], segmentation[i + 1]
+                pts.append(QtCore.QPointF(x, y))
+
+            shape = {
+                "type": "drag",  # ← 🔧 changed type from "polygon" to "drag"
+                "points": pts,
+                "label": label
+            }
+
+            if img_path not in self.annotation_store:
+                self.annotation_store[img_path] = []
+
+            self.annotation_store[img_path].append(shape)
+
+        print(f"Preloaded {len(self.annotation_store)} images from instances_default.json")
 
 
     def populate_annotation_filmstrip(self, folder):
@@ -1294,6 +1692,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         List all supported images in `folder`, fill the filmstrip.
         """
         self.listWidget_annotationFilmstrip.clear()
+
         # gather all image files
         exts = ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff')
         paths = sorted(
@@ -1301,6 +1700,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         )
         images = [str(p) for p in paths if p.suffix.lower() in exts]
         self._annotation_image_paths = images
+
+        # preload existing .anno.json for each image
+        for img_path in images:
+            self.load_annotations_for_image(img_path)
+
+        # update the category list based on preloaded data
+        self._refresh_annotation_categories()         # NEW: populate categories
 
         icon_size = self.listWidget_annotationFilmstrip.iconSize()
         for idx, img_path in enumerate(images):
@@ -1359,299 +1765,3 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 # End of GRIME_AI_HyperparametersDlg class.
 
 
-
-# ======================================================================================================================
-# ======================================================================================================================
-# ======================================================================================================================
-# ======================================================================================================================
-# ======================================================================================================================
-
-# MACHINE LEARNING ANNOTATION SUPPORT
-
-from PyQt5 import QtCore, QtGui, QtWidgets
-from shapely.geometry import Polygon
-
-def simplify_path(path, stride=5):
-    if len(path) < 3:
-        return []
-    return path[::stride]
-
-class AnnotatorLabel(QtWidgets.QLabel):
-    """
-    Draws onto a fixed‐resolution base pixmap and
-    always scales that pixmap to fit the current label size.
-    """
-
-    def __init__(self, pixmap, mode='drag', parent=None):
-        super().__init__(parent)
-
-        # 1) Keep a copy of your full‐res pixmap
-        self._base = pixmap.copy()
-
-        # 2) drawing state
-        self.mode = mode
-        self.shapes = []         # list of dicts {'type':'click'|'drag','points':[QPoint,...]}
-        self.active_pts = []     # click‐mode in‐progress
-        self.active_path = []    # drag‐mode in‐progress
-        self.drawing = False
-        self.annotations = []    # final output as list of [(x,y),...]
-
-        # 3) Make the label fully stretch/shrink
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Ignored,
-            QtWidgets.QSizePolicy.Ignored
-        )
-        self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setMouseTracking(True)
-
-        # initial draw
-        self._render_scaled()
-
-
-    def resizeEvent(self, ev):
-        # redraw whenever the widget changes size
-        self._render_scaled()
-        super().resizeEvent(ev)
-
-
-    '''
-    def _render_scaled(self):
-        """
-        Composite _base + all shapes onto a temporary canvas,
-        then scale that canvas to the label’s current size.
-        """
-        # draw everything into a fresh canvas
-        canvas = self._base.copy()
-        painter = QtGui.QPainter(canvas)
-
-        # 1) finalized shapes in green, 2px
-        pen = QtGui.QPen(QtCore.Qt.green, 1)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        for s in self.shapes:
-            pts = s['points']
-            if s['type'] == 'click':
-                for i, p in enumerate(pts):
-                    painter.drawEllipse(p, 1, 1)
-                    if i > 0:
-                        painter.drawLine(pts[i-1], p)
-            else:  # drag
-                for i in range(len(pts)):
-                    painter.drawLine(pts[i], pts[(i+1) % len(pts)])
-
-        # 2) active click pts in red
-        if self.active_pts:
-            pen.setColor(QtCore.Qt.red)
-            painter.setPen(pen)
-            for i, p in enumerate(self.active_pts):
-                painter.drawEllipse(p, 1, 1)
-                if i > 0:
-                    painter.drawLine(self.active_pts[i-1], p)
-
-        # 3) active drag stroke in green
-        if self.active_path:
-            pen.setColor(QtCore.Qt.green)
-            painter.setPen(pen)
-            for p in self.active_path:
-                painter.drawPoint(p)
-
-        painter.end()
-
-        # now scale that canvas to exactly fill the label
-        lbl_w, lbl_h = self.width(), self.height()
-        scaled = canvas.scaled(
-            lbl_w, lbl_h,
-            QtCore.Qt.KeepAspectRatio,
-            QtCore.Qt.SmoothTransformation
-        )
-        super().setPixmap(scaled)
-
-    '''
-
-    def _render_scaled(self, include_temp=False):
-        canvas = self._base.copy()
-        painter = QtGui.QPainter(canvas)
-
-        # Finalized shapes (green)
-        pen = QtGui.QPen(QtCore.Qt.green, 2)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        for s in self.shapes:
-            pts = s['points']
-            if s['type'] == 'click':
-                for i, p in enumerate(pts):
-                    painter.drawEllipse(p, 2, 2)
-                    if i > 0:
-                        painter.drawLine(pts[i - 1], p)
-            else:
-                for i in range(len(pts)):
-                    painter.drawLine(pts[i], pts[(i + 1) % len(pts)])
-
-        # Click-mode in-progress (red)
-        if self.active_pts:
-            pen.setColor(QtCore.Qt.red)
-            painter.setPen(pen)
-            for i, p in enumerate(self.active_pts):
-                painter.drawEllipse(p, 2, 2)
-                if i > 0:
-                    painter.drawLine(self.active_pts[i - 1], p)
-
-        # 👇 Drag-mode preview while drawing
-        if include_temp and self.active_path:
-            pen.setColor(QtCore.Qt.green)
-            painter.setPen(pen)
-            for p in self.active_path:
-                painter.drawPoint(p)
-
-        painter.end()
-
-        scaled = canvas.scaled(
-            self.width(), self.height(),
-            QtCore.Qt.KeepAspectRatio,
-            QtCore.Qt.SmoothTransformation
-        )
-        self.setPixmap(scaled)
-
-
-    def _map_to_base(self, pos):
-        """
-        Given a mouse pos in the label’s widget coords,
-        map it back to a QPoint in the base pixmap’s coords.
-        """
-        pm = self.pixmap()
-        if pm is None:
-            return None
-
-        bw, bh = self._base.width(), self._base.height()
-        pw, ph = pm.width(), pm.height()
-
-        sx = pw / bw
-        sy = ph / bh
-
-        # centered?
-        dx = (self.width()  - pw) // 2
-        dy = (self.height() - ph) // 2
-
-        x = (pos.x() - dx) / sx
-        y = (pos.y() - dy) / sy
-
-        x = max(0, min(x, bw - 1))
-        y = max(0, min(y, bh - 1))
-        return QtCore.QPoint(int(x), int(y))
-
-    def mousePressEvent(self, ev):
-        bp = self._map_to_base(ev.pos())
-        if not bp:
-            return super().mousePressEvent(ev)
-
-        if ev.button() == QtCore.Qt.LeftButton:
-            if self.mode == 'click':
-                self.active_pts.append(bp)
-            else:
-                self.drawing = True
-                self.active_path = [bp]
-        elif ev.button() == QtCore.Qt.RightButton and self.mode == 'click':
-            pts = list(self.active_pts)
-            self.active_pts.clear()
-            self._finalize('click', pts)
-
-        self._render_scaled()
-        super().mousePressEvent(ev)
-
-
-    '''
-    def mouseMoveEvent(self, ev):
-        if self.drawing and self.mode == 'drag':
-            bp = self._map_to_base(ev.pos())
-            if bp:
-                self.active_path.append(bp)
-                self._render_scaled()
-        super().mouseMoveEvent(ev)
-    '''
-
-    def mouseMoveEvent(self, ev):
-        if self.drawing and self.mode == 'drag':
-            bp = self._map_to_base(ev.pos())
-            if bp:
-                self.active_path.append(bp)
-                self._render_scaled(include_temp=True)  # <-- NEW: draw active drag
-        super().mouseMoveEvent(ev)
-
-
-    def mouseReleaseEvent(self, ev):
-        if ev.button() == QtCore.Qt.LeftButton and self.drawing and self.mode == 'drag':
-            self.drawing = False
-            raw = [(p.x(), p.y()) for p in self.active_path]
-            simp = simplify_path(raw, stride=5)
-            pts = [QtCore.QPoint(x, y) for x, y in simp]
-            self.active_path.clear()
-            self._finalize('drag', pts)
-        super().mouseReleaseEvent(ev)
-
-    def _finalize(self, kind, pts):
-        if len(pts) < 3:
-            return
-
-        # store shape & annotation
-        self.shapes.append({'type': kind, 'points': pts})
-        self.annotations.append([(p.x(), p.y()) for p in pts])
-
-        # update the base canvas so future scaling includes this shape
-        painter = QtGui.QPainter(self._base)
-        pen = QtGui.QPen(QtCore.Qt.green, 1)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        if kind == 'click':
-            for i, p in enumerate(pts):
-                painter.drawEllipse(p, 1, 1)
-                if i > 0:
-                    painter.drawLine(pts[i-1], p)
-        else:
-            for i in range(len(pts)):
-                painter.drawLine(pts[i], pts[(i+1) % len(pts)])
-        painter.end()
-
-        self._render_scaled()
-
-
-class ImageAnnotatorDialog(QtWidgets.QDialog):
-    """
-    Wraps AnnotatorLabel in a scroll area; the label always expands
-    or shrinks the image to fill its area, up to widget bounds.
-    Enter accepts.
-    """
-    def __init__(self, pixmap, mode='drag', parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Annotate Image")
-
-        # optionally half‐screen if too large
-        screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
-        iw, ih = pixmap.width(), pixmap.height()
-        sw, sh = screen.width(), screen.height()
-        if iw > sw or ih > sh:
-            pixmap = pixmap.scaled(
-                sw//2, sh//2,
-                QtCore.Qt.KeepAspectRatio,
-                QtCore.Qt.SmoothTransformation
-            )
-
-        self.label = AnnotatorLabel(pixmap, mode=mode, parent=self)
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidget(self.label)
-        scroll.setWidgetResizable(True)
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(scroll)
-
-        # start within screen bounds
-        self.resize(min(iw, sw), min(ih, sh))
-        self.setSizeGripEnabled(True)
-
-    def keyPressEvent(self, ev):
-        if ev.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-            self.accept()
-        else:
-            super().keyPressEvent(ev)
-
-    def getAnnotations(self):
-        return self.label.annotations
