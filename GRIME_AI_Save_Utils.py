@@ -1,6 +1,7 @@
 import sys
 import json
 import os
+from pathlib import Path
 
 from configparser import ConfigParser
 import configparser
@@ -30,6 +31,140 @@ class GRIME_AI_Save_Utils:
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
+    def get_artifacts_folder(self):
+        models_file_path = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIME-AI', 'Artifacts')
+
+        if not os.path.exists(models_file_path):
+            os.makedirs(models_file_path)
+
+        return models_file_path
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_composite_slices_folder(self, image_file_folder: str) -> str:
+        """
+        Given any image_file_folder path, builds and creates:
+          <artifacts_base>/<last_folder_of_image_file_folder>/compositeSlices
+
+        Returns the full path to that compositeSlices folder.
+        """
+        # 1. Normalize the incoming path and grab its last segment
+        normalized = os.path.normpath(image_file_folder)
+        #JES last_folder = Path(normalized).name
+        #JES if not last_folder:
+        #JES     raise ValueError(f"Could not determine last folder from '{image_file_folder}'")
+
+        # 2. Fetch your artifacts base
+        # PROVISIONAL
+        #JES artifacts_base = self.get_artifacts_folder()
+        #JES if not artifacts_base:
+        #JES     raise RuntimeError("get_artifacts_folder() returned an empty path")
+
+        # 3. Build the complete compositeSlices path
+        #JES target = Path(artifacts_base) / last_folder / "CompositeSlices"
+        target = os.path.join(normalized, "CompositeSlices")
+
+        # 4. Create directories if missing (equivalent to mkdir -p)
+        target = os.makedirs(target, exist_ok=True)
+
+        return str(target)
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_video_folder(self, video_file_folder: str) -> str:
+        """
+        Given any image_file_folder path, builds and creates:
+          <artifacts_base>/<last_folder_of_image_file_folder>/Videos
+
+        Returns the full path to the videos folder.
+        """
+        # 1. Normalize the incoming path and grab its last segment
+        normalized = os.path.normpath(video_file_folder)
+        #JES last_folder = Path(normalized).name
+        #JES if not last_folder:
+        #JES     raise ValueError(f"Could not determine last folder from '{video_file_folder}'")
+
+        # 2. Fetch your artifacts base
+        #JES artifacts_base = self.get_artifacts_folder()
+        #JES if not artifacts_base:
+        #JES     raise RuntimeError("get_artifacts_folder() returned an empty path")
+
+        # 3. Build the complete compositeSlices path
+        #JES target = Path(artifacts_base) / last_folder / "Videos"
+        target = os.path.join(normalized, "Videos")
+
+        # 4. Create directories if missing (equivalent to mkdir -p)
+        #JES target.mkdir(parents=True, exist_ok=True)
+        target = os.makedirs(target, exist_ok=True)
+
+        return str(target)
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_gif_folder(self, gif_file_folder: str) -> str:
+        """
+        Given any image_file_folder path, builds and creates:
+          <artifacts_base>/<last_folder_of_image_file_folder>/gif
+
+        Returns the full path to the gif folder.
+        """
+        # 1. Normalize the incoming path and grab its last segment
+        normalized = os.path.normpath(gif_file_folder)
+        #JES last_folder = Path(normalized).name
+        #JES if not last_folder:
+        #JES     raise ValueError(f"Could not determine last folder from '{gif_file_folder}'")
+
+        # 2. Fetch your artifacts base
+        #JES artifacts_base = self.get_artifacts_folder()
+        #JES if not artifacts_base:
+        #JES     raise RuntimeError("get_artifacts_folder() returned an empty path")
+
+        # 3. Build the complete compositeSlices path
+        #JES target = Path(artifacts_base) / last_folder / "gif"
+        target = os.path.join(normalized, "gif")
+
+        # 4. Create directories if missing (equivalent to mkdir -p)
+        #JES target.mkdir(parents=True, exist_ok=True)
+        target = os.makedirs(target, exist_ok=True)
+
+        return str(target)
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_segmented_images_folder(self, segmented_images_file_folder: str) -> str:
+        """
+        Given any image_file_folder path, builds and creates:
+          <artifacts_base>/<last_folder_of_image_file_folder>/Segmented_Images
+
+        Returns the full path to the segmented images folder.
+        """
+        # 1. Normalize the incoming path and grab its last segment
+        normalized = os.path.normpath(segmented_images_file_folder)
+        #JES last_folder = Path(normalized).name
+        #JES if not last_folder:
+        #JES     raise ValueError(f"Could not determine last folder from '{segmented_images_file_folder}'")
+
+        # 2. Fetch your artifacts base
+        #JES artifacts_base = self.get_artifacts_folder()
+        #JES if not artifacts_base:
+        #JES     raise RuntimeError("get_artifacts_folder() returned an empty path")
+
+        # 3. Build the complete compositeSlices path
+        #JES target = Path(artifacts_base) / last_folder / "Segmented_Images"
+        target = os.path.join(normalized, "Segmented_Images")
+
+        # 4. Create directories if missing (equivalent to mkdir -p)
+        #JES target.mkdir(parents=True, exist_ok=True)
+        target = os.makedirs(target, exist_ok=True)
+
+        return str(target)
+
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def get_settings_folder(self):
         configFilePath = os.path.join(os.path.expanduser('~'), 'Documents', 'GRIME-AI', 'Settings')
 
@@ -48,7 +183,6 @@ class GRIME_AI_Save_Utils:
         config_object = configparser.ConfigParser()
         with open(configFile, "r") as file_object:
             config_object.read_file(file_object)
-            #JES print(config_object.get("Local_Images_Folder"))
 
 
     # ------------------------------------------------------------------------------------------------------------------

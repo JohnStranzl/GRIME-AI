@@ -17,6 +17,7 @@ import imageio
 from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Color import GRIME_AI_Color
+import GRIME_AI_Save_Utils
 
 
 class GRIME_AI_Video:
@@ -32,9 +33,7 @@ class GRIME_AI_Video:
 
         myGRIMe_Color = GRIME_AI_Color()
 
-        filePath = os.path.join(rootFolder, "Videos")
-        if not os.path.exists(filePath):
-            os.mkdir(filePath)
+        filePath = GRIME_AI_Save_Utils().create_video_folder(rootFolder)
 
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')
@@ -74,9 +73,7 @@ class GRIME_AI_Video:
     # ======================================================================================================================
     def createGIF(self, rootFolder):
 
-        filePath = os.path.join(rootFolder, "Videos")
-        if not os.path.exists(filePath):
-            os.mkdir(filePath)
+        filePath = GRIME_AI_Save_Utils().create_gif_folder(rootFolder)
 
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')

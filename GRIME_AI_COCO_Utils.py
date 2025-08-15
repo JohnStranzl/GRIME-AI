@@ -1,37 +1,38 @@
-# coco_utils.py
-
 #!/usr/bin/env python3
 """
-Author: John Edward Stranzl, Jr.
-Date: 2025-08-05
-Company: Blade Vision Systems, LLC
-GitHub: https://github.com/JohnStranzl
-LinkedIn: https://www.linkedin.com/in/johnestranzl/
+coco_utils.py
 
-COCO Utilities
-
-A class-based tool to validate and clean a COCO 1.0 JSON annotation
-file against the images present in a directory.
+Utility class for validating, cleaning, and analyzing COCO 1.0 JSON.
 """
 
 import json
 import os
 import sys
+import random
+
+import openpyxl
+from openpyxl.utils import get_column_letter
+
 from typing import Any, Dict, List, Tuple
+import cv2
+
+import numpy as np
+import pandas as pd
+from pycocotools.coco import COCO
+from pycocotools import mask as maskUtils
 
 
 class GRIME_AI_COCO_Utils:
-    """Utility class for validating and cleaning a COCO-format JSON file."""
+    """Utility class for validating, cleaning, and summarizing a COCO-format JSON file."""
 
     def __init__(self, folder_path: str) -> None:
-        """Initialize with path to a directory containing images and one JSON."""
         self.folder_path: str = folder_path
         self.json_filename: str = ""
         self.json_path: str = ""
         self.data: Dict[str, Any] = {}
 
+
     def find_json_file(self) -> None:
-        """Locate exactly one .json file in the folder and set paths."""
         try:
             entries = os.listdir(self.folder_path)
         except FileNotFoundError:
@@ -45,31 +46,31 @@ class GRIME_AI_COCO_Utils:
 
         if len(json_files) > 1:
             print(f"Multiple JSON files found: {json_files}")
-            print("Please ensure exactly one JSON file in the directory.")
             sys.exit(1)
 
         self.json_filename = json_files[0]
         self.json_path = os.path.join(self.folder_path, self.json_filename)
 
+
     def load_json(self) -> None:
-        """Load JSON data from disk and validate presence of 'images' key."""
         with open(self.json_path, "r", encoding="utf-8") as f:
             self.data = json.load(f)
-
         if "images" not in self.data:
             print("Invalid COCO JSON: missing 'images' section.")
             sys.exit(1)
 
+
+    def load_coco(self) -> None:
+        """
+        Convenience method to find and load the COCO JSON in one call.
+        """
+        self.find_json_file()
+        self.load_json()
+
+
     def check_images(
         self,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """
-        Check which images in JSON exist on disk.
-
-        Returns:
-            present_images: images found in folder
-            missing_images: images not found in folder
-        """
         present_images: List[Dict[str, Any]] = []
         missing_images: List[Dict[str, Any]] = []
 
@@ -83,20 +84,16 @@ class GRIME_AI_COCO_Utils:
 
         return present_images, missing_images
 
+
     def backup_original(self) -> None:
-        """Rename the original JSON file by appending '.ORIGINAL'."""
         orig = os.path.join(self.folder_path, self.json_filename)
         backup = orig + ".ORIGINAL"
         os.rename(orig, backup)
 
+
     def clean_data(
         self, present_images: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Construct a cleaned data dictionary.
-
-        Keeps only present_images and filters annotations accordingly.
-        """
         new_data = dict(self.data)
         new_data["images"] = present_images
 
@@ -110,13 +107,13 @@ class GRIME_AI_COCO_Utils:
 
         return new_data
 
+
     def write_json(self, new_data: Dict[str, Any]) -> None:
-        """Write new_data back out to the original JSON filename."""
         with open(self.json_path, "w", encoding="utf-8") as f:
             json.dump(new_data, f, indent=4)
 
+
     def process(self) -> None:
-        """Execute full validation and cleaning pipeline."""
         self.find_json_file()
         self.load_json()
 
@@ -128,7 +125,166 @@ class GRIME_AI_COCO_Utils:
         self.backup_original()
         cleaned = self.clean_data(present)
         self.write_json(cleaned)
-        print(
-            "New JSON created for the images available "
-            "in the folder."
-        )
+        print("New JSON created for the images available in the folder.")
+
+
+    def get_image_label_counts(self) -> Dict[str, Dict[str, int]]:
+        """
+        Returns a mapping from image file names to a dict of category names
+        and their respective annotation counts (mask counts).
+        """
+        # Build lookups
+        id_to_name = {c["id"]: c["name"] for c in self.data.get("categories", [])}
+        id_to_file = {img["id"]: img["file_name"] for img in self.data.get("images", [])}
+
+        # Initialize counts dict
+        counts: Dict[str, Dict[str, int]] = {}
+        for fname in id_to_file.values():
+            counts[fname] = {name: 0 for name in id_to_name.values()}
+
+        # Tally annotations
+        for ann in self.data.get("annotations", []):
+            img_id = ann.get("image_id")
+            cat_id = ann.get("category_id")
+            if img_id in id_to_file and cat_id in id_to_name:
+                fname = id_to_file[img_id]
+                cat_name = id_to_name[cat_id]
+                counts[fname][cat_name] += 1
+
+        return counts
+
+
+    def write_image_label_counts_to_xlsx(self, output_file: str) -> None:
+        """
+        Writes the image-wise label counts to an Excel file.
+
+        The sheet will have one row per image, with columns:
+        [Image Name, <Label1>, <Label2>, …].
+
+        :param output_filepath: Path to write the .xlsx file.
+        """
+        # 1) Ensure data is loaded
+        if not self.data:
+            raise RuntimeError("COCO data not loaded. Call load_coco() first.")
+
+        # 2) Fetch counts dict: { image_name: { label: count, … }, … }
+        counts = self.get_image_label_counts()
+
+        # 3) Create workbook & sheet
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Image Label Counts"
+
+        # 4) Build header row
+        #    - first col is "Image"
+        #    - rest are all label names, sorted alphabetically
+        all_labels = list(next(iter(counts.values())).keys())
+        header = ["Image"] + sorted(all_labels)
+        ws.append(header)
+
+        # 5) Populate rows
+        for img_name, label_map in counts.items():
+            row = [img_name] + [label_map.get(lbl, 0) for lbl in header[1:]]
+            ws.append(row)
+
+        # 6) Auto-adjust column widths
+        for idx, col_title in enumerate(header, start=1):
+            max_length = max(
+                len(str(cell.value)) for cell in ws[get_column_letter(idx)]
+            )
+            # add a little padding
+            ws.column_dimensions[get_column_letter(idx)].width = max_length + 2
+
+        # 7) Save to disk
+        output_file = os.path.join(self.folder_path, output_file)
+        wb.save(output_file)
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def extract_masks(self, image_dir, output_dir):
+        print("Extract masks from COCO file...")
+
+        # Load COCO annotations
+        coco_annotation_file = os.path.join(image_dir, 'instances_default.json')
+        coco = COCO(coco_annotation_file)
+
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Prepare list to collect image → labels mapping
+        all_results = []
+
+        # Seed for reproducible random colors
+        random.seed(0)
+
+        # Dynamic map: category name → random BGR color
+        color_map = {}
+
+        # Iterate all images in the COCO
+        img_ids = coco.getImgIds()
+        for img_id in img_ids:
+            # Load image info and file
+            img_info = coco.loadImgs(img_id)[0]
+            filename = img_info['file_name']
+            base, _ = os.path.splitext(filename)
+            img_path = os.path.join(image_dir, filename)
+
+            # Read image to get dimensions
+            image = cv2.imread(img_path)
+            height, width, _ = image.shape
+
+            # Prepare masks
+            gray_mask = np.zeros((height, width), dtype=np.uint8)
+            color_mask = np.zeros((height, width, 3), dtype=np.uint8)
+
+            # Gather annotations for this image
+            ann_ids = coco.getAnnIds(imgIds=img_id)
+            anns = coco.loadAnns(ann_ids)
+
+            labels = []
+            for ann in anns:
+                # Decode RLE to a 0/1 mask
+                rle = coco.annToRLE(ann)
+                binary_mask = maskUtils.decode(rle).astype(bool)
+
+                # Merge into your single gray mask
+                gray_mask = np.maximum(gray_mask, binary_mask.astype(np.uint8) * 255)
+
+                # Get category name
+                cat = coco.loadCats(ann['category_id'])[0]['name']
+                labels.append(cat)
+
+                # If this label is new, assign it a random color
+                if cat not in color_map:
+                    # ensure up to 32 distinct colors
+                    b = random.randint(0, 255)
+                    g = random.randint(0, 255)
+                    r = random.randint(0, 255)
+                    color_map[cat] = (b, g, r)
+
+                # Paint that category’s region
+                color_mask[binary_mask] = color_map[cat]
+
+            # Save the grayscale mask
+            gray_path = os.path.join(output_dir, f"{base}_mask.png")
+            cv2.imwrite(gray_path, gray_mask)
+
+            # Save the colored mask
+            colored_path = os.path.join(output_dir, f"{base}_color_mask.png")
+            cv2.imwrite(colored_path, color_mask)
+
+            # Record unique labels for Excel
+            unique_labels = sorted(set(labels))
+            all_results.append({
+                "image_file": filename,
+                "labels": ", ".join(unique_labels)
+            })
+
+        # Write out Excel summary
+        df = pd.DataFrame(all_results, columns=["image_file", "labels"])
+        excel_path = os.path.join(output_dir, "mask_labels.xlsx")
+        df.to_excel(excel_path, index=False)
+
+        print(f"Saved gray masks, color masks, and wrote summary Excel to {output_dir}")

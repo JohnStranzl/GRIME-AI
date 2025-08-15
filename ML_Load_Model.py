@@ -125,28 +125,6 @@ class ML_Load_Model:
         msgBox.displayMsgBox()
 
 
-    def show_mask(self, mask, ax, category_id=None, borders=True):
-        color = self.get_color_for_category(category_id)
-        h, w = mask.shape[-2:]
-        mask = mask.astype(np.uint8)
-        mask_image = np.zeros((h, w, 4), dtype=np.float32)
-        rgba_color = color.reshape((1, 1, -1))  # RGBA shape
-
-        mask_image += mask.reshape(h, w, 1) * rgba_color
-
-        if borders:
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for contour in contours:
-                contour = contour.squeeze()
-
-                if contour.ndim != 2 or contour.shape[1] != 2:
-                    continue  # Skip invalid contours
-
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color="white")
-
-        ax.imshow(mask_image)
-
-
     def get_color_for_category(self, category_id):
         color_map = {
             0: np.array([1.0, 0.0, 0.0, 0.6]),  # Red
@@ -216,6 +194,28 @@ class ML_Load_Model:
         plt.close(fig)
 
 
+    def show_mask(self, mask, ax, category_id=None, borders=True):
+        color = self.get_color_for_category(category_id)
+        h, w = mask.shape[-2:]
+        mask = mask.astype(np.uint8)
+        mask_image = np.zeros((h, w, 4), dtype=np.float32)
+        rgba_color = color.reshape((1, 1, -1))  # RGBA shape
+
+        mask_image += mask.reshape(h, w, 1) * rgba_color
+
+        if borders:
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                contour = contour.squeeze()
+
+                if contour.ndim != 2 or contour.shape[1] != 2:
+                    continue  # Skip invalid contours
+
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color="white")
+
+        ax.imshow(mask_image)
+
+
     def mask_to_polygon(self, mask, min_contour_area=50):
         mask = mask.astype(np.uint8)
         contours, hierarchy = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
@@ -239,6 +239,7 @@ class ML_Load_Model:
 
         global progress_bar_closed
 
+        # INITIALIZE COLORWHEEL PROGRESS BAR
         def on_progress_bar_closed(obj):
             global progress_bar_closed
             progress_bar_closed = True
@@ -250,9 +251,11 @@ class ML_Load_Model:
         progressBar.setValue(1)
         progressBar.show()
 
+        # DETERMINE WHETHER TO USE THE CPU FOR IF CUDA CORES ARE AVAILABLE
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {device}")
 
+        # LOAD THE SAM2 CHECKPOINT
         config_dir = os.path.join("sam2", "sam2", "configs", "sam2.1")
         model_cfg_path = os.path.join(config_dir, os.path.basename(self.MODEL_CFG))
         print("Model config path:", model_cfg_path)
@@ -299,15 +302,25 @@ class ML_Load_Model:
 
         image_id = 1
         annotation_id = 1
+
+        # CREATE THE OUTPUT FOLDER WHERE THE PREDICTIONS AND OTHER OUTPUTS WILL BE SAVED
         os.makedirs(self.OUTPUT_DIR, exist_ok=True)
 
+        # BUILD A LIST OF THE IMAGES TO BE SEGMENTED
         VALID_EXTS = ('.jpg', '.jpeg')
         images_list = [f for f in os.listdir(self.INPUT_DIR) if f.lower().endswith(VALID_EXTS)]
+
+        # SET THE RANGE OF THE PROGRESS BAR BASED UPON THE NUMBER OF IMAGES TO SEGMENT
         progressBar.setRange(0, len(images_list) + 1)
 
+        # --------------------------------------------------------------------------------------------------------------
+        # BEGIN SEGMENTING IMAGES
+        # --------------------------------------------------------------------------------------------------------------
         for img_index, image in enumerate(images_list):
             if progress_bar_closed is False:
                 progressBar.setValue(img_index)
+
+                # LOAD THE IMAGE FROM FILE AND FEED IT TO THE PREDICTOR
                 image_path = os.path.join(self.INPUT_DIR, image)
                 pil_image = Image.open(image_path).convert("RGB")
                 image_array = np.array(pil_image)
@@ -318,9 +331,11 @@ class ML_Load_Model:
                     multimask_output=True,
                 )
 
+                # Warn if more than one mask candidate is returned, which might require manual review
                 if len(masks) > 1:
                     print(f"Multiple masks detected for image: {image} (Total: {len(masks)})")
 
+                # Choose the mask with the highest confidence score as the final output
                 sorted_ind = np.argmax(scores)
                 mask = masks[sorted_ind]
                 score = scores[sorted_ind]
@@ -397,7 +412,7 @@ class ML_Load_Model:
             progressBar.close()
         del progressBar
 
-        output_file = Path(self.OUTPUT_DIR) / "instances_default.json"
+        output_file = Path(self.OUTPUT_DIR) / "predictions.json"
         with open(output_file, "w") as f:
             json.dump(coco_data, f, indent=4)
 

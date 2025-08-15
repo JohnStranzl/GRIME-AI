@@ -344,12 +344,15 @@ class  NEON_API:
             # download all CSV files
             filename_with_path = NEON_API().Download_Field_Site_Metadata(csv_links)
 
-            siteList = GRIME_AI_Utils().parseCSV(filename_with_path)
+            try:
+                siteList = GRIME_AI_Utils().parseCSV(filename_with_path)
+            except Exception as e:
+                nErrorCode = -2
         # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST
         elif nErrorCode == -1:
             siteList = []
 
-        return siteList
+        return nErrorCode, siteList
 
 
     # ======================================================================================================================

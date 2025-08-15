@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from io import StringIO
 
 import csv
 import cv2
@@ -77,39 +78,120 @@ class GRIME_AI_Utils:
         # FULLY QUALIFIED PATH OF THE CSV DOWNLOADED ONTO THE LOCAL COMPUTER
         filename = filename_with_path
 
-        fields = []
+        # Validate before parsing
+        if not self.is_valid_csv_file(filename_with_path):
+            raise ValueError(f"Invalid CSV content detected in '{filename_with_path}'.")
+
         rows = []
         siteList = []
 
-        with open(filename, 'r') as data:
-            dict_Reader = csv.DictReader(data)
-            ordered_dict_from_csv = list(dict_Reader)[0]
-            dict_from_csv = dict(ordered_dict_from_csv)
-            keys = dict_from_csv.keys()
+        try:
+            with open(filename, 'r') as data:
+                dict_Reader = csv.DictReader(data)
+                ordered_dict_from_csv = list(dict_Reader)[0]
+                dict_from_csv = dict(ordered_dict_from_csv)
+                keys = dict_from_csv.keys()
 
-        # READ CSV FILE
-        with open(filename, 'r') as csvfile:
-            # creating a csv reader object
-            csvreader = csv.reader(csvfile)
+            # READ CSV FILE
+            with open(filename, 'r') as csvfile:
+                # creating a csv reader object
+                csvreader = csv.reader(csvfile)
 
-            # EXTRACT FIELD NAMES FROM THE FIRST ROW OF THE CSV
-            fields = next(csvreader)
+                # EXTRACT FIELD NAMES FROM THE FIRST ROW OF THE CSV
+                fields = next(csvreader)
 
-            # READ ONE ROW AT A TIME AND APPEND INTO A LIST
-            for row in csvreader:
-                rows.append(row)
+                # READ ONE ROW AT A TIME AND APPEND INTO A LIST
+                for row in csvreader:
+                    rows.append(row)
 
-        fieldSiteIDIndex = fields.index("field_site_id")
-        fieldSiteNameIndex = fields.index("field_site_name")
-        fieldPhenocamIndex = fields.index("field_phenocams")
-        fieldLatitudeIndex = fields.index("field_latitude")
-        fieldLongitudeIndex = fields.index("field_longitude")
+            fieldSiteIDIndex = fields.index("field_site_id")
+            fieldSiteNameIndex = fields.index("field_site_name")
+            fieldPhenocamIndex = fields.index("field_phenocams")
+            fieldLatitudeIndex = fields.index("field_latitude")
+            fieldLongitudeIndex = fields.index("field_longitude")
 
-        for row in rows:
-            siteList.append(siteData(row[fieldSiteIDIndex], row[fieldSiteNameIndex], row[fieldPhenocamIndex],
-                                     row[fieldLatitudeIndex], row[fieldLongitudeIndex]))
+            for row in rows:
+                siteList.append(siteData(row[fieldSiteIDIndex], row[fieldSiteNameIndex], row[fieldPhenocamIndex],
+                                         row[fieldLatitudeIndex], row[fieldLongitudeIndex]))
+        except:
+            siteList = []
 
         return siteList
+
+
+    def is_valid_csv(text: str,
+                     sample_size: int = 2048,
+                     max_rows: int = 10) -> bool:
+        # 1. HTML signature check
+        signatures = ['<!DOCTYPE html', '<html', '<head', '<body', '<script']
+        header = text[:sample_size].lower()
+        if any(sig in header for sig in signatures):
+            return False
+
+        # 2. CSV dialect sniffing
+        try:
+            sniff_sample = text[:sample_size]
+            dialect = csv.Sniffer().sniff(sniff_sample)
+        except csv.Error:
+            return False
+
+        # 3. Row consistency check
+        reader = csv.reader(StringIO(text), dialect)
+        rows = []
+        for i, row in enumerate(reader):
+            if i >= max_rows:
+                break
+            rows.append(row)
+
+        if len(rows) < 2:
+            return False
+
+        col_count = len(rows[0])
+        if col_count < 1:
+            return False
+
+        if all(len(row) == col_count for row in rows):
+            return True
+
+        return False
+
+    import csv
+    from io import StringIO
+
+    def is_valid_csv(self, text: str, sample_size: int = 2048, max_rows: int = 10) -> bool:
+        # 1. HTML signature check
+        signatures = ['<!DOCTYPE html', '<html', '<head', '<body', '<script']
+        header = text[:sample_size].lower()
+        if any(sig in header for sig in signatures):
+            return False
+
+        # 2. CSV dialect sniffing
+        try:
+            sniff_sample = text[:sample_size]
+            dialect = csv.Sniffer().sniff(sniff_sample)
+        except csv.Error:
+            return False
+
+        # 3. Row consistency check
+        reader = csv.reader(StringIO(text), dialect)
+        rows = []
+        for i, row in enumerate(reader):
+            if i >= max_rows:
+                break
+            rows.append(row)
+
+        if len(rows) < 2:
+            return False
+
+        col_count = len(rows[0])
+        if col_count < 1:
+            return False
+
+        if all(len(row) == col_count for row in rows):
+            return True
+
+        return False
+
 
     # ======================================================================================================================
     #
@@ -216,7 +298,7 @@ class GRIME_AI_Utils:
         JsonEditor().update_json_entry('Scratchpad_folder', os.path.normpath(scratchpadFilePath))
 
         # --------------------------------------------------------------------------------------------------------------
-        # CREATE DEFAULT FOLDERS INTO WHICH  DOWNLOADED DATA WILL BE SAVED FOR SUPPORTED PRODUCTS
+        # CREATE DEFAULT FOLDERS INTO WHICH DOWNLOADED DATA WILL BE SAVED FOR SUPPORTED PRODUCTS
         # e.g., NEON, USGS, PBT (and create an OTHER folder into which a user can download data from other
         # sources
         # --------------------------------------------------------------------------------------------------------------
@@ -224,7 +306,8 @@ class GRIME_AI_Utils:
                            'Downloads/USGS',  'Downloads/USGS/Images',  'Downloads/USGS/Data',  'Downloads/USGS/Videos',  'Downloads/USGS/EXIF', \
                            'Downloads/PBT',   'Downloads/PBT/Images',   'Downloads/PBT/Data',   'Downloads/PBT/Videos',   'Downloads/PBT/EXIF', \
                            'Downloads/OTHER', 'Downloads/OTHER/Images', 'Downloads/OTHER/Data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
-                           'Downloads/KOLA',  'Downloads/KOLA/Images',  'Downloads/KOLA/Data',  'Downloads/KOLA/Videos',  'Downloads/KOLA/EXIF']
+                           'Downloads/KOLA',  'Downloads/KOLA/Images',  'Downloads/KOLA/Data',  'Downloads/KOLA/Videos',  'Downloads/KOLA/EXIF', \
+                           'Models', 'Artifacts']
 
         for folder in default_folders:
             make_these_folders = os.path.join(rootFolder, folder)

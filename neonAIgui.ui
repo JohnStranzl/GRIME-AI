@@ -999,6 +999,7 @@
     <addaction name="separator"/>
     <addaction name="action_ExtractCOCOMasks"/>
     <addaction name="action_Sync_JSON_Annotations"/>
+    <addaction name="action_Inspect_Annotations"/>
     <addaction name="action_CreateJSON"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
@@ -1068,6 +1069,11 @@
   <action name="action_Sync_JSON_Annotations">
    <property name="text">
     <string>Sync JSON Annotations</string>
+   </property>
+  </action>
+  <action name="action_Inspect_Annotations">
+   <property name="text">
+    <string>Inspect Annotations</string>
    </property>
   </action>
  </widget>

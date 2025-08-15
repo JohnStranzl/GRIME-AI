@@ -200,7 +200,6 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # annotation tab state
         self._annotation_image_paths = []
 
-        # Example hookup in your dialog __init__
         le = self.lineEdit_annotationCategory
         lst = self.listWidget_annotationCategories
 
@@ -234,6 +233,8 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         icon_h = lw.iconSize().height()
         lw.setFixedHeight(icon_h)
 
+        self.lineEdit_siteName.editingFinished.connect(self.save_site_name_to_json)
+
         # Initialize tracking variables.
         self.transferred_items = set()
         self.original_folders = []
@@ -254,6 +255,29 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
         # install event filter on the annotation‐image label
         self.label_imageAnnotation.installEventFilter(self)
+
+    def save_site_name_to_json(self):
+        import os
+        import json
+
+        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+        config_file = os.path.join(settings_folder, "site_config.json")
+
+        # Load current settings if file exists
+        if os.path.exists(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        else:
+            settings = {}
+
+        # Update with the current SiteName value
+        settings["siteName"] = self.lineEdit_siteName.text()
+
+        # Write back to the config file
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=4)
+
+        print(f"Updated siteName in {config_file} to '{settings['siteName']}'")
 
 
     # ─── Debug helper: dump all stored annotations ───
@@ -1082,7 +1106,11 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # ––– Populate or alert “no valid”
         if valid:
             for vf in sorted(set(valid)):
-                self.listWidget_availableFolders.addItem(str(vf.relative_to(root)))
+                rel = vf.relative_to(root)
+                #JES # Replace "." with actual folder name if it's the root
+                #JES display_name = vf.name if str(rel) == "." else str(rel)
+                display_name = str(rel)
+                self.listWidget_availableFolders.addItem(display_name)
         else:
             QMessageBox.information(
                 self,
@@ -1094,14 +1122,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         if incomplete:
             lines = ["Folders missing files:"]
             for fld, miss in incomplete.items():
-                lines.append(f"\n" + fld + "\n  Missing:")
+                lines.append(f"\n{fld}\n  Missing:")
                 lines += [f"    • {m}" for m in miss]
             QMessageBox.information(
                 self,
                 "Incomplete Training Sets",
                 "\n".join(lines)
             )
-
 
     def move_to_right(self):
         """
@@ -1234,7 +1261,8 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             print(f"Existing {config_file} renamed to {backup_filename}")
 
         values = self.get_values()
-        values["siteName"] = "custom"
+        # EMBED NAME OF LABEL TRAINED ON IN SITE NAME
+        values["siteName"] = self.lineEdit_siteName.text()
 
         seg_images_folder = self.lineEdit_segmentation_images_folder.text().strip()
         if seg_images_folder:

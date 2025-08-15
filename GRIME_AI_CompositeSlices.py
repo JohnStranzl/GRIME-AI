@@ -1,6 +1,5 @@
 import os
 import datetime
-import math
 from PIL import Image
 
 from GRIME_AI_QProgressWheel import QProgressWheel

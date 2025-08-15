@@ -113,7 +113,6 @@ import iopath
 
 import numpy as np
 
-
 # ------------------------------------------------------------
 # PIL LIBRARIES AND IMPORTS
 # ------------------------------------------------------------
@@ -362,6 +361,10 @@ import seaborn as sns
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+import os
+import cv2
+import numpy as np
+import pandas as pd
 from pycocotools.coco import COCO
 from pycocotools import mask as maskUtils
 from pycocotools import mask as coco_mask
@@ -407,7 +410,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver.: 0.0.6.0 (beta 10)"
+SW_VERSION = "Ver. 0.0.6.0 (beta 11)"
 
 class displayOptions():
     displayROIs = True
@@ -581,9 +584,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.session = session
         self.ui = Ui_MainWindow()
 
-        self.setWindowTitle("GRIME AI: John E. Stranzl Jr.")
-        #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
         self.setupUi(self)
+        self.setWindowTitle("GRIME AI" + " " + SW_VERSION + " - John E. Stranzl Jr.")
+        #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
 
         # Initialize a variable to hold the current NEON site information
         self.current_site_info = ["No site info available."]
@@ -695,9 +698,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_CreateJSON.triggered.connect(self.menubar_CreateJSON)
         self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
         self.action_Sync_JSON_Annotations.triggered.connect(self.menubar_sync_json_annotations)
+        self.action_Inspect_Annotations.triggered.connect(self.menubar_inspect_annotations)
 
         # GRAPH TAB(S)
-
         self.NEON_labelLatestImage.setScaledContents(True)
         # self.ui.labelLatestImage.setScaledContents(True)
         # self.ui.labelOriginalImage.setScaledContents(True)
@@ -774,7 +777,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # if frame.checkBoxNEONSites.isChecked():
         print("Download NEON Field Site Table from NEON website...")
         myNEON_API = NEON_API()
-        siteList = myNEON_API.readFieldSiteTable()
+        _, siteList = myNEON_API.readFieldSiteTable()
 
         if len(siteList) == 0:
             print("NEON Field Site Table from NEON website FAILED...")
@@ -972,8 +975,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         icon_path = os.path.normpath(str(parent_path / "icons/Green Brain Icon.png"))
         button_action = QAction(QIcon(icon_path), "Deep Learning", self)
         button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
-        #button_action.triggered.connect(self.toolbarButtonDeepLearning)
-        #JES button_action.triggered.connect(self.onMyToolBarBuildModel)
         button_action.triggered.connect(self.menubar_CreateJSON)
         toolbar.addAction(button_action)
         print("Toolbar Initialization: Deep Learning (brain) icon path: ", icon_path)
@@ -1706,7 +1707,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # GET LIST OF ALL SITES ON NEON
         # if frame.checkBoxNEONSites.isChecked():
         myNEON_API = NEON_API()
-        siteList = myNEON_API.readFieldSiteTable()
+        _, siteList = myNEON_API.readFieldSiteTable()
         # else:
         # NEON_FormatProductTable(frame.tableProducts)
 
@@ -1771,15 +1772,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         print("Generating composite slices image(s)...")
 
         global imageFileFolder
-        if not os.path.exists(imageFileFolder+'\compositeSlices'):
-            os.makedirs(imageFileFolder+'\compositeSlices')
+        composite_slices_folder = GRIME_AI_Save_Utils().create_composite_slices_folder(imageFileFolder)
 
         widthMultiplier, heightMultiplier, sliceCenter, sliceWidth = self.compositeSliceDlg.getMultipliers()
 
         actualSliceCenter = self.compositeSliceDlg.getSliceCenter() * widthMultiplier
 
         compositeSlices = GRIME_AI_CompositeSlices(actualSliceCenter, sliceWidth)
-        compositeSlices.create_composite_image(dailyImagesList.visibleList, imageFileFolder+'\compositeSlices')
+        compositeSlices.create_composite_image(dailyImagesList.visibleList, composite_slices_folder)
 
     def closeCompositeSlices(self):
         if self.compositeSliceDlg != None:
@@ -1854,49 +1854,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
             response = msgBox.displayMsgBox()
 
-    # ==================================================================================================================
-    # ==================================================================================================================
-    # ==================================================================================================================
-    def create_masks(self, coco_annotation_file, image_dir, output_dir):
-        print("Extract masks from COCO file...")
-
-        # Load COCO annotations
-        coco = COCO(coco_annotation_file)
-
-        # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Get all image ids
-        img_ids = coco.getImgIds()
-
-        for img_id in img_ids:
-            # Load image info
-            img_info = coco.loadImgs(img_id)[0]
-            img_path = os.path.join(image_dir, img_info['file_name'])
-
-            # Load image
-            image = cv2.imread(img_path)
-            height, width, _ = image.shape
-
-            # Create an empty mask
-            mask = np.zeros((height, width), dtype=np.uint8)
-
-            # Get annotation ids for the image
-            ann_ids = coco.getAnnIds(imgIds=img_id)
-            anns = coco.loadAnns(ann_ids)
-
-            for ann in anns:
-                # Get binary mask for the annotation
-                rle = coco.annToRLE(ann)
-                binary_mask = maskUtils.decode(rle)
-
-                # Combine binary mask with the main mask
-                mask = np.maximum(mask, binary_mask * 255)
-
-            # Save the mask
-            mask_path = os.path.join(output_dir, f"{img_info['file_name'].split('.')[0]}_mask.png")
-            cv2.imwrite(mask_path, mask)
-
 
     def menubarExtractCOCOMasks(self):
         self.COCOdlg = GRIME_AI_ExportCOCOMasksDlg(self)
@@ -1908,11 +1865,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     def accepted_COCODlg(self):
-        coco_annotation_file = self.COCOdlg.getAnnotationFile()
         image_dir = self.COCOdlg.getAnnotationImagesFolder()
-        output_dir = os.path.join(image_dir, "masks")
+        output_dir = os.path.join(image_dir, "training_masks")
 
-        self.create_masks(coco_annotation_file, image_dir, output_dir)
+        #JES CLEANUP TASK: THE ANNOTATION FILE IS NOT REQUIRED TO BE IN THE TRAINING IMAGES FOLDER.
+        utils = GRIME_AI_COCO_Utils(image_dir)
+        utils.extract_masks(image_dir, output_dir)
 
     def rejected_COCODlg(self):
         pass
@@ -1931,7 +1889,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if selected_dir:
             util = GRIME_AI_COCO_Utils(selected_dir)
-            #util.process()
             print("Selected folder:", selected_dir)
 
             """Execute full validation and cleaning pipeline."""
@@ -1967,6 +1924,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # Execute and capture response
                     if msg_box.exec_() == QMessageBox.Ok:
                         print("New JSON created for the images available in the folder.")
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def menubar_inspect_annotations(self):
+        selected_dir = QFileDialog.getExistingDirectory(
+            parent=None,
+            caption="Select a Folder",
+            options=QFileDialog.ShowDirsOnly
+        )
+        #directory = "C:/",  # initial directory
+
+        if selected_dir:
+            utils = GRIME_AI_COCO_Utils(selected_dir)
+            print("Selected folder:", selected_dir)
+            utils.load_coco()
+
+            now = datetime.datetime.now()
+            self.formatted_time = now.strftime('%Y%m%d_%H%M%S')
+            inspection_file = f"{self.formatted_time}_Inspect_Annotations.xlsx"
+            inspection_file = os.path.join(selected_dir, inspection_file)
+
+            utils.write_image_label_counts_to_xlsx(inspection_file)
+            print(f"Annotations Inspection: {inspection_file}")
 
 
     # ==================================================================================================================
@@ -2037,185 +2019,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Add more conditions as needed
         return {'texts': ['default object description']}  # Default prompt
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    '''
-    def tuneSAM(self):
-        import torch
-        from segment_anything import SamPredictor, sam_model_registry, SamTrainer
-        from pycocotools.coco import COCO
-
-        # Load your labeled images in COCO format
-        coco = COCO('instances_default.json')
-
-        #sam = sam_model_registry"<model_type>"
-        DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        MODEL_TYPE = "vit_h"
-        sam = sam_model_registry[MODEL_TYPE]
-        sam.to(device=DEVICE)
-        predictor = SamPredictor(sam)
-
-        # Prepare your dataset
-        # Make sure to organize your dataset in the format expected by the SAM model
-        # Typically, this involves having a directory with images and another with annotations
-
-        # Define the training parameters
-        train_params = {
-            "batch_size": 4,
-            "shuffle": True,
-            "num_workers": 4,
-            "pin_memory": True
-        }
-
-        # Initialize the trainer
-        trainer = SamTrainer(sam, train_params)
-
-        # Train the model
-        trainer.train(coco, epochs=100)
-
-        # Save the trained model
-        torch.save(sam.state_dict(), 'my_sam_vit_h_4b8939.pth')
-    '''
-
-    '''
-        # CHECK TO SEE IF THE COMPUTER HAS A GPU
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-        # Assuming that we are on a CUDA machine, this should print a CUDA device:
-        print(device)
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 1. LOAD AND NORMALIZE CIFAR10
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        transform = transforms.Compose(
-            [transforms.ToTensor(),
-             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-        batch_size = 4
-
-        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                                download=True, transform=transform)
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                                  shuffle=True, num_workers=2)
-
-        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                               download=True, transform=transform)
-        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                                 shuffle=False, num_workers=2)
-
-        classes = ('plane', 'car', 'bird', 'cat',
-                   'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-
-        net = Net()
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 3. DEEP LEARNING: DEFINE A LOSS FUNCTION AND OPTIMIZER
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 4a. DEEP LEARNING: TRAIN THE NETWORK
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        for epoch in range(2):  # loop over the dataset multiple times
-
-            running_loss = 0.0
-            for i, data in enumerate(trainloader, 0):
-                # get the inputs; data is a list of [inputs, labels]
-                inputs, labels = data
-
-                # zero the parameter gradients
-                optimizer.zero_grad()
-
-                # forward + backward + optimize
-                outputs = net(inputs)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-
-                # print statistics
-                running_loss += loss.item()
-                if i % 2000 == 1999:  # print every 2000 mini-batches
-                    print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-                    running_loss = 0.0
-
-        print('Finished Training')
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 4b. DEEP LEARNING: SAVE THE TRAINED MODEL
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        PATH = './cifar_net.pth'
-        torch.save(net.state_dict(), PATH)
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 5a. DEEP LEARNING: TEST THE NETWORK ON THE TEST DATA
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        dataiter = iter(testloader)
-        images, labels = next(dataiter)
-
-        # print images
-        self.imshow( torchvision.utils.make_grid(images))
-        print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 5b. DEEP LEARNING: RELOAD THE TEST DATA
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        net = Net()
-        net.load_state_dict(torch.load(PATH))
-
-        # LET'S SEE WHAT THE NEURAL NET CLASSIFIES THE IMAGES AS
-        outputs = net(images)
-
-        _, predicted = torch.max(outputs, 1)
-
-        print('Predicted: ', ' '.join(f'{classes[predicted[j]]:5s}'
-                                      for j in range(4)))
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # CHECK TO SEE HOW THE NEURAL NET PERFORMS ON THE WHOLE DATA SET
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        correct = 0
-        total = 0
-        # since we're not training, we don't need to calculate the gradients for our outputs
-        with torch.no_grad():
-            for data in testloader:
-                images, labels = data
-                # calculate outputs by running images through the network
-                outputs = net(images)
-                # the class with the highest energy is what we choose as prediction
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-
-        print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # WHICH CLASSES PERFORMED WELL AND WHICH CLASSES PERFORMED POORLY
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # prepare to count predictions for each class
-        correct_pred = {classname: 0 for classname in classes}
-        total_pred = {classname: 0 for classname in classes}
-
-        # again no gradients needed
-        with torch.no_grad():
-            for data in testloader:
-                images, labels = data
-                outputs = net(images)
-                _, predictions = torch.max(outputs, 1)
-                # collect the correct predictions for each class
-                for label, prediction in zip(labels, predictions):
-                    if label == prediction:
-                        correct_pred[classes[label]] += 1
-                    total_pred[classes[label]] += 1
-
-        # print accuracy for each class
-        for classname, correct_count in correct_pred.items():
-            accuracy = 100 * float(correct_count) / total_pred[classname]
-            print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
-    '''
 
     # ==================================================================================================================
     #
@@ -2423,846 +2226,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
                 currentImage = QPixmap(tempCurrentImage)
 
-
-    # ==================================================================================================================
-    # ==================================================================================================================
-    # IMAGE MASK FUNCTIONALITY
-    # ==================================================================================================================
-    # ==================================================================================================================
-    def onMyToolBarBuildModel(self):
-
-        if self.buildModelDlg == None:
-            self.buildModelDlg = GRIME_AI_buildModelDlg()
-
-            self.buildModelDlg.rejected.connect(self.buildModelDialogClose)
-
-            self.buildModelDlg.save_model_masks_signal.connect(self.saveModelMasksChanged)
-            self.buildModelDlg.save_original_model_image_signal.connect(self.saveOriginalModelImageChanged)
-            self.buildModelDlg.segment_image_signal.connect(self.segment_image_clicked)
-            self.buildModelDlg.build_model_signal.connect(self.tune_model_clicked)
-
-            self.buildModelDlg.show()
-
-            global g_modelSettings
-            g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
-            g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    def buildModelDialogClose(self):
-        global g_modelSettings
-        g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
-        g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
-
-        # self.buildModelDlg.close()
-
-        del self.buildModelDlg
-        self.buildModelDlg = None
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    def saveModelMasksChanged(self, bSave):
-        global g_modelSettings
-        g_modelSettings.saveModelMasks = bSave
-
-
-    # ------------------------------------------------------------------------------------------------------------------
-    def saveOriginalModelImageChanged(self, bSave):
-        global g_modelSettings
-        g_modelSettings.saveOriginalModelImage = bSave
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def tune_model_clicked(self):
-
-        global g_modelSettings
-        g_modelSettings.saveModelMasks = self.buildModelDlg.getSaveModelMasks()
-        g_modelSettings.saveOriginalModelImage = self.buildModelDlg.getMoveOriginalImage()
-        g_modelSettings.model_file = self.buildModelDlg.get_selected_model_path_and_filename()
-
-        if self.buildModelDlg == None:
-            self.buildModelDlg.close()
-            del self.buildModelDlg
-            self.buildModelDlg = None
-
-        if g_modelSettings.model_file:
-            self.myDeepLearning(g_modelSettings)
-
-        self.GRIME_AI_tune_sam2_model()
-
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def segment_image_clicked(self):
-
-        global progress_bar_closed
-
-        def on_progress_bar_closed(obj):
-            global progress_bar_closed
-            progress_bar_closed = True
-
-        progressBar = QProgressWheel()
-        progressBar.destroyed.connect(on_progress_bar_closed)
-        progress_bar_closed = False
-        progressBar.show()
-
-        if 0:
-            # Clear the global Hydra instance if it's already initialized
-            if hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
-                hydra.core.global_hydra.GlobalHydra.instance().clear()
-
-            config_dir = "./sam2/sam2/configs/sam2.1"   # RELATIVE PATH
-            # CONVERT TO ABSOLUTE PATH, IF NEEDED
-            if 0:
-                dirname = os.path.dirname(__file__)
-                config_dir = os.path.join(dirname, config_dir)
-                config_dir = os.path.normpath(config_dir)
-
-            with initialize(config_path=config_dir):
-                cfg = compose(config_name="sam2.1_hiera_l.yaml")
-                print(OmegaConf.to_yaml(cfg))
-
-        #JES - INVESTIGATE - WHY DOES IT ONLY WORK WITH AN ABSOLUTE FILE PATH???
-        dirname = os.path.dirname(__file__)
-        model_cfg = os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1\\sam2.1_hiera_l.yaml")
-        model_cfg = os.path.normpath(model_cfg)
-        print(model_cfg)
-
-        sam2_checkpoint = os.path.join(dirname, "sam2\\checkpoints\\sam2.1_hiera_large.pt")
-        sam2_checkpoint = os.path.normpath(sam2_checkpoint)
-        print(sam2_checkpoint)
-
-        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(DEVICE)
-
-        sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE, mode='eval')
-
-        predictor = SAM2ImagePredictor(sam2_model)
-
-        # from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
-        # CHECKPOINT_PATH = '..\\..\\models\\sam_vit_h_4b8939.pth'
-        # MODEL_TYPE = "vit_h"
-        # sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT_PATH)
-        # sam.to(device=DEVICE)
-        # predictor = SAM2ImagePredictor(sam)
-
-        input_point = np.array([[619, 396]])
-        input_label = np.array([1])
-
-        model_filename = self.buildModelDlg.get_selected_model_path_and_filename()
-        predictor.model.load_state_dict(torch.load(model_filename, map_location=torch.device(DEVICE)))
-
-        if 0:
-            predictor.model.load_state_dict(torch.load(".\\models\\model_20 (DK Grand Island)-002.torch"))
-
-        if 0:
-            folder = self.buildModelDlg.get_images_folder()
-            VALID_EXTS = ('.jpg', '.jpeg')
-            images = [
-                f for f in os.listdir(folder)
-                if f.lower().endswith(VALID_EXTS)
-            ]
-
-            for image in images:
-                image = Image.open(f"{folder}\\{image}").convert("RGB")
-                plt.figure(figsize=(10, 10))
-                plt.imshow(image)
-                show_points(input_point, input_label, plt.gca())
-                plt.axis('on')
-                plt.show()
-
-        folder = self.buildModelDlg.get_segmentation_images_folder()
-        VALID_EXTS = ('.jpg', '.jpeg')
-        images = [
-            f for f in os.listdir(folder)
-            if f.lower().endswith(VALID_EXTS)
-        ]
-
-        progressBar.setRange(0, len(images) + 1)
-
-        for image_index, image in enumerate(images):
-            if progress_bar_closed is False:
-                progressBar.setWindowTitle(image)
-                progressBar.setValue(image_index)
-
-                predictor.set_image(np.array(Image.open(f"{folder}\\{image}").convert("RGB")))
-
-                masks, scores, logits = predictor.predict(
-                    point_coords=input_point,
-                    point_labels=input_label,
-                    multimask_output=True,
-                )
-                sorted_ind = np.argsort(scores)[::-1]
-                masks = masks[sorted_ind]
-                scores = scores[sorted_ind]
-                logits = logits[sorted_ind]
-
-                img = cv2.imread(f"{folder}\\{image}", cv2.COLOR_BGR2RGB)
-                masked_images, masks_only = self.show_masks(img, masks, scores, borders=True)
-
-                for mask_index, composite_mask_and_image in enumerate(masked_images):
-                    filename_only = Path(f"{folder}\\{image}").stem
-
-                    output_folder = f"{folder}\\mask_overlays"
-                    os.makedirs(output_folder, exist_ok=True)
-
-                    filename = f"{filename_only}_mask_overlay_{mask_index}.jpg"
-                    output_file = os.path.join(output_folder, filename)
-                    cv2.imwrite(output_file, np.array(cv2.cvtColor(composite_mask_and_image, cv2.COLOR_RGB2BGR)))
-
-                    # SAVE EACH MASK AS A SEPARATE FILE IF SELECTED
-                    if self.buildModelDlg.getSaveModelMasks():
-                        mask_filename = f"{filename_only}_mask_only_{mask_index}.jpg"
-                        output_file = os.path.join(output_folder, mask_filename)
-                        cv2.imwrite(output_file, np.array(cv2.cvtColor(masks_only[mask_index], cv2.COLOR_RGB2BGR)))
-
-            else:
-                strMessage = 'You have cancelled the image segmentation currently in-progress. Not all images have been segmented.'
-                msgBox = GRIME_AI_QMessageBox('Image Segmentation Terminated', strMessage, QMessageBox.Close)
-                response = msgBox.displayMsgBox()
-                break
-
-        # close the progressBar only if the user did not close it (i.e., terminated image segmentation)
-        if progress_bar_closed is False:
-            progressBar.close()
-        del progressBar
-
-
-    def show_masks(self, image, masks, scores, point_coords=None, box_coords=None, input_labels=None, borders=True):
-        """
-        Display masks on an image with optional points and boxes.
-
-        Args:
-            image (ndarray): The image on which to display the masks.
-            masks (list of ndarray): A list of masks to display.
-            scores (list of float): A list of scores corresponding to each mask.
-            point_coords (list of tuple, optional): Coordinates of points to display. Defaults to None.
-            box_coords (list of tuple, optional): Coordinates of boxes to display. Defaults to None.
-            input_labels (list of int, optional): Labels for the points. Required if point_coords is provided. Defaults to None.
-            borders (bool, optional): Whether to display borders around masks. Defaults to True.
-
-        Raises:
-            AssertionError: If point_coords is provided without input_labels.
-
-        """
-        masked_images = []
-        masks_only = []
-
-        for i, (mask, score) in enumerate(zip(masks, scores)):
-            #JES plt.figure(figsize=(10, 10))
-            #JES plt.imshow(image)
-            #JES mask_image = self.show_mask(mask, plt.gca(), borders=borders)
-            mask_image = self.show_mask(mask, borders=borders)
-
-            if point_coords is not None:
-                assert input_labels is not None
-                show_points(point_coords, input_labels, plt.gca())
-
-            if box_coords is not None:
-                # boxes
-                show_box(box_coords, plt.gca())
-
-            #JES if len(scores) > 1:
-            #JES     plt.title(f"Mask {i + 1}, Score: {score:.3f}", fontsize=18)
-            #JES plt.axis('off')
-            #JES plt.show()
-
-            # Overlay the mask on the original image
-            # Ensure the mask has an alpha channel
-            import cv2
-            # Resize the mask to match the size of the original image
-            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-            color = np.array([30, 144, 255, 0.6])
-            h, w = mask.shape[-2:]
-            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-            mask_np = np.array(mask_image)
-            mask_np = mask_np.astype(int)
-            mask_cv2 = mask_np
-            mask_cv2 = mask_cv2.astype(np.float32)
-            masks_only.append(mask_cv2)
-
-            image_np = np.array(image)
-            image_cv2 = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGRA)
-            image_cv2 = image_cv2.astype(np.float32)
-
-            combined = cv2.addWeighted(image_cv2, 1, mask_cv2, 0.5, 0)
-
-            masked_images.append(combined)
-
-        return masked_images, masks_only
-
-
-    """
-    Module for displaying masks on images.
-
-    This module provides a function to display a mask on an image with optional random coloring
-    and border drawing.
-
-    Functions:
-        show_mask(mask, ax, random_color=False, borders=True): Displays a mask on an image.
-
-    Example:
-        fig, ax = plt.subplots()
-        mask = np.array([[0, 1], [1, 0]])
-        show_mask(mask, ax, random_color=True, borders=True)
-
-    Author:
-        Your Name
-
-    Date:
-        YYYY-MM-DD
-    """
-
-    #JES def show_mask(self, mask, ax, random_color=False, borders=True):
-    def show_mask(self, mask, random_color=False, borders=True):
-
-        """
-        Displays a mask on an image.
-
-        Args:
-            mask (np.ndarray): The mask to be displayed.
-            ax (matplotlib.axes.Axes): The axes on which to display the mask.
-            random_color (bool, optional): If True, use a random color for the mask. Defaults to False.
-            borders (bool, optional): If True, draw borders around the mask. Defaults to True.
-
-        Returns:
-            None
-
-        """
-        if random_color:
-            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-        else:
-            color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-
-        h, w = mask.shape[-2:]
-        mask = mask.astype(np.uint8)
-        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-
-        if borders:
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-            # Try to smooth contours
-            contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
-            mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2)
-
-        return mask_image
-
-
-    """
-    Module for displaying points on a plot.
-
-    This module provides a function to display positive and negative points on a plot
-    with different colors and markers.
-
-    Functions:
-        show_points(coords, labels, ax, marker_size=375): Displays positive and negative points on a plot.
-
-    Example:
-        fig, ax = plt.subplots()
-        coords = np.array([[1, 2], [3, 4], [5, 6]])
-        labels = np.array([1, 0, 1])
-        show_points(coords, labels, ax)
-
-    Author:
-        Your Name
-
-    Date:
-        YYYY-MM-DD
-    """
-
-    def show_points(self, coords, labels, ax, marker_size=375):
-        """
-        Displays positive and negative points on a plot.
-
-        Args:
-            coords (np.ndarray): Array of coordinates for the points.
-            labels (np.ndarray): Array of labels for the points (1 for positive, 0 for negative).
-            ax (matplotlib.axes.Axes): The axes on which to display the points.
-            marker_size (int, optional): Size of the markers. Defaults to 375.
-
-        Returns:
-            None
-
-        """
-        pos_points = coords[labels == 1]
-        neg_points = coords[labels == 0]
-        ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white',
-                   linewidth=1.25)
-        ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white',
-                   linewidth=1.25)
-
-
-    # ==================================================================================================================
-    # https: // pytorch.org / tutorials / beginner / blitz / cifar10_tutorial.html
-    # https://pytorch.org/tutorials/beginner/blitz/neural_networks_tutorial.html
-    # https://www.cs.toronto.edu/~kriz/cifar.html
-    # ==================================================================================================================
-    #JES def myDeepLearning(self, modelSettings):
-
-        '''
-        # THIS IS THE OLD CODE THAT HAS BEEN ENCAPULATED INTO A CLASS. THE NEW CODE NEEDS TO BE ENAPSULATED INTO THIS
-        # CLASS A.S.A.P!
-        #self.tuneSAM()
-        DL = GRIME_AI_DeepLearning()
-        DL.SAM_001(modelSettings, dailyImagesList)
-        #self.SAM_002()
-        '''
-
-
-    def GRIME_AI_tune_sam2_model(self):
-        training_images_folder = [os.path.normpath(self.buildModelDlg.get_training_images_folder())]
-
-        annotation_file = [self.buildModelDlg.get_annotation_filename()]
-
-        all_images, all_annotations = self.load_images_and_annotations(training_images_folder, annotation_file)
-
-        train_images, val_images, test_images, annotations = self.split_dataset(all_images, all_annotations)
-
-        input_point = np.array([[1254, 934]])
-        input_label = np.array([1])
-
-        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(DEVICE)
-
-        sam2_checkpoint = "CheckPoints\\sam2.1_hiera_large.pt"
-        model_cfg = "configs\\sam2.1\\sam2.1_hiera_l.yaml"
-
-        sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=DEVICE)
-        predictor = SAM2ImagePredictor(sam2_model)
-        predictor.model.sam_mask_decoder.train(True)  # enable training of mask decoder
-        predictor.model.sam_prompt_encoder.train(True)  # enable training of prompt encoder
-
-        model = SAM2FullModel(predictor.model)
-
-        model.to(DEVICE)
-
-        optimizer = torch.optim.AdamW(predictor.model.parameters(), lr=0.0001, weight_decay=0.001)
-
-        now = datetime.now()
-        print(now)
-        self.GRIME_AI_train_sam(sam2_model, predictor, train_images, annotations, optimizer, val_images, annotations, input_point, input_label,
-                  epochs=30, modelSettings=g_modelSettings)
-        now = datetime.now()
-        print(now)
-
-        now = datetime.now()
-        formatted_time = now.strftime('%d%m_%H%M')
-        plt.plot(self.epoch_list, self.loss_values, marker='*')
-        plt.title('Epoch vs loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('loss')
-        plt.savefig("EpochVsLoss_{}.png".format(formatted_time))
-
-        predictor.model.load_state_dict(torch.load("model_20.torch"))
-
-        num_classes = 2
-        all_true_labels = []
-        all_predicted_labels = []
-
-        coco_data = {
-            "images": [],
-            "annotations": [],
-            "categories": []
-        }
-
-        categories = [
-            {"id": 1, "name": "object"}
-        ]
-        coco_data["categories"].extend(categories)
-
-        image_id = 0
-        annotation_id = 0
-
-        output_dir = Path("output_annotations")
-        output_dir.mkdir(exist_ok=True)
-
-        for idx, image_file in enumerate(test_images):
-
-            image = np.array(Image.open(image_file).convert("RGB"))
-
-            height, width = image.shape[:2]
-            image_info = {
-                "file_name": os.path.basename(image_file),
-                "height": height,
-                "width": width,
-                "id": image_id
-            }
-            coco_data["images"].append(image_info)
-            predictor.set_image(image)
-            masks, scores, _ = predictor.predict(multimask_output=False)
-
-            if masks.size > 0:
-                mask = masks[np.argmax(scores)]
-                mask_tensor = torch.tensor(mask, dtype=torch.uint8)
-
-                true_mask = load_true_mask(image_file, annotations)
-
-                true_labels = true_mask.flatten()
-                predicted_labels = mask_tensor.flatten()
-
-                all_true_labels.extend(true_labels)
-                all_predicted_labels.extend(predicted_labels)
-
-                pos = np.where(mask)
-                xmin = int(np.min(pos[1]))
-                xmax = int(np.max(pos[1]))
-                ymin = int(np.min(pos[0]))
-                ymax = int(np.max(pos[0]))
-                bbox = [xmin, ymin, xmax - xmin, ymax - ymin]
-
-                segmentation = mask.ravel().tolist()
-
-                annotation = {
-                    "id": annotation_id,
-                    "image_id": image_id,
-                    "category_id": 1,
-                    "segmentation": [segmentation],
-                    "area": int(np.sum(mask)),
-                    "bbox": bbox,
-                    "iscrowd": 0
-                }
-                coco_data["annotations"].append(annotation)
-
-                annotation_id += 1
-
-            image_id += 1
-
-        output_file = output_dir / "annotations_coco_format8.json"
-        with open(output_file, "w") as f:
-            json.dump(coco_data, f, indent=4)
-
-        print(f"COCO annotations saved to {output_file}")
-
-    def GRIME_AI_train_sam(self, sam2_model, predictor, train_images, annotations, optimizer, val_images, val_annotations,
-                  input_point, input_label, epochs=20, modelSettings=g_modelSettings):
-        """
-        Train the SAM model using the provided training images and annotations.
-
-        Args:
-            predictor (SAM2ImagePredictor): The predictor object for the SAM model.
-            train_images (list of str): List of file paths to the training images.
-            annotations (dict): A dictionary containing image and annotation data.
-            optimizer (torch.optim.Optimizer): The optimizer for training the model.
-            val_images (list of str, optional): List of file paths to the validation images. Defaults to None.
-            val_annotations (dict, optional): A dictionary containing validation image and annotation data. Defaults to None.
-            input_point (list of tuple): List of input points for mask prediction.
-            input_label (list of int): List of labels corresponding to the input points.
-            epochs (int, optional): Number of training epochs. Defaults to 20.
-
-        Returns:
-            None
-
-        Raises:
-            ValueError: If an image file is not found in the annotations.
-
-        """
-        ECHO = 0
-        epochs = 50
-
-        sam2_model.train()
-        predictor = SAM2ImagePredictor(sam2_model)
-
-        for epoch in range(epochs):
-            self.epoch_list.append(epoch + 1)
-            epoch_loss = 0.0
-            if ECHO:
-                print(f"Epoch {epoch + 1}/{epochs}")
-
-            np.random.shuffle(train_images)
-            loss_fn = nn.BCEWithLogitsLoss()
-
-            for idx, image_file in enumerate(train_images):
-                image = np.array(Image.open(image_file).convert("RGB"))
-                true_mask = self.load_true_mask(image_file, annotations)
-
-                if true_mask is None:
-                    print(f"No annotation found for image {image_file}, skipping.")
-                    continue
-
-                predictor.set_image(image)
-
-                # Prepare prompts for mask prediction
-                mask_input, unnorm_coords, labels, unnorm_box = predictor._prep_prompts(input_point, input_label,
-                                                                                        box=None, mask_logits=None,
-                                                                                        normalize_coords=True)
-                sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(
-                    points=(unnorm_coords, labels),
-                    boxes=None,
-                    masks=None
-                )
-
-                # Mask decoder prediction
-                batched_mode = unnorm_coords.shape[0] > 1  # multi-object prediction
-                high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in
-                                     predictor._features["high_res_feats"]]
-                low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
-                    image_embeddings=predictor._features["image_embed"][-1].unsqueeze(0),
-                    image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
-                    sparse_prompt_embeddings=sparse_embeddings,
-                    dense_prompt_embeddings=dense_embeddings,
-                    multimask_output=True,
-                    repeat_image=batched_mode,
-                    high_res_features=high_res_features,
-                )
-                prd_masks = predictor._transforms.postprocess_masks(low_res_masks,
-                                                                    predictor._orig_hw[-1])  # Upscale masks
-
-                # Loss calculations
-                gt_mask = torch.tensor(true_mask.astype(np.float32)).cuda().unsqueeze(0)
-                prd_mask = torch.sigmoid(prd_masks[:, 0]).unsqueeze(0)
-
-                try:
-                    # Segmentation Loss
-                    seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log(
-                        (1 - prd_mask) + 0.00001)).mean()
-
-                    # Score Loss (IOU)
-                    inter = (gt_mask * (prd_mask > 0.5)).sum(1).sum(1)
-                    iou = inter / (gt_mask.sum(1).sum(1) + (prd_mask > 0.5).sum(1).sum(1) - inter)
-                    score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
-
-                    # Combine losses
-                    loss = seg_loss + score_loss * 0.05
-
-                    # Backpropagation with mixed precision
-                    optimizer.zero_grad()
-                    with autocast():
-                        self.scaler.scale(loss).backward()
-                        self.scaler.step(optimizer)
-                        self.scaler.update()
-
-                    epoch_loss += loss.detach().item()
-                    if ECHO:
-                        print(f"Image {idx + 1}/{len(train_images)} processed. Loss: {loss.item()}")
-                except Exception:
-                    print("Something is wrong with the tensors!")
-
-            # Average epoch loss
-            avg_epoch_loss = epoch_loss / len(train_images)
-            self.loss_values.append(avg_epoch_loss)
-
-            if ECHO:
-                print(f"Epoch {epoch + 1} Training Loss: {avg_epoch_loss}")
-
-            # Validation step
-            if val_images is not None and val_annotations is not None:
-                val_loss = 0.0
-                with torch.no_grad():
-                    for val_idx, val_image_file in enumerate(val_images):
-                        val_image = np.array(Image.open(val_image_file).convert("RGB"))
-                        val_true_mask = self.load_true_mask(val_image_file, val_annotations)
-
-                        if val_true_mask is None:
-                            if ECHO:
-                                print(f"No annotation found for validation image {val_image_file}, skipping.")
-                            continue
-
-                        predictor.set_image(val_image)
-                        masks, scores, _ = predictor.predict(point_coords=input_point, point_labels=input_label,
-                                                             multimask_output=False)
-
-                        if masks.size > 0:
-                            best_mask = masks[np.argmax(scores)]
-                            # best_mask_tensor = torch.tensor(best_mask, dtype=torch.float32, attn_implementation="flash_attention_2").unsqueeze(0).to("cuda")
-                            # val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32, attn_implementation="flash_attention_2").unsqueeze(0).to("cuda")Salt Lake City, Utah
-                            best_mask_tensor = torch.tensor(best_mask, dtype=torch.float32).unsqueeze(0).to("cpu")
-                            val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32).unsqueeze(0).to(
-                                "cpu")
-
-                            val_loss += loss_fn(best_mask_tensor, val_true_mask_tensor).item()
-
-                avg_val_loss = val_loss / len(val_images)
-                if ECHO:
-                    print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss}")
-        torch.save(predictor.model.state_dict(), "model_20.torch")
-
-
-    """
-    Module for loading images and annotations.
-
-    This module provides a function to load images and their corresponding annotations
-    from specified folders and annotation files.
-
-    Functions:
-        load_images_and_annotations(folders, annotation_files): Loads images and annotations from the given folders and annotation files.
-
-    Example:
-        folders = ['path/to/folder1', 'path/to/folder2']
-        annotation_files = ['path/to/annotations1.json', 'path/to/annotations2.json']
-        images, annotations = load_images_and_annotations(folders, annotation_files)
-
-    Author:
-        Your Name
-
-    Date:
-        YYYY-MM-DD
-    """
-    def load_images_and_annotations(self, folders, annotation_files):
-        """
-        Loads images and annotations from the given folders and annotation files.
-
-        Args:
-            folders (list): List of folder paths containing images.
-            annotation_files (list): List of paths to annotation files.
-
-        Returns:
-            tuple: A tuple containing:
-                - all_images (list): List of paths to all images.
-                - all_annotations (dict): Dictionary containing 'images' and 'annotations' lists.
-
-        """
-
-        if 0:
-            all_images = []
-            all_annotations = {'images': [], 'annotations': []}
-
-            for folder, annotation_file in zip(folders, annotation_files):
-                images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
-                all_images.extend([(os.path.join(folder, img)) for img in images])
-
-                with open(annotation_file, 'r') as f:
-                    annotations = json.load(f)
-
-                all_annotations['images'].extend(annotations['images'])
-                all_annotations['annotations'].extend(annotations['annotations'])
-        else:
-            all_images = []
-            all_annotations = {'images': [], 'annotations': []}
-
-            for folder, annotation_file in zip(folders, annotation_files):
-                water_category_id = None
-                images = [f for f in os.listdir(folder) if f.endswith('.jpg')]
-                all_images.extend([(os.path.join(folder, img)) for img in images])
-
-                with open(annotation_file, 'r') as f:
-                    annotations = json.load(f)
-
-                # Retrieve 'water' category ID if not already found
-                if water_category_id is None:
-                    for category in annotations.get('categories', []):
-                        if category['name'] == 'water':
-                            water_category_id = category['id']
-                            break
-
-                if water_category_id is None:
-                    raise ValueError("The 'water' category is not found in the categories list.")
-
-                # Filter annotations for 'water' category
-                water_annotations = [
-                    ann for ann in annotations['annotations']
-                    if ann['category_id'] == water_category_id
-                ]
-
-                # Add filtered annotations and images
-                all_annotations['images'].extend(annotations['images'])
-                all_annotations['annotations'].extend(water_annotations)
-
-                return all_images, all_annotations
-
-        return all_images, all_annotations
-
-    """
-    Module: dataset_splitter
-
-    This module provides a function to split a dataset of images and annotations into
-    training, validation, and test sets.
-
-    Functions:
-        split_dataset(all_images, annotations, train_split=0.7, val_split=0.15, test_split=0.15)
-            Splits the dataset into training, validation, and test sets based on the given split ratios.
-
-    Example:
-        all_images = ['image1.jpg', 'image2.jpg', 'image3.jpg', ...]
-        annotations = {'images': [...], 'annotations': [...]}
-        train_images, val_images, test_images, annotations = split_dataset(all_images, annotations)
-
-    Author: Your Name
-    Date: YYYY-MM-DD
-    """
-
-    def split_dataset(self, all_images, annotations, train_split=0.7, val_split=0.15, test_split=0.15):
-        """
-        Splits the dataset into training, validation, and test sets.
-
-        Args:
-            all_images (list): List of all image paths.
-            annotations (dict): Dictionary containing image and annotation data.
-            train_split (float): Proportion of the dataset to include in the training set.
-            val_split (float): Proportion of the dataset to include in the validation set.
-            test_split (float): Proportion of the dataset to include in the test set.
-
-        Returns:
-            tuple: A tuple containing:
-                - train_images (list): List of training image paths.
-                - val_images (list): List of validation image paths.
-                - test_images (list): List of test image paths.
-                - annotations (dict): Dictionary containing image and annotation data.
-
-        """
-        random.shuffle(all_images)
-
-        num_images = len(all_images)
-        train_size = int(train_split * num_images)
-        val_size = int(val_split * num_images)
-
-        train_images = all_images[:train_size]
-        val_images = all_images[train_size:train_size + val_size]
-        test_images = all_images[train_size + val_size:]
-
-        print(
-            f"Train: {len(train_images)} images, Validation: {len(val_images)} images, Test: {len(test_images)} images")
-        return train_images, val_images, test_images, annotations
-
-
-    def load_true_mask(self, image_file, annotations):
-        """
-        Load the true mask for a given image file from annotations.
-
-        Args:
-            image_file (str): The path to the image file.
-            annotations (dict): A dictionary containing image and annotation data.
-
-        Returns:
-            ndarray: The mask for the image as a float32 numpy array. Returns None if no annotation is found.
-
-        Raises:
-            ValueError: If the image file is not found in the annotations.
-
-        """
-        # Find corresponding annotation for the image
-        file_name_only = os.path.basename(image_file)
-        image_info = next((img for img in annotations['images'] if img['file_name'] == file_name_only), None)
-        print(image_info)
-
-        if image_info is None:
-            raise ValueError(f"Image file {image_file} not found in annotations.")
-
-        image_id = image_info['id']
-
-        annotation = next((ann for ann in annotations['annotations'] if ann['image_id'] == image_id), None)
-        if annotation is None:
-            return None
-
-        height = image_info['height']
-        width = image_info['width']
-
-        segmentation = annotation['segmentation']
-        rle = coco_mask.frPyObjects(segmentation, height, width)
-        mask = coco_mask.decode(rle)
-        return mask.astype(np.float32)
-
-
-    # ======================================================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
-    # NOT CURRENTLY USED
-    '''
-    def toolbarButtonDeepLearning(self):
-        self.myDeepLearning(g_modelSettings)
-    '''
 
     # ==================================================================================================================
     # ==================================================================================================================
@@ -4668,8 +3631,11 @@ def NEON_labelMouseDoubleClickEvent(self, event):
 #
 # ======================================================================================================================
 def retranslateUi(self, MainWindow):
+
+    szWindowsTitle = "GRIME AI" + " " + SW_VERSION + " - John E. Stranzl Jr."
+
     _translate = QtCore.QCoreApplication.translate
-    MainWindow.setWindowTitle(_translate("GRIME-AI: John E. Stranzl Jr.", "GRIME-AI: John E. Stranzl Jr."))
+    MainWindow.setWindowTitle(_translate(szWindowsTitle, szWindowsTitle))
 
 # ======================================================================================================================
 # FIND THE MONTHS THAT DATA IS AVAILABLE FOR A PARTICULAR PRODUCT FOR A PARTICULAR SITE
