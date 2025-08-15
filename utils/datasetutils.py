@@ -23,12 +23,12 @@ class DatasetUtils:
 
             if water_category_id is None:
                 for category in annotations.get('categories', []):
-                    if category['name'] == 'water':
+                    if category['name'] == 'water' or category['name'] == 'Vegetation':
                         water_category_id = category['id']
                         break
 
             if water_category_id is None:
-                raise ValueError(f"The 'water' category is not found in {annotation_file}.")
+                raise ValueError(f"The 'water' or 'Vegetation' category were not found in {annotation_file}.")
 
             water_annotations = [
                 ann for ann in annotations['annotations']
