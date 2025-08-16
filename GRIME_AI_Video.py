@@ -24,6 +24,9 @@ class GRIME_AI_Video:
     def __init__(self):
         self.className = "GRIME_AI_Video"
 
+        from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+        self.myGRIMEAI_save_utils = GRIME_AI_Save_Utils()
+
     # ======================================================================================================================
     #
     # ======================================================================================================================
@@ -33,7 +36,7 @@ class GRIME_AI_Video:
 
         myGRIMe_Color = GRIME_AI_Color()
 
-        filePath = GRIME_AI_Save_Utils().create_video_folder(rootFolder)
+        filePath = self.myGRIMEAI_save_utils.create_video_folder(rootFolder)
 
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')
@@ -73,7 +76,7 @@ class GRIME_AI_Video:
     # ======================================================================================================================
     def createGIF(self, rootFolder):
 
-        filePath = GRIME_AI_Save_Utils().create_gif_folder(rootFolder)
+        filePath = self.myGRIMEAI_save_utils.create_gif_folder(rootFolder)
 
         # ONLY LOOK FOR FILES WITH THE FOLLOWING EXTENSIONS
         extensions = ('.jpg', '.jpeg', '.png')

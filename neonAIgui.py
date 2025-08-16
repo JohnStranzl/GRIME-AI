@@ -413,6 +413,8 @@ class Ui_MainWindow(object):
         self.action_Generate_Greenness_Test_Images.setObjectName("action_Generate_Greenness_Test_Images")
         self.action_Sync_JSON_Annotations = QtWidgets.QAction(MainWindow)
         self.action_Sync_JSON_Annotations.setObjectName("action_Sync_JSON_Annotations")
+        self.action_Inspect_Annotations = QtWidgets.QAction(MainWindow)
+        self.action_Inspect_Annotations.setObjectName("action_Inspect_Annotations")
         self.menuFile.addAction(self.action_SaveImageSet)
         self.menuFile.addAction(self.action_SaveSettings)
         self.menu_About.addAction(self.action_ReleaseNotes)
@@ -428,6 +430,7 @@ class Ui_MainWindow(object):
         self.menuTools.addSeparator()
         self.menuTools.addAction(self.action_ExtractCOCOMasks)
         self.menuTools.addAction(self.action_Sync_JSON_Annotations)
+        self.menuTools.addAction(self.action_Inspect_Annotations)
         self.menuTools.addAction(self.action_CreateJSON)
         self.menuTools.addSeparator()
         self.menuTools.addSeparator()
@@ -507,5 +510,6 @@ class Ui_MainWindow(object):
         self.action_CreateJSON.setText(_translate("MainWindow", "Create JSON"))
         self.action_Generate_Greenness_Test_Images.setText(_translate("MainWindow", "Generate Greenness Test Images"))
         self.action_Sync_JSON_Annotations.setText(_translate("MainWindow", "Sync JSON Annotations"))
+        self.action_Inspect_Annotations.setText(_translate("MainWindow", "Inspect Annotations"))
 from GRIME_AI_QTableWidget import GRIME_AI_QTableWidget
 from GRIME_QLabel import GRIME_QLabel

@@ -65,7 +65,7 @@ class GRIME_AI_Save_Utils:
         target = os.path.join(normalized, "CompositeSlices")
 
         # 4. Create directories if missing (equivalent to mkdir -p)
-        target = os.makedirs(target, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
 
         return str(target)
 
@@ -96,7 +96,7 @@ class GRIME_AI_Save_Utils:
 
         # 4. Create directories if missing (equivalent to mkdir -p)
         #JES target.mkdir(parents=True, exist_ok=True)
-        target = os.makedirs(target, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
 
         return str(target)
 
@@ -127,7 +127,7 @@ class GRIME_AI_Save_Utils:
 
         # 4. Create directories if missing (equivalent to mkdir -p)
         #JES target.mkdir(parents=True, exist_ok=True)
-        target = os.makedirs(target, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
 
         return str(target)
 
@@ -158,7 +158,7 @@ class GRIME_AI_Save_Utils:
 
         # 4. Create directories if missing (equivalent to mkdir -p)
         #JES target.mkdir(parents=True, exist_ok=True)
-        target = os.makedirs(target, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
 
         return str(target)
 
