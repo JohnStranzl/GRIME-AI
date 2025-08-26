@@ -1,6 +1,7 @@
 import os
 import getpass
 import json
+import csv
 import cv2
 from pathlib import Path
 from promptlib import Files
@@ -167,8 +168,6 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # Initialize per-image annotation store
         # Keys: full image path, Values: list of {type, points}
         self.annotation_store: Dict[str, List[Dict]] = {}
-
-        self.pushButton_analyze.clicked.connect(self.analyze_roi)
 
         # --- Filmstrip one‐row configuration ---
         filmstrip = self.listWidget_annotationFilmstrip
@@ -717,6 +716,9 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self.pushButton_analyze.clicked.connect(self.analyze_roi)
         self.pushButton_analyze.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
+        self.pushButton_extract_ROI_features.clicked.connect(self.extract_ROI_features)
+        self.pushButton_extract_ROI_features.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+
         self.listWidget_filmstrip.itemClicked.connect(self.on_filmstrip_item_clicked)
 
         self.num_clusters = self.spinBox_numClusters.value()
@@ -933,6 +935,117 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # 4) overlay the top-3 swatches
         swatches = getattr(analyzer, "dominant_rgb_list", [])[:3]
         self._draw_color_swatches_on_label(swatches, swatch_size=100)
+
+    def extract_ROI_features(self):
+        """
+        Loop through all (image, mask) pairs in self._pairs, run GRIME_AI_ROI_Analyzer on each,
+        export the key metrics to both a CSV and an XLSX file in the folder specified by
+        self.lineEdit_folderPathNew. In the XLSX, only the filenames appear in the
+        image_path and mask_path columns, but those cells are hyperlinked to the full paths.
+        """
+        # 1) Get and validate output folder path
+        output_folder = self.lineEdit_folderPathNew.text().strip()
+        if not output_folder:
+            QMessageBox.warning(self, "No Output Folder", "Please specify an output folder.")
+            return
+
+        os.makedirs(output_folder, exist_ok=True)
+        csv_path = os.path.join(output_folder, "roi_metrics.csv")
+        xlsx_path = os.path.join(output_folder, "roi_metrics.xlsx")
+
+        # 2) Prepare header and container for all rows
+        header = [
+            "image_path",
+            "mask_path",
+            "roi_intensity",  # formatted to 2 decimals
+            "roi_entropy",  # formatted to 4 decimals
+            "roi_texture",  # formatted to 4 decimals
+            "mean_gli",  # formatted to 2 decimals
+            "mean_gcc"  # formatted to 2 decimals
+        ]
+        rows = [header]
+
+        # 3) Iterate pairs, run analysis, collect results
+        for orig_path, mask_path in self._pairs:
+            n_clusters = self.spinBox_numClusters.value()
+            from GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
+            analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+            try:
+                analyzer.run_analysis()
+            except Exception as e:
+                print(f"Failed on {orig_path}, {mask_path}: {e}")
+                continue
+
+            rows.append([
+                orig_path,
+                mask_path,
+                f"{analyzer.roi_intensity:.2f}",
+                f"{analyzer.roi_entropy:.4f}",
+                f"{analyzer.roi_texture:.4f}",
+                f"{analyzer.mean_gli:.2f}",
+                f"{analyzer.mean_gcc:.2f}"
+            ])
+
+        # 4) Write out CSV
+        with open(csv_path, mode="w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+
+        # 5) Write out XLSX with hyperlinks
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font
+
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "ROI Metrics"
+
+            # Write header
+            for col_idx, title in enumerate(header, start=1):
+                ws.cell(row=1, column=col_idx, value=title)
+
+            hyperlink_style = Font(color="0000FF", underline="single")
+
+            # Write data rows
+            for row_idx, data in enumerate(rows[1:], start=2):
+                orig_full, mask_full, intensity, entropy, texture, gli, gcc = data
+
+                # image_path as filename with hyperlink
+                img_name = os.path.basename(orig_full)
+                cell_img = ws.cell(row=row_idx, column=1, value=img_name)
+                cell_img.hyperlink = orig_full
+                cell_img.font = hyperlink_style
+
+                # mask_path as filename with hyperlink
+                mask_name = os.path.basename(mask_full)
+                cell_mask = ws.cell(row=row_idx, column=2, value=mask_name)
+                cell_mask.hyperlink = mask_full
+                cell_mask.font = hyperlink_style
+
+                # numeric metrics (openpyxl will treat strings as text, so convert back to float)
+                ws.cell(row=row_idx, column=3, value=float(intensity))
+                ws.cell(row=row_idx, column=4, value=float(entropy))
+                ws.cell(row=row_idx, column=5, value=float(texture))
+                ws.cell(row=row_idx, column=6, value=float(gli))
+                ws.cell(row=row_idx, column=7, value=float(gcc))
+
+            wb.save(xlsx_path)
+
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "XLSX Export Skipped",
+                "The 'openpyxl' library is not installed. "
+                "Install it via 'pip install openpyxl' to enable XLSX export."
+            )
+
+        # 6) Notify user
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"Metrics written to:\n{csv_path}\n"
+            + (f"{xlsx_path}" if os.path.exists(xlsx_path) else "(XLSX skipped)")
+        )
 
 
     def setup_drag_and_drop(self):

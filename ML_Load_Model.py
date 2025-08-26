@@ -280,6 +280,32 @@ class ML_Load_Model:
         model_path = os.path.join(dirname, self.MODEL)
         checkpoint = torch.load(model_path, map_location=device)
 
+        # --------------------------------------------------------------------------------------------------------------
+        # PRINT CHECKPOINT CONTENTS TO CONSOLE
+        # --------------------------------------------------------------------------------------------------------------
+        print("Checkpoint contents:")
+        for key, value in checkpoint.items():
+            # show type for metadata, dict size for nested dicts
+            if isinstance(value, dict):
+                print(f"  {key}: dict[{len(value)}]")
+            else:
+                print(f"  {key}: {type(value).__name__}")
+
+        # --------------------------------------------------------------------------------------------------------------
+        # PROVISIONAL
+        # --------------------------------------------------------------------------------------------------------------
+        if 0:
+            # if there's a state dict, show each tensor’s shape
+            if "model_state_dict" in checkpoint:
+                print("model_state_dict parameter shapes:")
+                for name, tensor in checkpoint["model_state_dict"].items():
+                    print(f"  {name}: {tuple(tensor.shape)}")
+
+        print()
+
+        # --------------------------------------------------------------------------------------------------------------
+        #
+        # --------------------------------------------------------------------------------------------------------------
         coco_data = {
             "images": [],
             "annotations": [],
@@ -296,7 +322,18 @@ class ML_Load_Model:
             predictor.model.load_state_dict(checkpoint["model_state_dict"])
             coco_data["categories"].extend(selected_label_categories)
         else:
-            predictor.model.load_state_dict(checkpoint)
+            # Grab the model’s expected keys
+            model_keys = set(predictor.model.state_dict().keys())
+
+            # Filter out keys that do not match
+            clean_ckpt = {
+                k: v for k, v in checkpoint.items()
+                if k in model_keys
+            }
+
+            # Load only matching keys
+            predictor.model.load_state_dict(clean_ckpt)
+
             fallback_category = {"id": 2, "name": "water"}
             coco_data["categories"].extend([fallback_category])
 

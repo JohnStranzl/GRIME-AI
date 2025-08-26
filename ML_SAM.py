@@ -7,9 +7,7 @@ import os
 import sys
 from datetime import datetime
 import json
-from typing import Callable, Optional
-
-from PyQt5.QtWidgets import QWidget
+import random
 
 from utils.datasetutils import DatasetUtils
 
@@ -18,18 +16,20 @@ from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_Model_Training_Visualization import GRIME_AI_Model_Training_Visualization
 
-
 if True:
     import logging
     logging.getLogger("root").setLevel(logging.WARNING)
     logging.disable(logging.INFO)
 
+import os
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
 # ----------------------------------------------------------------------------------------------------------------------
 # HYDRA (for SAM2)
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------- -----------------------------------------------------------
 from omegaconf import OmegaConf, DictConfig
 
-from torch.cuda.amp import GradScaler
+from torch.cuda.amp import autocast, GradScaler
 
 
 import hydra
@@ -54,8 +54,8 @@ class ML_SAM:
         self.model_output_folder = None
 
         # ALL FILES SAVED WITH BE TAGGED WITH THE DATE AND TIME THAT TRAINING STARTED.
-        now = datetime.now()
-        self.formatted_time = now.strftime('%Y%m%d_%H%M%S')
+        self.now = datetime.now()
+        self.formatted_time = self.now.strftime('%Y%m%d_%H%M%S')
 
         # load site_config from Hydra or from saved JSON
         if cfg is None or "site_config" not in cfg:
@@ -165,25 +165,45 @@ class ML_SAM:
         progressBar.setValue(1)
         progressBar.show()
 
-        optimizer = torch.optim.AdamW(predictor.model.parameters(), lr=learnrate, weight_decay=weight_decay)
+        # Seed for reproducibility
+        seed = 42
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        # Force deterministic kernels
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+
+        # Build model, optimizer, predictor
         self.sam2_model.train()
         predictor = SAM2ImagePredictor(self.sam2_model)
-
+        optimizer = torch.optim.AdamW(self.sam2_model.parameters(), lr=learnrate, weight_decay=weight_decay)
         loss_fn = nn.BCEWithLogitsLoss()
 
+        # Initialize the GradScaler just once per epoch if using CUDA.
+        scaler = GradScaler() if device.type == "cuda" else None
+
         for epoch in range(epochs):
+
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            # TRAIN ON EACH EPOCH
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            self.sam2_model.train()
+
             self.epoch_list.append(epoch + 1)
             epoch_loss, train_correct, train_total = 0.0, 0, 0
             print(f"\nEpoch {epoch + 1}/{epochs}")
 
             np.random.shuffle(train_images)
 
-            # Initialize the GradScaler just once per epoch if using CUDA.
-            if device.type == "cuda":
-                scaler = GradScaler()
-            else:
-                scaler = None
-
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            # TRAIN ON ALL IMAGES FOR EACH EPOCH
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
             for idx, image_file in enumerate(train_images):
                 if progress_bar_closed:
                     self._terminate_training(progressBar)
@@ -210,78 +230,68 @@ class ML_SAM:
                 batched_mode = True  # unnorm_coords.shape[0] > 1  # multi-object prediction
                 high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in
                                      predictor._features["high_res_feats"]]
-                low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
-                    image_embeddings=predictor._features["image_embed"][-1].unsqueeze(0),
-                    image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
-                    sparse_prompt_embeddings=sparse_embeddings,
-                    dense_prompt_embeddings=dense_embeddings,
-                    multimask_output=True,
-                    repeat_image=batched_mode,
-                    high_res_features=high_res_features,
-                )
 
-                prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])
-                #if prd_masks.shape != true_mask.shape:
-                #    print(f"prd_mask shape {prd_masks.shape} and true mask shapes {true_mask.shape} are different.")
-
-                # If the ground-truth mask is 3D, keep just one channel
-
-                if len(true_mask.shape) == 3:
-                    true_mask = true_mask[..., 0]  # shape -> [H, W]
-
-                # Convert to a float32 tensor on GPU, and add batch & channel dimensions
-                gt_mask = torch.tensor(true_mask, dtype=torch.float32, device=device)  # [H, W]
-                gt_mask = gt_mask.unsqueeze(0).unsqueeze(1)  # [1,1,H,W]
-
-                # If there are no positive pixels, optionally skip
-                if gt_mask.sum() == 0:
-                    print(f"Skipping {image_file} - ground-truth mask is empty.")
-                    continue
-
-                # prd_masks is [1,3,H,W] if multimask_output=True. Pick the first or best mask:
-                prd_mask = prd_masks[:, 0]  # [1,H,W]
-                prd_mask = torch.sigmoid(prd_mask).unsqueeze(1)  # [1,1,H,W]
-
-                # Now check that they match
-                if prd_mask.shape != gt_mask.shape:
-                    raise ValueError(
-                        f"Mismatched shapes for {image_file}: {prd_mask.shape} vs {gt_mask.shape}"
+                optimizer.zero_grad()
+                use_amp = False
+                with autocast(enabled=use_amp):
+                    # Forward pass
+                    low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
+                        image_embeddings=predictor._features["image_embed"][-1].unsqueeze(0),
+                        image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
+                        sparse_prompt_embeddings=sparse_embeddings,
+                        dense_prompt_embeddings=dense_embeddings,
+                        multimask_output=False,
+                        repeat_image=batched_mode,
+                        high_res_features=high_res_features,
                     )
 
-                #print(f"Final shapes -> prd_mask: {prd_mask.shape}, gt_mask: {gt_mask.shape}")
+                    prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])
+                    #if prd_masks.shape != true_mask.shape:
+                    #    print(f"prd_mask shape {prd_masks.shape} and true mask shapes {true_mask.shape} are different.")
 
-                # Ensure both tensors have the same shape
-                #print(f"Modified gt_mask shape: {gt_mask.shape}")
-                #print(f"Modified prd_mask shape: {prd_mask.shape}")
+                    # If the ground-truth mask is 3D, keep just one channel
 
-                # Segmentation Loss using binary cross entropy formula
-                seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log((1 - prd_mask) + 0.00001)).mean()
+                    if len(true_mask.shape) == 3:
+                        true_mask = true_mask[..., 0]  # shape -> [H, W]
 
-                # Score Loss (IOU)
-                inter = (gt_mask * (prd_mask > 0.5)).sum((1, 2, 3))  # If shape is [B,1,H,W]
-                union = gt_mask.sum((1, 2, 3)) + (prd_mask > 0.5).sum((1, 2, 3)) - inter
+                    # Convert to a float32 tensor on GPU, and add batch & channel dimensions
+                    gt_mask = torch.tensor(true_mask, dtype=torch.float32, device=device)  # [H, W]
+                    gt_mask = gt_mask.unsqueeze(0).unsqueeze(1)  # [1,1,H,W]
 
-                # union might be zero. Let's create a boolean mask:
-                zero_union_mask = (union == 0)
+                    # If there are no positive pixels, optionally skip
+                    if gt_mask.sum() == 0:
+                        print(f"Skipping {image_file} - ground-truth mask is empty.")
+                        continue
 
-                # Option A: set IoU=1 if union == 0 and intersection == 0
-                iou = inter / (union + 1e-6)  # add epsilon to avoid dividing by zero
-                iou[zero_union_mask] = 1.0
+                    # prd_masks is [1,3,H,W] if multimask_output=True. Pick the first or best mask:
+                    prd_mask = prd_masks[:, 0]  # [1,H,W]
+                    prd_mask = torch.sigmoid(prd_mask).unsqueeze(1)  # [1,1,H,W]
 
-                # If you prefer iou=0 for empty-empties, do:
-                # iou[zero_union_mask] = 0.0
+                    # Now check that they match
+                    if prd_mask.shape != gt_mask.shape:
+                        raise ValueError(
+                            f"Mismatched shapes for {image_file}: {prd_mask.shape} vs {gt_mask.shape}"
+                        )
 
-                score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
-                loss = seg_loss + 0.05 * score_loss
+                    # Segmentation Loss using binary cross entropy formula
+                    seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log((1 - prd_mask) + 0.00001)).mean()
 
-                if 0:
-                    print(f"Segmentation loss is : {seg_loss}")
-                    print(f"iou is : {iou}")
-                    print(f"score loss is : {score_loss}")
-                    print(f"total loss is : {loss}")
-            
+                    # Score Loss (IOU)
+                    inter = (gt_mask * (prd_mask > 0.5)).sum((1, 2, 3))  # If shape is [B,1,H,W]
+                    union = gt_mask.sum((1, 2, 3)) + (prd_mask > 0.5).sum((1, 2, 3)) - inter
+
+                    # union might be zero. Let's create a boolean mask:
+                    zero_union_mask = (union == 0)
+
+                    # Option A: set IoU=1 if union == 0 and intersection == 0
+                    iou = inter / (union + 1e-6)  # add epsilon to avoid dividing by zero
+                    iou[zero_union_mask] = 1.0
+
+                    score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
+                    loss = seg_loss + 0.05 * score_loss
+
                 optimizer.zero_grad()
-                if scaler is not None:
+                if use_amp and scaler is not None:
                     # Wrap the backward pass in autocast to leverage mixed-precision training
                     # Note: In many cases it is preferable to include the forward pass in the autocast context,
                     # but if your forward pass was already done outside, using the scaler here enables scaling.
@@ -320,10 +330,16 @@ class ML_SAM:
 
             print(f"Epoch {epoch + 1} Training Loss: {avg_epoch_loss}")
 
-            # Validation step
+
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            # VALIDATION
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            self.sam2_model.eval()
+
             if val_images is not None:
                 progressBar.setWindowTitle("Validation in-progress")
                 val_loss, val_correct, val_total = 0.0, 0, 0
+
                 with torch.no_grad():
                     for val_idx, val_image_file in enumerate(val_images):
                         if progress_bar_closed:
@@ -342,9 +358,6 @@ class ML_SAM:
 
                         if masks.size > 0:
                             best_mask = masks[np.argmax(scores)]
-                            if False:
-                                print(f"best_mask:{best_mask.shape}")
-                                print(f"value_mask:{val_true_mask.shape}")
 
                             # Remove the extra dimension from val_true_mask_tensor
                             if len(val_true_mask.shape) > 2:
@@ -354,10 +367,6 @@ class ML_SAM:
                                 device.type)  # Shape: [1, 1080, 1920]
                             val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32).unsqueeze(0).to(
                                 device.type)  # Shape: [1, 1080, 1920, 1]
-
-                            if False:
-                                print(f"best_mask after change:{best_mask_tensor.shape}")
-                                print(f"value_mask after change:{val_true_mask_tensor.shape}")
 
                             '''
                             ## changing
@@ -404,13 +413,24 @@ class ML_SAM:
                 self.val_loss_values.append(avg_val_loss)
                 print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss}")
 
+        # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+        # SAVE MODEL
+        # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+        timestamp = self.now.strftime("%Y%m%d_%H%M%S")
         ckpt = {
             "model_state_dict": predictor.model.state_dict(),
-            "categories": self.categories
+            "categories": self.categories,
+            "creation_UTC": timestamp,
+            "site_name": self.site_name,
+            "learning_rate": learnrate,
+            "epochs": epochs
         }
         torch_filename = f"{self.formatted_time}_{self.site_name}_final_{learnrate}.torch"
         torch.save(ckpt, os.path.join(self.model_output_folder, torch_filename))
 
+        # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+        # CLEAN-UP
+        # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
         if not progress_bar_closed:
             progressBar.close()
         del progressBar

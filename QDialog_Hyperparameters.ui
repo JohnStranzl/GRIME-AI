@@ -20,7 +20,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>1</number>
+      <number>4</number>
      </property>
      <widget class="QWidget" name="tabSegmentImages">
       <attribute name="title">
@@ -473,7 +473,6 @@
                  <property name="font">
                   <font>
                    <pointsize>10</pointsize>
-                   <weight>75</weight>
                    <italic>false</italic>
                    <bold>true</bold>
                   </font>
@@ -1082,20 +1081,66 @@
         </layout>
        </item>
        <item>
-        <widget class="QPushButton" name="pushButton_analyze">
-         <property name="minimumSize">
-          <size>
-           <width>150</width>
-           <height>40</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">font: bold 12pt;</string>
-         </property>
-         <property name="text">
-          <string>Analyze</string>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="horizontalLayoutROIButtons">
+         <item>
+          <spacer name="leftSpacerROI">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_analyze">
+           <property name="minimumSize">
+            <size>
+             <width>150</width>
+             <height>40</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font: bold 12pt;</string>
+           </property>
+           <property name="text">
+            <string>Analyze</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_extract_ROI_features">
+           <property name="minimumSize">
+            <size>
+             <width>150</width>
+             <height>40</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font: bold 12pt;</string>
+           </property>
+           <property name="text">
+            <string>Extract ROI Features</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="rightSpacerROI">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QListWidget" name="listWidget_filmstrip">
