@@ -46,6 +46,19 @@ print(f"Using device: {device}")
 DEBUG = False  # Set to True if you want print statements
 
 
+# ======================================================================================================================
+# ======================================================================================================================
+# =====     =====     =====     =====     =====      INLINE FUNCTIONS      =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+def compute_mean_iou(y_true: list[int], y_pred: list[int]) -> float:
+    arr_t = np.array(y_true, dtype=bool)
+    arr_p = np.array(y_pred, dtype=bool)
+    inter = np.logical_and(arr_t, arr_p).sum()
+    union = np.logical_or(arr_t, arr_p).sum()
+    return float(inter) / float(union) if union > 0 else 1.0
+
+
 class ML_SAM:
 
     def __init__(self, cfg: DictConfig = None):
@@ -88,11 +101,17 @@ class ML_SAM:
         self.device              = self.site_config.get('device', str(device))
 
         self.dataset             = {}
+
         self.loss_values         = []
         self.val_loss_values     = []
         self.epoch_list          = []
         self.train_accuracy_values = []
         self.val_accuracy_values   = []
+        self.val_true_list  = []
+        self.val_pred_list  = []
+        self.val_score_list = []
+        # track mean–IoU per epoch
+        self.miou_values = []
 
         self.sam2_model          = None
         self.folders             = None
@@ -151,19 +170,20 @@ class ML_SAM:
     def train_sam(self, learnrate, weight_decay, predictor, train_images, val_images, epochs=20):
         progress_bar_closed = False
 
-        def on_progress_bar_closed(obj):
-            nonlocal progress_bar_closed
-            progress_bar_closed = True
+        # reset all metrics
+        self.epoch_list.clear()
+        self.loss_values.clear()
+        self.train_accuracy_values.clear()
+        self.val_loss_values.clear()
+        self.val_accuracy_values.clear()
+        self.val_true_list.clear()
+        self.val_pred_list.clear()
+        self.val_score_list.clear()
 
         total_iterations = epochs * (len(train_images) + (len(val_images) if val_images else 0))
         global_iteration = 0
 
-        progressBar = QProgressWheel()
-        progressBar.setWindowTitle("Training in-progress...")
-        progressBar.destroyed.connect(on_progress_bar_closed)
-        progressBar.setRange(0, total_iterations)
-        progressBar.setValue(1)
-        progressBar.show()
+        progressBar = self._make_progress_bar("Training in-progress...", total_iterations)
 
         # Seed for reproducibility
         seed = 42
@@ -315,7 +335,7 @@ class ML_SAM:
                 # Inside the training loop
                 if true_mask is None:
                     print(f"[DEBUG] Skipping {image_file}: no annotation")
-                continue
+                    continue
 
                 if not progress_bar_closed:
                     global_iteration += 1
@@ -323,9 +343,10 @@ class ML_SAM:
 
             # Average epoch loss
             avg_epoch_loss = epoch_loss / len(train_images)
+            self.loss_values.append(avg_epoch_loss)
+
             train_accuracy = train_correct / train_total
             self.train_accuracy_values.append(train_accuracy)
-            self.loss_values.append(avg_epoch_loss)
             print(f"Loss Values: {self.loss_values}")
 
             print(f"Epoch {epoch + 1} Training Loss: {avg_epoch_loss}")
@@ -334,12 +355,14 @@ class ML_SAM:
             # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
             # VALIDATION
             # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
-            self.sam2_model.eval()
+            if val_images:
+                self.sam2_model.eval()
 
-            if val_images is not None:
                 progressBar.setWindowTitle("Validation in-progress")
+
                 val_loss, val_correct, val_total = 0.0, 0, 0
 
+                # VARIABLES FOR CALCULATING THE CONFUSION MATRIX
                 with torch.no_grad():
                     for val_idx, val_image_file in enumerate(val_images):
                         if progress_bar_closed:
@@ -354,7 +377,7 @@ class ML_SAM:
                             continue
 
                         predictor.set_image(val_image)
-                        masks, scores, _ = predictor.predict(point_coords=None, point_labels=None,multimask_output=False)
+                        masks, scores, low_res_logits  = predictor.predict(point_coords=None, point_labels=None, multimask_output=False)
 
                         if masks.size > 0:
                             best_mask = masks[np.argmax(scores)]
@@ -368,49 +391,65 @@ class ML_SAM:
                             val_true_mask_tensor = torch.tensor(val_true_mask, dtype=torch.float32).unsqueeze(0).to(
                                 device.type)  # Shape: [1, 1080, 1920, 1]
 
-                            '''
-                            ## changing
-
-                            gt_mask = torch.tensor(val_true_mask.astype(np.float32)).cuda()#.unsqueeze(0  # Add batch dimension
-
-
-                            # Reshape gt_mask to remove the last dimension if present
-                            if gt_mask.shape[-1] == 1:  # Check if the last dimension is singleton
-                                gt_mask = gt_mask.squeeze(-1)  # Remove the last dimension
-
-                            #Add channel dimension to prd_mask
-                            prd_mask = torch.sigmoid(prd_masks[:, 0]).unsqueeze(1)  # Add channel dimension
-
-                            # Ensure both tensors have the same shape
-                            print(f"Modified gt_mask shape: {gt_mask.shape}")
-                            print(f"Modified prd_mask shape: {prd_mask.shape}")
-
-                            prd_mask = torch.sigmoid(prd_masks[:, 0])#.unsqueeze(1)
-                            # Segmentation Loss
-                            seg_loss = (-gt_mask * torch.log(prd_mask + 0.00001) - (1 - gt_mask) * torch.log((1 - prd_mask) + 0.00001)).mean()
-
-                            # Score Loss (IOU)
-                            inter = (gt_mask * (prd_mask > 0.5)).sum(1).sum(1)
-                            iou = inter / (gt_mask.sum(1).sum(1) + (prd_mask > 0.5).sum(1).sum(1) - inter)
-                            score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
-
-                            # Combine losses
-                            loss = seg_loss + score_loss * 0.05
-                            '''
-
                             val_loss += loss_fn(best_mask_tensor, val_true_mask_tensor).item()
                             pred_binary = (best_mask_tensor > 0.5).cpu().numpy()
                             true_binary = val_true_mask_tensor.cpu().numpy()
                             val_correct += np.sum(pred_binary == true_binary)
                             val_total += np.prod(true_binary.shape)
 
+                            # EXTEND THE LISTS FOR THE CONFUSION MATRIX
+                            # flatten your arrays (no .astype here; conversion happens in the comprehension)
+                            true_flat = true_binary.flatten()
+                            pred_flat = pred_binary.flatten()
+                            self.val_true_list.extend(int(x) for x in true_flat)
+                            self.val_pred_list.extend(int(x) for x in pred_flat)
+
+                            # extend with native Python ints/floats (satisfies Iterable[int/float])
+                            # scoring with raw logits → full [0,1] distribution
+                            best_idx = int(np.argmax(scores))
+                            best_logit = low_res_logits [best_idx]
+                            best_logit_tensor = torch.tensor(best_logit, dtype=torch.float32).unsqueeze(0).to(device)
+
+                            import torch.nn.functional as F
+
+                            # pick the same best‐mask index
+                            best_idx = int(np.argmax(scores))
+
+                            # build a tensor from the low‐res logit
+                            logit_lr = torch.tensor(
+                                low_res_logits[best_idx],
+                                dtype=torch.float32,
+                                device=device
+                            ).unsqueeze(0).unsqueeze(0)  # shape [1,1,H_lr,W_lr]
+
+                            # convert to probabilities
+                            prob_lr = torch.sigmoid(logit_lr)
+
+                            # upsample to match full resolution
+                            H_full, W_full = val_true_mask_tensor.shape[1], val_true_mask_tensor.shape[2]
+                            prob_full = F.interpolate(
+                                prob_lr,
+                                size=(H_full, W_full),
+                                mode='bilinear',
+                                align_corners=False
+                            )
+
+                            # flatten and extend scores list
+                            score_flat = prob_full.squeeze(0).squeeze(0).cpu().numpy().flatten()
+                            self.val_score_list.extend(score_flat.tolist())
+
                             global_iteration += 1
                             progressBar.setValue(global_iteration)
 
                 avg_val_loss = val_loss / len(val_images)
+                self.val_loss_values.append(avg_val_loss)
                 val_accuracy = val_correct / val_total
                 self.val_accuracy_values.append(val_accuracy)
-                self.val_loss_values.append(avg_val_loss)
+                # compute Mean IoU for this epoch
+
+                miou = compute_mean_iou(self.val_true_list, self.val_pred_list)
+                self.miou_values.append(miou)
+
                 print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss}")
 
         # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
@@ -580,41 +619,102 @@ class ML_SAM:
         # instantiate the visualizer
         for lr in self.learning_rates:
             print(f"Training with learning rate: {lr}")
+
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            # TRAIN AND VALIDATE MODEL
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
             self.train_sam(lr, self.weight_decay, predictor, train_images, val_images, epochs=self.num_epochs)
 
-            #JES FUTURE
-            # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-            #viz = GRIME_AI_Model_Training_Visualization(self.model_output_folder, self.formatted_time, self.categories)
-            #viz.epoch_list = self.epoch_list
-            #viz.train_accuracy_values = self.train_accuracy_values
-            #viz.val_accuracy_values = self.val_accuracy_values
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            # PLOT GRAPHS
+            # *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~
+            progressBar = self._make_progress_bar("Generating graphs...", 7)
+            progressBar.show()
 
-            # 1. Epoch vs. Loss Plot
-            #viz.plot_loss(self.site_name, learnrate)
+            # instantiate the viz once for this LR
+            viz = GRIME_AI_Model_Training_Visualization(self.model_output_folder, self.formatted_time, self.categories)
 
-            # 2. Training vs. Validation Accuracy
-            #viz.plot_accuracy(self.site_name, learnrate)
-            # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            plot_index = 0
+            # 1) Loss curves
+            viz.plot_loss_curves(
+                epochs=self.epoch_list,
+                train_loss=self.loss_values,
+                val_loss=self.val_loss_values,
+                site_name=self.site_name,
+                lr=lr
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
 
-            # plot loss
-            plt.plot(self.epoch_list, self.loss_values, marker='*')
-            plt.title('Epoch vs loss')
-            plt.xlabel('Epoch');
-            plt.ylabel('Loss')
-            plot_output_file = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}_EpochVsLoss_{lr}.png")
-            plt.savefig(plot_output_file)
-            plt.close()
+            # 2) Accuracy curves
+            viz.plot_accuracy(
+                epochs=self.epoch_list,
+                train_acc=self.train_accuracy_values,
+                val_acc=self.val_accuracy_values,
+                site_name=self.site_name,
+                lr=lr
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
 
-            # plot accuracy
-            plt.plot(self.epoch_list, self.train_accuracy_values, marker='o', label="Train Acc")
-            plt.plot(self.epoch_list, self.val_accuracy_values, marker='s', label="Val Acc")
-            plt.xlabel("Epoch");
-            plt.ylabel("Accuracy")
-            plt.title("Training and Validation Accuracy")
-            plt.legend()
-            plot_output_file = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}_Accuracy_{lr}.png")
-            plt.savefig(plot_output_file)
-            plt.close()
+            # 3) Confusion matrix
+            viz.plot_confusion_matrix(
+                y_true      = self.val_true_list,
+                y_pred      = self.val_pred_list,
+                site_name   = self.site_name,
+                lr          = lr,
+                normalize   = True,
+                file_prefix = "Normalized"
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
+
+            # 4) ROC Curve + AUC
+            viz.plot_roc_curve(
+                y_true      = self.val_true_list,
+                y_scores    = self.val_score_list,
+                site_name   = self.site_name,
+                lr          = lr,
+                file_prefix = f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
+
+            # 5) Precision–Recall
+            viz.plot_precision_recall(
+                y_true=self.val_true_list,
+                y_scores=self.val_score_list,
+                site_name=self.site_name,
+                lr=lr,
+                file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
+
+            # 6) F1 vs. Threshold
+            viz.plot_f1_score(
+                y_true=self.val_true_list,
+                y_scores=self.val_score_list,
+                site_name=self.site_name,
+                lr=lr,
+                file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
+
+            # 7) Mean IoU curve
+            viz.plot_miou_curve(
+                epochs=self.epoch_list,
+                miou_values=self.miou_values,
+                site_name=self.site_name,
+                lr=lr,
+                file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            )
+            progressBar.setValue(plot_index := plot_index + 1)
+            progressBar.show()
+
+            progressBar.close()
+            del progressBar
 
         config_file = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}_configuration.txt")
         self.save_config_to_text(config_file)
@@ -662,3 +762,20 @@ class ML_SAM:
         # dedupe
         unique = {(c['id'], c['name']): c for c in merged}
         return list(unique.values())
+
+
+    def _make_progress_bar(self, title: str, total: int):
+        """
+        Create, configure and show a QProgressWheel.
+        Sets self.progress_bar_closed=True when the window is destroyed.
+        """
+        self.progress_bar_closed = False
+
+        pb = QProgressWheel()
+        pb.setWindowTitle(title)
+        pb.destroyed.connect(lambda _: setattr(self, "progress_bar_closed", True))
+        pb.setRange(0, total)
+        pb.setValue(1)
+        pb.show()
+
+        return pb

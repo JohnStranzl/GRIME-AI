@@ -410,7 +410,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver. 0.0.6.0 (beta 13)"
+SW_VERSION = "Ver. 0.0.6.0 (beta 14)"
 
 class displayOptions():
     displayROIs = True

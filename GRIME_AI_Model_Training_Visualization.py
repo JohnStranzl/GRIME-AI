@@ -55,26 +55,36 @@ class GRIME_AI_Model_Training_Visualization:
             plt.savefig(png_file)
             plt.close()
 
-    def plot_accuracy(self, site_name, lr):
-        if not self.epoch_list == [] and not self.val_accuracy_values == []:
-            # Defensive: synchronize epoch_list and val_accuracy_values
-            if len(self.epoch_list) != len(self.val_accuracy_values):
-                print(
-                    f"[plot_accuracy] Epoch list and val_accuracy_values mismatch: {len(self.epoch_list)} vs {len(self.val_accuracy_values)}")
-                # Pad val_accuracy_values with zeros if it's too short
-                while len(self.val_accuracy_values) < len(self.epoch_list):
-                    self.val_accuracy_values.append(0.0)
-                # Pad epoch_list if it's too short
-                while len(self.epoch_list) < len(self.val_accuracy_values):
-                    self.epoch_list.append(len(self.epoch_list) + 1)
+    def plot_accuracy(self,
+                      epochs: list[int],
+                      train_acc: list[float],
+                      val_acc: list[float],
+                      site_name: str,
+                      lr: float):
+        if not epochs or not train_acc or not val_acc:
+            return
 
-            plt.figure()
-            plt.plot(self.epoch_list, self.val_accuracy_values, marker='s', label="Val Acc")
-            plt.title(f"{site_name} Validation Accuracy (lr={lr})")
-            plt.xlabel("Epoch")
-            plt.ylabel("Val Accuracy")
-            plt.legend()
-            plt.show()
+        # Create a single Axes instead of a 6×4 grid
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        # Plot curves
+        ax.plot(epochs, train_acc, label="Train Accuracy", marker="o")
+        ax.plot(epochs, val_acc, label="Val Accuracy", marker="s")
+
+        # Labeling
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Accuracy")
+        ax.set_title(f"{site_name} Accuracy (lr={lr:.5f})")
+        ax.legend(loc="best")
+
+        # Save figure
+        fig.tight_layout()
+        out_file = os.path.join(
+            self.models_folder,
+            f"{self.formatted_time}_{site_name}_AccuracyCurves_lr{lr:.5f}.png"
+        )
+        fig.savefig(out_file, dpi=300, bbox_inches="tight")
+        plt.close(fig)
 
 
     def plot_loss_curves(
@@ -135,7 +145,17 @@ class GRIME_AI_Model_Training_Visualization:
         cm = confusion_matrix(y_true, y_pred, labels=range(len(class_names)))
 
         if normalize:
-            cm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
+            # compute row sums (shape: [n_classes, 1])
+            row_sums = cm.sum(axis=1, keepdims=True).astype(float)
+
+            # safe divide: wherever row_sums != 0, do cm/row_sums, else leave zeros
+            cm = np.divide(
+                cm.astype(float),
+                row_sums,
+                out=np.zeros_like(cm, dtype=float),
+                where=(row_sums != 0)
+            )
+
             fmt = ".2f"
             title = "Normalized Confusion Matrix"
         else:
@@ -202,7 +222,8 @@ class GRIME_AI_Model_Training_Visualization:
         # If file_prefix is provided, save the plot instead of showing it
         if file_prefix is not None:
             filename = f"{file_prefix}_precision_recall_curve.png"
-            plt.savefig(filename)
+            png_path = os.path.join(self.models_folder, filename)
+            plt.savefig(png_path)
             print(f"Plot saved to {filename}")
             plt.close()
         else:
@@ -246,8 +267,117 @@ class GRIME_AI_Model_Training_Visualization:
         # Save or show plot
         if file_prefix is not None:
             filename = f"{file_prefix}_roc_curve.png"
-            plt.savefig(filename)
+            png_path = os.path.join(self.models_folder, filename)
+            plt.savefig(png_path)
             print(f"ROC plot saved to {filename}")
             plt.close()
+        else:
+            plt.show()
+
+    def plot_f1_score(self,
+                      y_true,
+                      y_scores,
+                      site_name: str=None,
+                      lr: float=None,
+                      file_prefix: str=None):
+        import os
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import precision_recall_curve
+
+        # to numpy
+        y_true   = np.array(y_true)
+        y_scores = np.array(y_scores)
+
+        # safety checks
+        if y_true.size == 0 or y_scores.size == 0:
+            print("Cannot plot F1 curve: y_true or y_scores is empty.")
+            return
+
+        # ensure binary labels
+        unique_labels = np.unique(y_true)
+        if not np.all(np.isin(unique_labels, [0, 1])):
+            print(f"[plot_f1_score] converting labels {unique_labels} to { [0,1] }.")
+            y_true = (y_true == unique_labels.max()).astype(int)
+
+        # get precision, recall, thresholds
+        precision, recall, thresholds = precision_recall_curve(y_true, y_scores, pos_label=1)
+
+        # compute F1 = 2·(P·R)/(P+R)
+        # precision/recall arrays are len = n_thresh+1, thresholds len = n_thresh
+        f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
+
+        # drop the last precision/recall point with no threshold
+        f1 = f1_scores[:-1]
+        thr = thresholds
+
+        # find best F1
+        best_idx = np.argmax(f1)
+        best_thr = thr[best_idx]
+        best_f1 = f1[best_idx]
+
+        # plot
+        plt.figure()
+        plt.plot(thr, f1, color="green", lw=2, label="F1 Score")
+        plt.scatter(best_thr, best_f1, color="red",
+                    label=f"Max F1={best_f1:.2f} at thr={best_thr:.2f}")
+        title = "F1 Score vs Threshold"
+        if site_name:
+            title = f"{site_name} {title}"
+        if lr is not None:
+            title += f" (lr={lr})"
+        plt.title(title)
+        plt.xlabel("Threshold")
+        plt.ylabel("F1 Score")
+        plt.legend(loc="best")
+        plt.tight_layout()
+
+        # save or show
+        if file_prefix:
+            filename = f"{file_prefix}_f1_curve.png"
+            png_path = os.path.join(self.models_folder, filename)
+            plt.savefig(png_path)
+            plt.close()
+            print(f"Saved F1 curve to {png_path}")
+        else:
+            plt.show()
+
+
+    def plot_miou_curve(self,
+                        epochs: list[int],
+                        miou_values: list[float],
+                        site_name: str   = None,
+                        lr: float        = None,
+                        file_prefix: str = "miou"):
+        import os
+        import numpy as np
+        import matplotlib.pyplot as plt
+
+        # safety checks
+        if not epochs or not miou_values:
+            print("Cannot plot Mean IoU curve: epochs or miou_values is empty.")
+            return
+
+        # build the plot
+        fig, ax = plt.subplots()
+        ax.plot(epochs, miou_values, marker="o", color="blue", lw=2)
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Mean IoU")
+        title = "Mean IoU over Epochs"
+        if site_name:
+            title = f"{site_name} {title}"
+        if lr is not None:
+            title += f" (lr={lr:.5f})"
+        ax.set_title(title)
+        ax.grid(True)
+        plt.tight_layout()
+
+        # save or show
+        if file_prefix:
+            filename = f"{file_prefix}_miou_curve.png"
+            png_path = os.path.join(self.models_folder, filename)
+            fig.savefig(png_path)
+            plt.close(fig)
+            print(f"Saved Mean IoU curve to {png_path}")
         else:
             plt.show()
