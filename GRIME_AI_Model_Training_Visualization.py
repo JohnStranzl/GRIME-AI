@@ -2,6 +2,9 @@ import os
 
 import numpy as np
 
+import matplotlib
+matplotlib.use("Agg")  # PATCH: non-interactive backend, no GUI overhead
+
 import matplotlib.pyplot as plt
 
 import seaborn as sns
@@ -41,20 +44,6 @@ class GRIME_AI_Model_Training_Visualization:
         self.max_samples = 100_000
 
 
-    def plot_loss(self, site_name: str, lr: float):
-        if not self.epoch_list == [] and not self.loss_values == []:
-            plt.plot(self.epoch_list, self.loss_values, marker='*')
-            plt.title('Epoch vs loss')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
-
-            png_file = os.path.join(
-                self.models_folder,
-                f"{self.formatted_time}_{site_name}_EpochVsLoss_{lr}.png"
-            )
-            plt.savefig(png_file)
-            plt.close()
-
     def plot_accuracy(self,
                       epochs: list[int],
                       train_acc: list[float],
@@ -68,8 +57,10 @@ class GRIME_AI_Model_Training_Visualization:
         fig, ax = plt.subplots(figsize=(6, 4))
 
         # Plot curves
-        ax.plot(epochs, train_acc, label="Train Accuracy", marker="o")
-        ax.plot(epochs, val_acc, label="Val Accuracy", marker="s")
+        #ax.plot(epochs, train_acc, label="Train Accuracy", marker="o")
+        #ax.plot(epochs, val_acc, label="Val Accuracy", marker="s")
+        ax.plot(epochs, train_acc, label="Train Accuracy")
+        ax.plot(epochs, val_acc, label="Val Accuracy")
 
         # Labeling
         ax.set_xlabel("Epoch")
@@ -86,7 +77,6 @@ class GRIME_AI_Model_Training_Visualization:
         fig.savefig(out_file, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-
     def plot_loss_curves(
             self,
             epochs: list,
@@ -95,37 +85,36 @@ class GRIME_AI_Model_Training_Visualization:
             site_name: str,
             lr: float
     ):
-        # ── subsample if too many points ───────────────────────────────────────────────
+        import os
+        import numpy as np
+        import matplotlib.pyplot as plt
+
+        # ── subsample if too many points ────────────────────────────────────────────
         n = len(epochs)
         if n > self.max_samples:
-            # pick evenly spaced indices
             idxs = np.linspace(0, n - 1, self.max_samples, dtype=int)
-            epochs     = [epochs[i]     for i in idxs]
+            epochs = [epochs[i] for i in idxs]
             train_loss = [train_loss[i] for i in idxs]
-            val_loss   = [val_loss[i]   for i in idxs]
+            val_loss = [val_loss[i] for i in idxs]
 
-        # 1) Create a fresh Figure and Axes
+        # ── plotting ────────────────────────────────────────────────────────────────
         fig, ax = plt.subplots(figsize=(6, 4))
 
-        # 2) Plot onto that Axes
-        ax.plot(epochs, train_loss, label="Train Loss", color='tab:blue')
-        ax.plot(epochs, val_loss,   label="Val Loss",   color='tab:orange')
+        # PATCH: thin plain lines, no markers for speed
+        ax.plot(epochs, train_loss, label="Train Loss", color="tab:blue", lw=1)
+        ax.plot(epochs, val_loss, label="Val Loss", color="tab:orange", lw=1)
 
-        # 3) Label
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
         ax.set_title("Train vs. Validation Loss")
-        ax.legend()
+        ax.legend(loc="best")
 
-        # 4) Tight layout & save
-        fig.tight_layout()
+        # ── save with lower DPI ──────────────────────────────────────────────────────
         png_file = os.path.join(
             self.models_folder,
             f"{self.formatted_time}_{site_name}_LossCurves_{lr}.png"
         )
-        fig.savefig(png_file)
-
-        # 5) Close only this Figure
+        fig.savefig(png_file, dpi=150)  # PATCH: faster write, removed compress_level
         plt.close(fig)
 
 
@@ -188,25 +177,37 @@ class GRIME_AI_Model_Training_Visualization:
         plt.close()
 
     def plot_precision_recall(self, y_true, y_scores, site_name=None, lr=None, file_prefix=None):
+        import os
         import numpy as np
         import matplotlib.pyplot as plt
         from sklearn.metrics import precision_recall_curve
 
-        y_true = np.array(y_true)
+        # to numpy
+        y_true   = np.array(y_true)
         y_scores = np.array(y_scores)
 
-        # Defensive: check for empty arrays
-        if len(y_true) == 0 or len(y_scores) == 0:
+        # defensive checks
+        if y_true.size == 0 or y_scores.size == 0:
             print("Cannot plot precision-recall: y_true or y_scores is empty.")
             return
 
-        # Defensive: ensure y_true contains only 0s and 1s
+        # binary labels
         unique_labels = np.unique(y_true)
         if not np.all(np.isin(unique_labels, [0, 1])):
             print(f"[plot_precision_recall] y_true contains unexpected labels {unique_labels}, converting to binary.")
             y_true = (y_true == 1).astype(int)
 
+        # compute curve
         precision, recall, _ = precision_recall_curve(y_true, y_scores, pos_label=1)
+
+        # ── subsample PR points if too many ───────────────────────────────
+        n_pr = precision.shape[0]
+        if n_pr > self.max_samples:
+            idxs = np.linspace(0, n_pr - 1, self.max_samples, dtype=int)
+            precision = precision[idxs]
+            recall    = recall[idxs]
+
+        # plot
         plt.figure()
         plt.plot(recall, precision, marker='.')
         title = "Precision-Recall Curve"
@@ -219,67 +220,88 @@ class GRIME_AI_Model_Training_Visualization:
         plt.ylabel("Precision")
         plt.tight_layout()
 
-        # If file_prefix is provided, save the plot instead of showing it
+        # save or show
         if file_prefix is not None:
             filename = f"{file_prefix}_precision_recall_curve.png"
             png_path = os.path.join(self.models_folder, filename)
             plt.savefig(png_path)
-            print(f"Plot saved to {filename}")
             plt.close()
+            print(f"Plot saved to {filename}")
         else:
             plt.show()
 
     def plot_roc_curve(self, y_true, y_scores, site_name=None, lr=None, file_prefix=None):
+        import os
         import numpy as np
         import matplotlib.pyplot as plt
         from sklearn.metrics import roc_curve, auc
 
+        # to numpy
         y_true = np.array(y_true)
         y_scores = np.array(y_scores)
 
-        # Defensive: check for empty arrays
-        if len(y_true) == 0 or len(y_scores) == 0:
+        # defensive checks
+        if y_true.size == 0 or y_scores.size == 0:
             print("Cannot plot ROC curve: y_true or y_scores is empty.")
             return
 
-        # Defensive: ensure y_true contains only 0s and 1s
+        # binary labels
         unique_labels = np.unique(y_true)
         if not np.all(np.isin(unique_labels, [0, 1])):
             print(f"[plot_roc_curve] y_true contains unexpected labels {unique_labels}, converting to binary.")
             y_true = (y_true == 1).astype(int)
 
+        # compute curve
         fpr, tpr, _ = roc_curve(y_true, y_scores, pos_label=1)
         roc_auc = auc(fpr, tpr)
-        plt.figure()
-        plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
-        plt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--')
+
+        # ── subsample if too many points ─────────────────────────────
+        n_roc = fpr.size
+        if n_roc > self.max_samples:
+            idxs = np.linspace(0, n_roc - 1, self.max_samples, dtype=int)
+            fpr = fpr[idxs]
+            tpr = tpr[idxs]
+
+        # ── plotting ─────────────────────────────────────────────────
+        fig, ax = plt.subplots()  # PATCH: use subplots for faster management
+        ax.plot(
+            fpr,
+            tpr,
+            color='blue',
+            lw=1,  # PATCH: thinner line, no markers
+            label=f'ROC curve (AUC = {roc_auc:.2f})'
+        )
+        ax.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--')
+
         title = "ROC Curve"
-        if site_name is not None:
+        if site_name:
             title = f"{site_name} {title}"
         if lr is not None:
             title += f" (lr={lr})"
-        plt.title(title)
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.legend(loc="lower right")
-        plt.tight_layout()
+        ax.set_title(title)
 
-        # Save or show plot
-        if file_prefix is not None:
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.legend(loc="lower right")
+        # plt.tight_layout()  # optional; can be left out for a tiny speed gain
+
+        # ── save or show ─────────────────────────────────────────────
+        if file_prefix:
             filename = f"{file_prefix}_roc_curve.png"
             png_path = os.path.join(self.models_folder, filename)
-            plt.savefig(png_path)
+            fig.savefig(png_path, dpi=150)  # PATCH: removed compress_level
+            plt.close(fig)
             print(f"ROC plot saved to {filename}")
-            plt.close()
         else:
             plt.show()
+
 
     def plot_f1_score(self,
                       y_true,
                       y_scores,
-                      site_name: str=None,
-                      lr: float=None,
-                      file_prefix: str=None):
+                      site_name: str = None,
+                      lr: float = None,
+                      file_prefix: str = None):
         import os
         import numpy as np
         import matplotlib.pyplot as plt
@@ -289,38 +311,43 @@ class GRIME_AI_Model_Training_Visualization:
         y_true   = np.array(y_true)
         y_scores = np.array(y_scores)
 
-        # safety checks
+        # defensive checks
         if y_true.size == 0 or y_scores.size == 0:
             print("Cannot plot F1 curve: y_true or y_scores is empty.")
             return
 
-        # ensure binary labels
+        # binary labels
         unique_labels = np.unique(y_true)
         if not np.all(np.isin(unique_labels, [0, 1])):
-            print(f"[plot_f1_score] converting labels {unique_labels} to { [0,1] }.")
+            print(f"[plot_f1_score] converting labels {unique_labels} to binary.")
             y_true = (y_true == unique_labels.max()).astype(int)
 
-        # get precision, recall, thresholds
+        # compute precision/recall and thresholds
         precision, recall, thresholds = precision_recall_curve(y_true, y_scores, pos_label=1)
 
         # compute F1 = 2·(P·R)/(P+R)
-        # precision/recall arrays are len = n_thresh+1, thresholds len = n_thresh
         f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
 
-        # drop the last precision/recall point with no threshold
-        f1 = f1_scores[:-1]
+        # drop the last point without threshold
+        f1  = f1_scores[:-1]
         thr = thresholds
 
-        # find best F1
+        # find best F1 on full array
         best_idx = np.argmax(f1)
         best_thr = thr[best_idx]
-        best_f1 = f1[best_idx]
+        best_f1  = f1[best_idx]
+
+        # ── subsample F1-threshold curve if too many ───────────────────────
+        n_f1 = f1.shape[0]
+        if n_f1 > self.max_samples:
+            idxs = np.linspace(0, n_f1 - 1, self.max_samples, dtype=int)
+            f1  = f1[idxs]
+            thr = thr[idxs]
 
         # plot
         plt.figure()
         plt.plot(thr, f1, color="green", lw=2, label="F1 Score")
-        plt.scatter(best_thr, best_f1, color="red",
-                    label=f"Max F1={best_f1:.2f} at thr={best_thr:.2f}")
+        plt.scatter(best_thr, best_f1, color="red", label=f"Max F1={best_f1:.2f} at thr={best_thr:.2f}")
         title = "F1 Score vs Threshold"
         if site_name:
             title = f"{site_name} {title}"
@@ -360,7 +387,8 @@ class GRIME_AI_Model_Training_Visualization:
 
         # build the plot
         fig, ax = plt.subplots()
-        ax.plot(epochs, miou_values, marker="o", color="blue", lw=2)
+        #ax.plot(epochs, miou_values, marker="o", color="blue", lw=2)
+        ax.plot(epochs, miou_values, color="blue", lw=1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Mean IoU")
         title = "Mean IoU over Epochs"
