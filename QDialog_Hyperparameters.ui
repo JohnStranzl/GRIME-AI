@@ -193,14 +193,14 @@
        <item>
         <layout class="QHBoxLayout" name="horizontalFolderSelectorLayout">
          <item>
-          <widget class="QLineEdit" name="lineEdit_folderPath">
+          <widget class="QLineEdit" name="lineEdit_model_training_images_path">
            <property name="placeholderText">
             <string>Enter folder path...</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="pushButton_browseFolder">
+          <widget class="QPushButton" name="pushButton_browse_model_training_images_folder">
            <property name="text">
             <string>Browse</string>
            </property>
@@ -878,14 +878,14 @@
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutFolderPath">
          <item>
-          <widget class="QLineEdit" name="lineEdit_folderPathNew">
+          <widget class="QLineEdit" name="lineEdit_ROI_images_folder">
            <property name="placeholderText">
             <string>Enter folder path…</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="pushButton_browseFolderNew">
+          <widget class="QPushButton" name="pushButton_browse_ROI_images_folder">
            <property name="text">
             <string>Browse</string>
            </property>

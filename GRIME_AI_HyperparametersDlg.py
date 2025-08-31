@@ -255,6 +255,9 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # install event filter on the annotation‐image label
         self.label_imageAnnotation.installEventFilter(self)
 
+        if self.lineEdit_model_training_images_path.text():
+            self.populate_available_folders()
+
     def save_site_name_to_json(self):
         import os
         import json
@@ -650,8 +653,11 @@ class GRIME_AI_HyperparametersDlg(QDialog):
     def setup_connections(self):
         """Connect signals with their slot methods."""
         # Folder management signals.
-        self.pushButton_browseFolder.clicked.connect(self.browse_folder)
-        self.lineEdit_folderPath.editingFinished.connect(self.populate_available_folders)
+        self.pushButton_browse_model_training_images_folder.clicked.connect(self.browse_model_training_images_folder)
+        model_training_image_folder = JsonEditor().getValue("Model_Training_Images_Folder")
+        if model_training_image_folder:
+            self.lineEdit_model_training_images_path.setText(model_training_image_folder)
+        self.lineEdit_model_training_images_path.editingFinished.connect(self.populate_available_folders)
 
         self.pushButton_moveRight.clicked.connect(self.move_to_right)
         self.pushButton_moveRight.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
@@ -708,10 +714,9 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         # ### END NEW COCO CONNECTIONS ###
 
         # <<<< Connection for ROI Analyzer Analyze button >>>>
-        self.pushButton_browseFolderNew.clicked.connect(self.browse_folder_new)
-        self.pushButton_browseFolderNew.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
-
-        self.lineEdit_folderPathNew.editingFinished.connect(self._on_roi_folder_changed)
+        self.lineEdit_ROI_images_folder.editingFinished.connect(self._on_roi_images_folder_changed)
+        self.pushButton_browse_ROI_images_folder.clicked.connect(self.browse_ROI_images_folder)
+        self.pushButton_browse_ROI_images_folder.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
 
         self.pushButton_analyze.clicked.connect(self.analyze_roi)
         self.pushButton_analyze.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
@@ -843,17 +848,17 @@ class GRIME_AI_HyperparametersDlg(QDialog):
             QTimer.singleShot(self._batchDelay, lambda: self._loadNextBatch(token))
 
 
-    def browse_folder_new(self):
+    def browse_ROI_images_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
         if not folder:
             return
-        self.lineEdit_folderPathNew.setText(folder)
+        self.lineEdit_ROI_images_folder.setText(folder)
 
-        self._on_roi_folder_changed()
+        self._on_roi_images_folder_changed()
 
 
-    def _on_roi_folder_changed(self):
-        folder = self.lineEdit_folderPathNew.text().strip()
+    def _on_roi_images_folder_changed(self):
+        folder = self.lineEdit_ROI_images_folder.text().strip()
         if not folder or not os.path.isdir(folder):
             return
 
@@ -874,7 +879,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         3) Display composite plot, fallback to original if empty
         4) Overlay top-3 color swatches
         """
-        folder = self.lineEdit_folderPathNew.text().strip()
+        folder = self.lineEdit_ROI_images_folder.text().strip()
         if not folder:
             QMessageBox.warning(self, "ROI Analyzer", "Please specify a folder path.")
             return
@@ -940,11 +945,11 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         """
         Loop through all (image, mask) pairs in self._pairs, run GRIME_AI_ROI_Analyzer on each,
         export the key metrics to both a CSV and an XLSX file in the folder specified by
-        self.lineEdit_folderPathNew. In the XLSX, only the filenames appear in the
+        self.lineEdit_ROI_images_folder. In the XLSX, only the filenames appear in the
         image_path and mask_path columns, but those cells are hyperlinked to the full paths.
         """
         # 1) Get and validate output folder path
-        output_folder = self.lineEdit_folderPathNew.text().strip()
+        output_folder = self.lineEdit_ROI_images_folder.text().strip()
         if not output_folder:
             QMessageBox.warning(self, "No Output Folder", "Please specify an output folder.")
             return
@@ -1093,12 +1098,16 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         print("Segment Images tab populated with default values.")
 
 
-    def browse_folder(self):
+    def browse_model_training_images_folder(self):
         """Open a dialog to choose a folder and update the folder path field."""
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
+        folder = os.path.normpath(folder)
+
         if folder:
-            self.lineEdit_folderPath.setText(folder)
+            self.lineEdit_model_training_images_path.setText(folder)
             self.populate_available_folders()
+
+            JsonEditor().update_json_entry("Model_Training_Images_Folder", folder)
 
 
     def updateCOCOButtonState(self):
@@ -1185,7 +1194,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         return found
 
     def populate_available_folders(self):
-        root = Path(self.lineEdit_folderPath.text().strip()).resolve()
+        root = Path(self.lineEdit_model_training_images_path.text().strip()).resolve()
         self.listWidget_availableFolders.clear()
 
         if not root.is_dir():
@@ -1336,7 +1345,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         values["early_stopping"] = self.checkBox_earlyStopping.isChecked()
         values["patience"] = self.spinBox_patience.value()
         values["device"] = self.comboBox_device.currentText()
-        values["folder_path"] = self.lineEdit_folderPath.text()
+        values["folder_path"] = self.lineEdit_model_training_images_path.text()
         values["available_folders"] = [self.listWidget_availableFolders.item(i).text() for i in range(self.listWidget_availableFolders.count())]
         values["selected_folders"] = [self.listWidget_selectedFolders.item(i).text() for i in range(self.listWidget_selectedFolders.count())]
         values["segmentation_model_file"] = self.lineEdit_segmentation_model_file.text()
@@ -1399,7 +1408,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         else:
             print("No valid segmentation model file selected; using default MODEL path.")
 
-        root_folder = os.path.abspath(self.lineEdit_folderPath.text().strip()).replace("\\", "/")
+        root_folder = os.path.abspath(self.lineEdit_model_training_images_path.text().strip()).replace("\\", "/")
         selected_folders = values.get("selected_folders", [])
         if selected_folders:
             new_folders = []
@@ -1456,7 +1465,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
                     selected_labels.append(item.text())
 
         self.create_custom_json()
-        print("Train button clicked. Starting training process...")
+        print("\nTrain button clicked. Starting training process...")
 
         settings = self.get_values()
         print("Current settings:", settings)

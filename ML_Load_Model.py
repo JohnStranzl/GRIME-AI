@@ -8,10 +8,13 @@ import warnings
 import shutil
 from pathlib import Path
 
-
 import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.colors import ListedColormap, Normalize
+
+from skimage.measure import find_contours
 
 from omegaconf import OmegaConf, DictConfig
 
@@ -189,6 +192,9 @@ class ML_Load_Model:
                    borders=True, category_id=None):
         fig, ax = plt.subplots()
         ax.imshow(image)
+        # hide axes, ticks, and spines
+        ax.axis('off')
+
         self.show_mask(mask, ax, category_id=category_id, borders=borders)
         fig.savefig(output_file_with_path)
         plt.close(fig)

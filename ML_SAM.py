@@ -1,9 +1,16 @@
 # ML_SAM.py
 
 from ML_Dependencies import *  # JES - Boy, do I have issues with this. :(
+
+from torch.nn.functional import scaled_dot_product_attention
+from torch.nn.attention import sdpa_kernel, SDPBackend
+
 from torchvision.transforms import InterpolationMode
 _ = InterpolationMode.BILINEAR  # Ensures inclusion during PyInstaller freeze
+
 import os
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
 import sys
 from datetime import datetime
 import json
@@ -21,8 +28,6 @@ if True:
     logging.getLogger("root").setLevel(logging.WARNING)
     logging.disable(logging.INFO)
 
-import os
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 # ----------------------------------------------------------------------------------------------------------------------
 # HYDRA (for SAM2)
@@ -254,16 +259,50 @@ class ML_SAM:
                 optimizer.zero_grad()
                 use_amp = False
                 with autocast(enabled=use_amp):
-                    # Forward pass
-                    low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
-                        image_embeddings=predictor._features["image_embed"][-1].unsqueeze(0),
-                        image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
-                        sparse_prompt_embeddings=sparse_embeddings,
-                        dense_prompt_embeddings=dense_embeddings,
-                        multimask_output=False,
-                        repeat_image=batched_mode,
-                        high_res_features=high_res_features,
-                    )
+                    # ─── Multi-backend scaled-dot-product-attention ───
+                    desired = ("FLASH_ATTENTION", "XFORMERS", "DEFAULT", "MATMUL")
+                    backends = []
+                    for name in desired:
+                        if hasattr(SDPBackend, name):
+                            backends.append(getattr(SDPBackend, name))
+                        else:
+                            warnings.warn(f"SDPBackend has no attribute {name!r}; skipping.")
+
+                    # Attempt each available backend, fall back to direct call if all fail
+                    last_exc = None
+                    for backend in backends:
+                        try:
+                            with sdpa_kernel(backend):
+                                low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
+                                    image_embeddings         = predictor._features["image_embed"][-1].unsqueeze(0),
+                                    image_pe                 = predictor.model.sam_prompt_encoder.get_dense_pe(),
+                                    sparse_prompt_embeddings = sparse_embeddings,
+                                    dense_prompt_embeddings  = dense_embeddings,
+                                    multimask_output         = False,
+                                    repeat_image             = batched_mode,
+                                    high_res_features        = high_res_features,
+                                )
+                            print(f"Using SDPA backend: {backend.name}")
+                            break
+                        except Exception as e:
+                            warnings.warn(f"SDPA backend {backend.name!r} failed: {e}")
+                            last_exc = e
+                    else:
+                        warnings.warn(
+                            f"All SDPA kernels failed "
+                            f"({', '.join(b.name for b in backends)}): {last_exc}. "
+                            "Falling back to default kernel."
+                        )
+                        low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
+                            image_embeddings         = predictor._features["image_embed"][-1].unsqueeze(0),
+                            image_pe                 = predictor.model.sam_prompt_encoder.get_dense_pe(),
+                            sparse_prompt_embeddings = sparse_embeddings,
+                            dense_prompt_embeddings  = dense_embeddings,
+                            multimask_output         = False,
+                            repeat_image             = batched_mode,
+                            high_res_features        = high_res_features,
+                        )
+                    # ───────────────────────────────────────────────────
 
                     prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])
                     #if prd_masks.shape != true_mask.shape:
