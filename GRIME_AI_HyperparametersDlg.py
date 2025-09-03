@@ -160,7 +160,7 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self._loadToken = 0  # to cancel stale batches
 
         ###JES hide GRIME AI annotation/labeling; users must use CVAT
-        if getpass.getuser() != "johns":
+        if getpass.getuser() != "johns" and getpass.getuser() != "tgilmore10":
             tb = self.tabWidget.tabBar()
             is_visible = tb.isTabVisible(3)
             tb.setTabVisible(3, not is_visible)
@@ -960,13 +960,19 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
         # 2) Prepare header and container for all rows
         header = [
-            "image_path",
-            "mask_path",
-            "roi_intensity",  # formatted to 2 decimals
-            "roi_entropy",  # formatted to 4 decimals
-            "roi_texture",  # formatted to 4 decimals
-            "mean_gli",  # formatted to 2 decimals
-            "mean_gcc"  # formatted to 2 decimals
+            "Image Path",
+            "Mask Path",
+            "ROI Intensity",
+            "ROI Entropy",
+            "ROI Texture",
+            "Mean GLI",
+            "Mean GCC",
+            "ROI Pixel Count",
+            "ROI Area",
+            "Image Height",
+            "Image Width",
+            "Image Total Pixels",
+            "ROI Area Percentage"
         ]
         rows = [header]
 
@@ -988,7 +994,13 @@ class GRIME_AI_HyperparametersDlg(QDialog):
                 f"{analyzer.roi_entropy:.4f}",
                 f"{analyzer.roi_texture:.4f}",
                 f"{analyzer.mean_gli:.2f}",
-                f"{analyzer.mean_gcc:.2f}"
+                f"{analyzer.mean_gcc:.2f}",
+                f"{analyzer.ROI_total_pixels:.2f}",
+                f"{analyzer.ROI_total_area:.2f}",
+                f"{analyzer.image_height:.2f}",
+                f"{analyzer.image_width:.2f}",
+                f"{analyzer.image_total_pixels:.2f}",
+                f"{analyzer.ROI_percentage:.2f}",
             ])
 
         # 4) Write out CSV
@@ -1013,7 +1025,8 @@ class GRIME_AI_HyperparametersDlg(QDialog):
 
             # Write data rows
             for row_idx, data in enumerate(rows[1:], start=2):
-                orig_full, mask_full, intensity, entropy, texture, gli, gcc = data
+                orig_full, mask_full, intensity, entropy, texture, gli, gcc, pixel_count, pixel_area, image_height,\
+                    image_width, image_total_pixels, roi_area_percentage = data
 
                 # image_path as filename with hyperlink
                 img_name = os.path.basename(orig_full)
@@ -1033,7 +1046,12 @@ class GRIME_AI_HyperparametersDlg(QDialog):
                 ws.cell(row=row_idx, column=5, value=float(texture))
                 ws.cell(row=row_idx, column=6, value=float(gli))
                 ws.cell(row=row_idx, column=7, value=float(gcc))
-
+                ws.cell(row=row_idx, column=8, value=float(pixel_count))
+                ws.cell(row=row_idx, column=9, value=float(pixel_area))
+                ws.cell(row=row_idx, column=10, value=float(image_height))
+                ws.cell(row=row_idx, column=11, value=float(image_width))
+                ws.cell(row=row_idx, column=12, value=float(image_total_pixels))
+                ws.cell(row=row_idx, column=13, value=float(roi_area_percentage))
             wb.save(xlsx_path)
 
         except ImportError:

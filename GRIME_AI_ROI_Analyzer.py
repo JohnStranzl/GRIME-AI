@@ -28,6 +28,8 @@ class GRIME_AI_ROI_Analyzer:
         self.roi_texture = None
         self.mean_gli = None
         self.mean_gcc = None
+        self.ROI_total_pixels = None
+        self.ROI_total_area = None
 
         self.dominant_hsv_list = []
         self.dominant_rgb_list = []
@@ -143,6 +145,33 @@ class GRIME_AI_ROI_Analyzer:
         grad_magnitude = np.sqrt(sobel_x ** 2 + sobel_y ** 2)
         roi_grad = grad_magnitude[self.mask_bin > 0]
         self.roi_texture = np.mean(roi_grad)
+
+
+    def compute_mask_area(self):
+        """
+        Calculate the total number of pixels in the masked region and
+        store both the pixel count and area in class variables.
+
+        Also stores:
+            self.image_width, self.image_height  - dimensions of the image
+            self.image_total_pixels              - total number of pixels in the image
+            self.ROI_percentage                  - ROI pixel count as % of total image pixels
+        """
+        if self.mask_bin is None:
+            raise ValueError("Mask binary (self.mask_bin) is not initialized. Run load_data() first.")
+
+        # Get image dimensions from the mask
+        self.image_height, self.image_width = self.mask_bin.shape[:2]
+        self.image_total_pixels = self.image_width * self.image_height
+
+        # Count nonzero pixels in the binary mask
+        self.ROI_total_pixels = int(np.count_nonzero(self.mask_bin))
+
+        # Area in pixels² (same as pixel count unless scaling is applied)
+        self.ROI_total_area = float(self.ROI_total_pixels)
+
+        # Percentage of ROI pixels relative to total image pixels
+        self.ROI_percentage = (self.ROI_total_pixels / self.image_total_pixels) * 100.0
 
 
     def compute_greenness(self):
@@ -294,6 +323,7 @@ class GRIME_AI_ROI_Analyzer:
         self.compute_composite()
         self.analyze_roi()
         self.compute_greenness()
+        self.compute_mask_area()
         self.extract_dominant_colors()
         # You can choose to use the traditional display_results() method here,
         # but for integration with the UI we'll use get_results_pixmap().
