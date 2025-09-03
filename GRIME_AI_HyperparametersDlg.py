@@ -160,10 +160,12 @@ class GRIME_AI_HyperparametersDlg(QDialog):
         self._loadToken = 0  # to cancel stale batches
 
         ###JES hide GRIME AI annotation/labeling; users must use CVAT
-        if getpass.getuser() != "johns" and getpass.getuser() != "tgilmore10":
-            tb = self.tabWidget.tabBar()
-            is_visible = tb.isTabVisible(3)
-            tb.setTabVisible(3, not is_visible)
+        tb = self.tabWidget.tabBar()
+        if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
+            tb.setTabVisible(3, True)
+        else:
+            tb.setTabVisible(3, False)
+
 
         # Initialize per-image annotation store
         # Keys: full image path, Values: list of {type, points}
