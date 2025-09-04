@@ -778,9 +778,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if len(siteList) == 0:
             print("NEON Field Site Table from NEON website FAILED...")
-            pass
-            # frame.radioButtonHardDriveImages.setChecked(True)
-            # frame.radioButtonHardDriveImages.setDisabled(False)
         # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
             print("Populate NEON Products tab on GUI...")

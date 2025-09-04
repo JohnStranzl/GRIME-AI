@@ -21,6 +21,73 @@ from pathlib import Path
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_Save_Utils import JsonEditor
 
+
+def is_valid_csv(source, sniff_lines=5, max_rows=10, encoding="utf-8-sig"):
+    """
+    Return True if 'source' is a well-formed CSV. 'source' can be a filepath or raw CSV string.
+    """
+
+    # Load the file’s contents if 'source' is a valid path
+    if isinstance(source, str) and os.path.exists(source):
+        with open(source, 'r', encoding=encoding) as f:
+            text = f.read()
+    else:
+        text = source
+
+    # Strip BOM if present
+    if text.startswith('\ufeff'):
+        text = text.lstrip('\ufeff')
+
+    # Quick HTML rejection
+    head = text[:2048].lower()
+    for sig in ['<!doctype html', '<html', '<head', '<body', '<script']:
+        if sig in head:
+            return False
+
+    # Build a sample of complete lines for sniffing
+    lines = text.splitlines(keepends=True)
+    sample = ''.join(lines[:sniff_lines])
+    try:
+        dialect = csv.Sniffer().sniff(sample)
+    except csv.Error:
+        # Fallback to basic CSV with commas
+        dialect = csv.excel
+        dialect.delimiter = ','
+        dialect.quotechar = '"'
+        dialect.doublequote = True
+
+    # Read up to max_rows and collect them
+    reader = csv.reader(StringIO(text), dialect)
+    rows = []
+    for i, row in enumerate(reader):
+        if i >= max_rows:
+            break
+        rows.append(row)
+
+    # Need at least header + one data row
+    if len(rows) < 2:
+        return False
+
+    expected_cols = len(rows[0])
+    if expected_cols < 1:
+        return False
+
+    # Ensure every sampled row matches the header’s column count
+    return all(len(r) == expected_cols for r in rows)
+
+
+def find_field_index(fields, base_name):
+    """
+    Return the index of either 'field_<base_name>' or '<base_name>' in the header list.
+    Raises ValueError if neither is present.
+    """
+    for prefix in ("field_", ""):
+        key = prefix + base_name
+        if key in fields:
+            return fields.index(key)
+    raise ValueError(f"Could not find column '{base_name}' (with or without 'field_' prefix) in CSV header.")
+
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -75,122 +142,51 @@ class GRIME_AI_Utils:
     # THIS FUNCTION PARSES THE FIELD SITE TABLE THAT IS FETCHED FROM THE NEON SITE.
     # ======================================================================================================================
     def parseCSV(self, filename_with_path):
-        # FULLY QUALIFIED PATH OF THE CSV DOWNLOADED ONTO THE LOCAL COMPUTER
-        filename = filename_with_path
-
+        """
+        Parse the CSV at 'filename_with_path', extracting site_id, site_name, phenocams,
+        latitude & longitude—handling headers that may or may not be prefixed with 'field_'.
+        """
         # Validate before parsing
-        if not self.is_valid_csv_file(filename_with_path):
+        if not is_valid_csv(filename_with_path):
             raise ValueError(f"Invalid CSV content detected in '{filename_with_path}'.")
 
         rows = []
         siteList = []
 
         try:
-            with open(filename, 'r') as data:
-                dict_Reader = csv.DictReader(data)
-                ordered_dict_from_csv = list(dict_Reader)[0]
-                dict_from_csv = dict(ordered_dict_from_csv)
-                keys = dict_from_csv.keys()
-
-            # READ CSV FILE
-            with open(filename, 'r') as csvfile:
-                # creating a csv reader object
+            # Read all rows into memory (you could stream this if files get huge)
+            with open(filename_with_path, 'r', newline='') as csvfile:
                 csvreader = csv.reader(csvfile)
-
-                # EXTRACT FIELD NAMES FROM THE FIRST ROW OF THE CSV
+                # Extract header
                 fields = next(csvreader)
-
-                # READ ONE ROW AT A TIME AND APPEND INTO A LIST
+                # Buffer the rest of the rows
                 for row in csvreader:
                     rows.append(row)
 
-            fieldSiteIDIndex = fields.index("field_site_id")
-            fieldSiteNameIndex = fields.index("field_site_name")
-            fieldPhenocamIndex = fields.index("field_phenocams")
-            fieldLatitudeIndex = fields.index("field_latitude")
-            fieldLongitudeIndex = fields.index("field_longitude")
+            # Locate the needed columns, with or without 'field_' prefix
+            site_id_idx = find_field_index(fields, "site_id")
+            site_name_idx = find_field_index(fields, "site_name")
+            phenocam_idx = find_field_index(fields, "phenocams")
+            lat_idx = find_field_index(fields, "latitude")
+            lon_idx = find_field_index(fields, "longitude")
 
+            # Build your siteData objects
             for row in rows:
-                siteList.append(siteData(row[fieldSiteIDIndex], row[fieldSiteNameIndex], row[fieldPhenocamIndex],
-                                         row[fieldLatitudeIndex], row[fieldLongitudeIndex]))
-        except:
+                siteList.append(
+                    siteData(
+                        row[site_id_idx],
+                        row[site_name_idx],
+                        row[phenocam_idx],
+                        row[lat_idx],
+                        row[lon_idx]
+                    )
+                )
+
+        except Exception:
+            # Swallow any parsing errors and return empty list
             siteList = []
 
         return siteList
-
-
-    def is_valid_csv(text: str,
-                     sample_size: int = 2048,
-                     max_rows: int = 10) -> bool:
-        # 1. HTML signature check
-        signatures = ['<!DOCTYPE html', '<html', '<head', '<body', '<script']
-        header = text[:sample_size].lower()
-        if any(sig in header for sig in signatures):
-            return False
-
-        # 2. CSV dialect sniffing
-        try:
-            sniff_sample = text[:sample_size]
-            dialect = csv.Sniffer().sniff(sniff_sample)
-        except csv.Error:
-            return False
-
-        # 3. Row consistency check
-        reader = csv.reader(StringIO(text), dialect)
-        rows = []
-        for i, row in enumerate(reader):
-            if i >= max_rows:
-                break
-            rows.append(row)
-
-        if len(rows) < 2:
-            return False
-
-        col_count = len(rows[0])
-        if col_count < 1:
-            return False
-
-        if all(len(row) == col_count for row in rows):
-            return True
-
-        return False
-
-    import csv
-    from io import StringIO
-
-    def is_valid_csv(self, text: str, sample_size: int = 2048, max_rows: int = 10) -> bool:
-        # 1. HTML signature check
-        signatures = ['<!DOCTYPE html', '<html', '<head', '<body', '<script']
-        header = text[:sample_size].lower()
-        if any(sig in header for sig in signatures):
-            return False
-
-        # 2. CSV dialect sniffing
-        try:
-            sniff_sample = text[:sample_size]
-            dialect = csv.Sniffer().sniff(sniff_sample)
-        except csv.Error:
-            return False
-
-        # 3. Row consistency check
-        reader = csv.reader(StringIO(text), dialect)
-        rows = []
-        for i, row in enumerate(reader):
-            if i >= max_rows:
-                break
-            rows.append(row)
-
-        if len(rows) < 2:
-            return False
-
-        col_count = len(rows[0])
-        if col_count < 1:
-            return False
-
-        if all(len(row) == col_count for row in rows):
-            return True
-
-        return False
 
 
     # ======================================================================================================================
