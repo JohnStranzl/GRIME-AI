@@ -197,16 +197,13 @@ from GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
 from GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
 from GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
 from GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
-from GRIME_AI_buildModelDlg import GRIME_AI_buildModelDlg
 from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
 from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-
-from GRIME_AI_Save_Utils import JsonEditor
-
 from GRIME_AI_HyperparametersDlg import GRIME_AI_HyperparametersDlg
 
+from GRIME_AI_Save_Utils import JsonEditor
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
