@@ -201,7 +201,7 @@ from GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
 from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-from GRIME_AI_HyperparametersDlg import GRIME_AI_HyperparametersDlg
+from GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
 
 from GRIME_AI_Save_Utils import JsonEditor
 
@@ -1673,7 +1673,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return None
         '''
 
-        hyperparameterDlg = GRIME_AI_HyperparametersDlg(frame)
+        hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
 
         hyperparameterDlg.ml_train_signal.connect(train_main)
         hyperparameterDlg.ml_segment_signal.connect(load_model_main)
