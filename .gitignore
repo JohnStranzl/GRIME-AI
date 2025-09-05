@@ -28,3 +28,7 @@ utils/__pycache__/
 validation/
 /pytorch/
 /pytorch/third_party/
+/pytorch/third_party/fbgemm/
+/pytorch/third_party/fbgemm/external/
+/pytorch/third_party/flash-attention/
+/pytorch/third_party/flash-attention/csrc/
