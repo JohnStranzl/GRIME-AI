@@ -2,6 +2,8 @@ import os
 
 os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 
+from io import StringIO
+
 import csv
 import re
 import multiprocessing
@@ -31,6 +33,182 @@ from nitrateData import nitrateData
 SERVER = 'http://data.neonscience.org/api/v0/'
 
 # https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20240423.csv
+
+# ======================================================================================================================
+# ======================================================================================================================
+# ===== ===== ===== ===== ===== ===== ===== =====    HELPER FUNCTIONS    ===== ===== ===== ===== ===== ===== ===== =====
+# ======================================================================================================================
+# ======================================================================================================================
+
+def parse_NEON_field_site_metadata(self, filename_with_path):
+    """
+    Module: parse_NEON_field_site_metadata
+    Author: John Edward Stranzl, Jr.
+    Created: 2021-04-xx
+    License: Apache License 2.0
+
+        This file is licensed under the Apache License, Version 2.0.
+        You may not use this file except in compliance with the License.
+        You may obtain a copy of the License at:
+            http://www.apache.org/licenses/LICENSE-2.0
+
+    Description:
+        Utilities for parsing phenocam site CSV files. The core function, parse_NEON_field_site_metadata,
+        reads a CSV listing sites and extracts the following fields:
+          - site_id
+          - site_name
+          - phenocams
+          - latitude
+          - longitude
+        It automatically handles headers that may be prefixed with 'field_'.
+
+    Dependencies:
+        - csv (stdlib)
+        - is_valid_csv (custom validator for CSV integrity)
+        - find_field_index (helper to locate columns with or without 'field_' prefix)
+        - siteData (data class for site attributes)
+
+    Functions:
+        parse_NEON_field_site_metadata(self, filename_with_path) -> List[siteData]
+            Parse the CSV at the given path and return a list of siteData objects.
+            Raises ValueError if the CSV fails validation. Returns an empty list
+            on any parsing error.
+
+    Usage Example:
+        from phenocam_csv_parser import PhenocamParser, siteData
+
+        parser = PhenocamParser()
+        try:
+            sites = parser.parse_NEON_field_site_metadata("/data/site_list.csv")
+        except ValueError as e:
+            print(f"Validation error: {e}")
+    """
+    # Validate before parsing
+    if not is_valid_csv(filename_with_path):
+        raise ValueError(f"Invalid CSV content detected in '{filename_with_path}'.")
+
+    rows = []
+    siteList = []
+
+    try:
+        # Read all rows into memory (you could stream this if files get huge)
+        with open(filename_with_path, 'r', newline='') as csvfile:
+            csvreader = csv.reader(csvfile)
+            # Extract header
+            fields = next(csvreader)
+            # Buffer the rest of the rows
+            for row in csvreader:
+                rows.append(row)
+
+        # Locate the needed columns, with or without 'field_' prefix
+        site_id_idx = find_field_index(fields, "site_id")
+        site_name_idx = find_field_index(fields, "site_name")
+        phenocam_idx = find_field_index(fields, "phenocams")
+        lat_idx = find_field_index(fields, "latitude")
+        lon_idx = find_field_index(fields, "longitude")
+
+        # Build your siteData objects
+        for row in rows:
+            siteList.append(
+                siteData(
+                    row[site_id_idx],
+                    row[site_name_idx],
+                    row[phenocam_idx],
+                    row[lat_idx],
+                    row[lon_idx]
+                )
+            )
+
+    except Exception:
+        # Swallow any parsing errors and return empty list
+        siteList = []
+
+    return siteList
+
+
+def is_valid_csv(source, sniff_lines=5, max_rows=10, encoding="utf-8-sig"):
+    """
+    Function: is_valid_csv
+    Author: John Edward Stranzl, Jr.
+    Created: 2025-09-04
+    License: Apache License 2.0
+
+        This file is licensed under the Apache License, Version 2.0.
+        You may not use this file except in compliance with the License.
+        You may obtain a copy of the License at:
+            http://www.apache.org/licenses/LICENSE-2.0
+
+    Description:
+        Determine whether the provided source (a filesystem path or raw CSV text)
+        constitutes a well-formed CSV. Checks include:
+          - Quick HTML rejection
+          - Sniffing a sample of lines for dialect
+          - Consistent column counts across up to max_rows
+          - At least a header plus one data row
+
+    Dependencies:
+        - os (stdlib)
+        - csv (stdlib)
+        - io.StringIO (stdlib)
+
+    Parameters:
+        source       Path to a CSV file or a raw CSV string.
+        sniff_lines  Number of initial lines to sample for dialect sniffing (default: 5).
+        max_rows     Maximum number of rows to read for validation (default: 10).
+        encoding     Encoding used when reading a file source (default: "utf-8-sig").
+
+    Returns:
+        bool         True if source passes all CSV validity checks; False otherwise.
+    """
+
+    # Load the file’s contents if 'source' is a valid path
+    if isinstance(source, str) and os.path.exists(source):
+        with open(source, 'r', encoding=encoding) as f:
+            text = f.read()
+    else:
+        text = source
+
+    # Strip BOM if present
+    if text.startswith('\ufeff'):
+        text = text.lstrip('\ufeff')
+
+    # Quick HTML rejection
+    head = text[:2048].lower()
+    for sig in ['<!doctype html', '<html', '<head', '<body', '<script']:
+        if sig in head:
+            return False
+
+    # Build a sample of complete lines for sniffing
+    lines = text.splitlines(keepends=True)
+    sample = ''.join(lines[:sniff_lines])
+    try:
+        dialect = csv.Sniffer().sniff(sample)
+    except csv.Error:
+        # Fallback to basic CSV with commas
+        dialect = csv.excel
+        dialect.delimiter = ','
+        dialect.quotechar = '"'
+        dialect.doublequote = True
+
+    # Read up to max_rows and collect them
+    reader = csv.reader(StringIO(text), dialect)
+    rows = []
+    for i, row in enumerate(reader):
+        if i >= max_rows:
+            break
+        rows.append(row)
+
+    # Need at least header + one data row
+    if len(rows) < 2:
+        return False
+
+    expected_cols = len(rows[0])
+    if expected_cols < 1:
+        return False
+
+    # Ensure every sampled row matches the header’s column count
+    return all(len(r) == expected_cols for r in rows)
+
 
 class  NEON_API:
     def __init__(self, parent=None):
@@ -345,7 +523,7 @@ class  NEON_API:
             filename_with_path = NEON_API().Download_Field_Site_Metadata(csv_links)
 
             try:
-                siteList = GRIME_AI_Utils().parseCSV(filename_with_path)
+                siteList = parse_NEON_field_site_metadata(filename_with_path)
             except Exception as e:
                 nErrorCode = -2
         # ELSE IF NO FIELD SITE TABLES ARE FOUND, RETURN AN EMPTY LIST
@@ -409,3 +587,4 @@ class  NEON_API:
                                            row[15]))
 
         return nitrateList
+
