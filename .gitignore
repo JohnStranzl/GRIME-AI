@@ -26,3 +26,5 @@ sam2_transforms.pt
 train/
 utils/__pycache__/
 validation/
+/pytorch/
+/pytorch/third_party/
