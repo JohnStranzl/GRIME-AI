@@ -854,8 +854,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print('This is Test Function 1.')
 
             # KMeans EXPECTS THE BYTE ORDER TO BE RGB
-            #img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-            img1 = GRIME_AI_Utils().convertQImageToMat(myImage.toImage())
+            img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
+            #img1 = GRIME_AI_Utils().convertQImageToMat(myImage.toImage())
 
             rgb = cv2.blur(img1, ksize=(11, 11))
 
