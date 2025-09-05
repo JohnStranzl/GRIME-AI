@@ -230,7 +230,7 @@ from GRIME_AI_ImageStats import GRIME_AI_ImageStats
 # ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
 from GRIME_AI_ProductTable import GRIME_AI_ProductTable
-from GRIME_QLabel import DrawingMode
+from GRIME_AI_QLabel import DrawingMode
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
@@ -595,12 +595,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Initialize a variable to hold the current NEON site information
         self.current_site_info = ["No site info available."]
-        # Set the tooltip generator on your GRIME_QLabel widget(s). For example, if your widget is named NEON_labelLatestImage:
+        # Set the tooltip generator on your GRIME_AI_QLabel widget(s). For example, if your widget is named NEON_labelLatestImage:
         if 0:
             if hasattr(self.NEON_labelLatestImage, "tooltipGenerator"):
                 self.NEON_labelLatestImage.tooltipGenerator = self.siteInfoTooltip
             else:
-                print("Warning: NEON_labelLatestImage is not an instance of GRIME_QLabel.")
+                print("Warning: NEON_labelLatestImage is not an instance of GRIME_AI_QLabel.")
 
         # Set stylesheet for the tabs to change color when a tab is selected.
         self.tabWidget.setStyleSheet("""
@@ -810,7 +810,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def siteInfoTooltip(self):
         """
-        This function returns the dynamic tooltip string for GRIME_QLabel.
+        This function returns the dynamic tooltip string for GRIME_AI_QLabel.
         It uses self.current_site_info (a list of strings) to create the tooltip.
         """
         if self.current_site_info:

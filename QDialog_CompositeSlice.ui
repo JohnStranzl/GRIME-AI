@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Select Features</string>
   </property>
-  <widget class="GRIME_QLabel" name="label_Image">
+  <widget class="GRIME_AI_QLabel" name="label_Image">
    <property name="geometry">
     <rect>
      <x>20</x>
@@ -191,9 +191,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>GRIME_QLabel</class>
+   <class>GRIME_AI_QLabel</class>
    <extends>QLabel</extends>
-   <header location="global">GRIME_QLabel</header>
+   <header location="global">GRIME_AI_QLabel</header>
   </customwidget>
  </customwidgets>
  <resources/>
