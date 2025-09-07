@@ -1,11 +1,12 @@
 
 import os
-import json
-import cv2
 import shutil
 import random
-import numpy as np
 from pycocotools import mask as coco_mask
+import cv2
+import numpy as np
+import json
+
 
 class DatasetUtils:
     def __init__(self):
@@ -129,3 +130,77 @@ class DatasetUtils:
 
         if len(train_images) == 0 or len(val_images) == 0:
             print("Empty split — cannot train/validate properly.")
+
+
+
+    def get_image_size(self, image_path: str) -> tuple[int, int]:
+        """
+        Returns (height, width) of the image.
+        """
+        img = cv2.imread(image_path)
+        if img is None:
+            raise FileNotFoundError(f"Image not found: {image_path}")
+        return img.shape[:2]
+
+    def get_annotations_for_image(
+        self,
+        image_path: str,
+        annotation_index: dict
+    ) -> list[dict]:
+        """
+        Returns the list of COCO‐style annotation dicts for this image.
+        Assumes annotation_index maps image_path (or stem) to a list of anns.
+        """
+        # If your index keys are full paths, use image_path directly;
+        # if they are stems/IDs you may need Path(image_path).stem
+        return annotation_index.get(image_path, [])
+
+    def rasterize_polygon(
+        self,
+        segmentation: list,
+        image_shape: tuple[int, int]
+    ) -> np.ndarray:
+        """
+        Given a COCO‐style polygon (list of [x0,y0,x1,y1,...]), rasterize into
+        a H×W binary mask.
+        """
+        h, w = image_shape
+        mask = np.zeros((h, w), dtype=np.uint8)
+        # segmentation may be a list of lists
+        if isinstance(segmentation, list):
+            for poly in segmentation:
+                pts = np.array(poly, dtype=np.int32).reshape(-1, 2)
+                cv2.fillPoly(mask, [pts], color=1)
+        else:
+            # if it's RLE or other, extend here
+            raise ValueError("Unsupported segmentation format")
+        return mask
+
+    def load_all_true_masks(
+        self,
+        image_path: str,
+        annotation_index: dict
+    ) -> dict[int, np.ndarray]:
+        """
+        Returns a dict mapping category_id -> H×W binary mask for every annotation
+        in this image. Categories missing from the image (e.g. snow) simply won't
+        appear in the dict.
+        """
+        # 1) get all annotations for this image
+        anns = self.get_annotations_for_image(image_path, annotation_index)
+
+        # 2) get image size
+        h, w = self.get_image_size(image_path)
+
+        all_masks: dict[int, np.ndarray] = {}
+        for ann in anns:
+            cid = ann.get("category_id")
+            seg = ann.get("segmentation")
+            if cid is None or seg is None:
+                continue
+
+            mask = self.rasterize_polygon(seg, (h, w))
+            if mask.sum() > 0:
+                all_masks[cid] = mask
+
+        return all_masks
