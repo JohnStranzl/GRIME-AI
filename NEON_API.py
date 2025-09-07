@@ -39,6 +39,9 @@ from GRIME_AI_Save_Utils import JsonEditor
 
 from nitrateData import nitrateData
 
+from siteData import siteData
+
+
 SERVER = 'http://data.neonscience.org/api/v0/'
 
 # https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20240423.csv
@@ -49,7 +52,7 @@ SERVER = 'http://data.neonscience.org/api/v0/'
 # ======================================================================================================================
 # ======================================================================================================================
 
-def parse_NEON_field_site_metadata(self, filename_with_path):
+def parse_NEON_field_site_metadata(filename_with_path):
     """
     Module: parse_NEON_field_site_metadata
     Author: John Edward Stranzl, Jr.
@@ -217,6 +220,18 @@ def is_valid_csv(source, sniff_lines=5, max_rows=10, encoding="utf-8-sig"):
 
     # Ensure every sampled row matches the header’s column count
     return all(len(r) == expected_cols for r in rows)
+
+
+def find_field_index(fields, base_name):
+    """
+    Return the index of either 'field_<base_name>' or '<base_name>' in the header list.
+    Raises ValueError if neither is present.
+    """
+    for prefix in ("field_", ""):
+        key = prefix + base_name
+        if key in fields:
+            return fields.index(key)
+    raise ValueError(f"Could not find column '{base_name}' (with or without 'field_' prefix) in CSV header.")
 
 
 class  NEON_API:

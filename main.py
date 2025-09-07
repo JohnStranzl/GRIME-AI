@@ -3771,6 +3771,13 @@ def my_main():
     coco_parser.add_argument("--output", required=False,
                              help="(Optional) Override output JSON file path.")
 
+    # Segment parser
+    segment_parser = subparsers.add_parser('segment', help='Segment images using a Hydra-configured model')
+    segment_parser.add_argument('--model_file',
+                                 help='Path to the model checkpoint file (e.g., ckpt.pth)')
+    segment_parser.add_argument('--images_folder', help='Directory containing images to segment')
+    segment_parser.add_argument('--overrides', nargs='*', help='Optional Hydra overrides (e.g. training.lr=1e-4)')
+
     # Custom help handling
     if '-h' in sys.argv or '--help' in sys.argv:
         print("Global Help: CLI for GRIME AI")
@@ -3779,6 +3786,8 @@ def my_main():
         triage_parser.print_help()  # Help for triage subparser
         print("\nHelp for 'slice' command:")
         slice_parser.print_help()  # Help for slice subparser
+        print("\nHelp for 'segment' command:")
+        segment_parser.print_help()  # Help for segment subparser
         sys.exit(0)  # Exit after displaying help
 
     args = parser.parse_args()
@@ -3845,6 +3854,30 @@ def run_cli(args):
             # Instantiate for one-to-one mode
             generator = CocoGenerator(folder=folder, output_path=output_path)
         generator.generate_annotations()
+    elif args.command == 'segment':
+        # 1. Point Hydra at your config directory
+        initialize(config_path=myconfig_path, job_name="segment_image_cli")
+
+        # 2. Gather any user-provided overrides
+        overrides = args.overrides or []
+
+        # 3. Inject the model checkpoint path and the folder of images
+        overrides.extend([
+            f"model_file={args.model_file}",
+            f"images_folder={args.images_folder}"
+        ])
+
+        # 4. Build the DictConfig from base + overrides
+        cfg: DictConfig = compose(
+            config_name=myconfig_name,
+            overrides=overrides
+        )
+
+        # 5. Invoke the Hydra-decorated entry point
+        load_model_main(cfg)
+    else:
+        parser.print_help()
+        sys.exit(1)
 
 # ======================================================================================================================
 # ======================================================================================================================

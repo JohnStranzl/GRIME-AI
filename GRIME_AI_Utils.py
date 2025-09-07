@@ -23,24 +23,10 @@ import urllib.request
 from urllib.request import urlopen
 import ssl
 
-from siteData import siteData
-
 from pathlib import Path
 
 from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI_Save_Utils import JsonEditor
-
-
-def find_field_index(fields, base_name):
-    """
-    Return the index of either 'field_<base_name>' or '<base_name>' in the header list.
-    Raises ValueError if neither is present.
-    """
-    for prefix in ("field_", ""):
-        key = prefix + base_name
-        if key in fields:
-            return fields.index(key)
-    raise ValueError(f"Could not find column '{base_name}' (with or without 'field_' prefix) in CSV header.")
 
 
 # ======================================================================================================================
