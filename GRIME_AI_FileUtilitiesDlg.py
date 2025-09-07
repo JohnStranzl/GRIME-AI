@@ -121,7 +121,7 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
         if len(self.lineEdit_images_folder.text()) > 0:
             self.fetchImageList_Signal.emit(self.lineEdit_images_folder.text(), self.checkBox_FetchRecursive.isChecked())
         else:
-            self.pushButton_BrowseImageFolderClicked()
+            self.pushButtonBrowseImageFolderClicked()
             self.fetchImageList_Signal.emit(self.lineEdit_images_folder.text(), self.checkBox_FetchRecursive.isChecked())
 
     def checkboxNEONSitesClicked(self):
