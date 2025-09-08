@@ -87,8 +87,9 @@ class ML_SAM:
         # load site_config from Hydra or from saved JSON
         if cfg is None or "site_config" not in cfg:
             settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+            CONFIG_FILENAME = "site_config.json"
             site_configuration_file = os.path.normpath(
-                os.path.join(settings_folder, "site_config.json")
+                os.path.join(settings_folder, CONFIG_FILENAME)
             )
             print(site_configuration_file)
 
@@ -97,11 +98,6 @@ class ML_SAM:
         else:
             # Convert the Hydra DictConfig to a standard dict using OmegaConf.to_container.
             self.site_config = OmegaConf.to_container(cfg.site_config, resolve=True)
-
-        #dirname = os.path.dirname(__file__)
-        #site_configuration_file = os.path.normpath(os.path.join(dirname, "site_config.json"))
-        #with open(site_configuration_file, 'r') as file:
-        #    self.site_config = json.load(file)
 
         self.site_name           = self.site_config['siteName']
         self.learning_rates      = self.site_config['learningRates']

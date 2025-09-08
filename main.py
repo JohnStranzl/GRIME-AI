@@ -1689,7 +1689,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         hyperparameterDlg.finished.connect(closehyperparameterDlg)
 
         settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        site_configuration_file = os.path.normpath(os.path.join(settings_folder, "site_config.json"))
+        CONFIG_FILENAME = "site_config.json"
+        site_configuration_file = os.path.normpath(os.path.join(settings_folder, CONFIG_FILENAME))
         config = hyperparameterDlg.load_config_from_json(site_configuration_file)
         hyperparameterDlg.initialize_dialog_from_config(config)
 

@@ -274,7 +274,8 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         import json
 
         settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        config_file = os.path.join(settings_folder, "site_config.json")
+        CONFIG_FILENAME = "site_config.json"
+        config_file = os.path.join(settings_folder, CONFIG_FILENAME)
 
         # Load current settings if file exists
         if os.path.exists(config_file):

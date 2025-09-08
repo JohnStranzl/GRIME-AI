@@ -61,7 +61,8 @@ class ML_Load_Model:
 
         if cfg is None or "load_model" not in cfg:
             settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-            config_file = os.path.join(settings_folder, "site_config.json")
+            CONFIG_FILENAME = "site_config.json"
+            config_file = os.path.join(settings_folder, CONFIG_FILENAME)
             with open(config_file, 'r') as file:
                 # Expecting a "load_model" key in the JSON file
                 self.config = json.load(file).get("load_model", {})
