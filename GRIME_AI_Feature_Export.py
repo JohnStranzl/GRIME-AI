@@ -382,7 +382,7 @@ class GRIME_AI_Feature_Export:
             texture = -999
 
             if 0:
-                self.extract_texture_and_save(
+                self.extract_texture_and_savCe(
                     image=img,
                     excel_filename=xlsFile,
                     plot_folder="plots",
@@ -424,7 +424,7 @@ class GRIME_AI_Feature_Export:
 
             try:
                 for greenness in greenness_index_list:
-                    greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+                    greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
                     strOutputString = strOutputString + ',' + '%3.4f' % greenness_updated.get_value()
             except:
                 pass
