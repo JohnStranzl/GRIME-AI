@@ -242,7 +242,7 @@ from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
 from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
 from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
 
-from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
+#from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
 from colorSegmentationParams import colorSegmentationParamsClass
 from GRIME_AI_GreenImageGenerator import GreenImageGenerator
@@ -282,7 +282,6 @@ from constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 # ----------------------------------------------------------------------------------------------------------------------
 from exifData import EXIFData
 
-from playsound import playsound
 # import GRIME_AI_KMeans
 
 # ----------------------------------------------------------------------------------------------------------------------

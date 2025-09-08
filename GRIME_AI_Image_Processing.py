@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 import re
 
-from PySide6.QtGui import QPixmap
+#from PySide6.QtGui import QPixmap
 
 from GRIME_AI_Image_Conversion import GRIME_AI_Image_Conversion
 

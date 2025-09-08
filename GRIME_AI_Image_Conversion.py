@@ -11,7 +11,7 @@
 
 import numpy as np
 
-from PySide6.QtGui import QPixmap, QImage
+#from PySide6.QtGui import QPixmap, QImage
 
 class GRIME_AI_Image_Conversion:
     def __init__(self):

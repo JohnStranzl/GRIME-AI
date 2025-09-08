@@ -9,7 +9,6 @@
 
 from PyQt5.QtWidgets import QSplashScreen
 from threading import Thread
-from playsound import playsound
 import time
 from PyQt5.QtGui import QPixmap, QPainter, QFont
 from PyQt5.QtCore import Qt
