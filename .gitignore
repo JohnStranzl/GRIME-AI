@@ -15,6 +15,7 @@ SplashScreen Images/GRIME-AI Logo - Copy.jpg
 SplashScreen Images/New Bitmap image.bmp
 Splash_007.jpg
 __pycache__/
+venv/
 build/
 data/
 dist/
