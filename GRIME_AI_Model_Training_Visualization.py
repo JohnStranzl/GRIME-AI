@@ -507,38 +507,70 @@ class GRIME_AI_Model_Training_Visualization:
             plt.show()
 
     def plot_miou_curve(
-        self,
-        epochs: list[int],
-        miou_values: list[float],
-        site_name: str   = None,
-        lr: float        = None,
-        file_prefix: str = "miou"
+            self,
+            epochs: list[int],
+            miou_values: list[float],
+            site_name: str = None,
+            lr: float = None,
+            file_prefix: str = "miou"
     ):
+        """
+        Plots Mean IoU vs. epoch. Ensures x and y have the same length by
+        truncating to the smaller size if they differ, then applies optional
+        downsampling to max_samples.
+
+        Parameters:
+          self         – object with attributes max_samples, models_folder
+          epochs       – list of epoch indices
+          miou_values  – list of corresponding Mean IoU values
+          site_name    – optional label prepended to title
+          lr           – optional learning‐rate annotation in title
+          file_prefix  – prefix for saved filename (skip save if empty)
+        """
+        # Early exit on empty data
         if not epochs or not miou_values:
             print("Cannot plot Mean IoU curve: empty inputs.")
             return
 
+        # Convert to numpy arrays
         ep = np.asarray(epochs)
         mi = np.asarray(miou_values)
+
+        # 1) Dimension check: truncate to the smaller of two lengths
+        if ep.size != mi.size:
+            print(
+                f"[plot_miou_curve] dimension mismatch: "
+                f"epochs ({ep.size}) != miou ({mi.size}); "
+                "truncating to the smaller length."
+            )
+            min_len = min(ep.size, mi.size)
+            ep = ep[:min_len]
+            mi = mi[:min_len]
+
+        # 2) Optional downsampling if still more points than max_samples
         if ep.size > self.max_samples:
             idxs = np.linspace(0, ep.size - 1, self.max_samples, dtype=int)
             ep = ep[idxs]
             mi = mi[idxs]
             print(f"[plot_miou_curve] downsampled to {ep.size} points")
 
+        # Plotting
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(ep, mi, color="blue", lw=1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Mean IoU")
+
         title = "Mean IoU over Epochs"
         if site_name:
             title = f"{site_name} {title}"
         if lr is not None:
             title += f" (lr={lr:.5f})"
         ax.set_title(title)
+
         ax.grid(True)
         fig.tight_layout()
 
+        # Save or show
         if file_prefix:
             filename = f"{file_prefix}_miou_curve.png"
             fig.savefig(os.path.join(self.models_folder, filename), dpi=150)
