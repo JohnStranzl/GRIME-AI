@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.6.0 (beta 9)"
+#define MyAppVersion "0.0.6.0 (beta 17)"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -25,10 +25,10 @@ DisableProgramGroupPage=yes
 DiskSpanning=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ; PrivilegesRequired=lowest
-OutputDir=C:\Users\johns\pycharmprojects\neonAI\Installer
+OutputDir=..\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 9) Setup
+OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 17) Setup
 ;Password=C0rnHusk3r%
 Compression=lzma2
 SolidCompression=yes
@@ -57,29 +57,30 @@ Name: "{userdocs}\GRIME-AI\Settings"; Flags: uninsalwaysuninstall
 [Files]
 ;
 ; GRIME-AI application
-Source: "C:\Users\johns\pycharmprojects\neonAI\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "..\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
 ; 3rd party installers
 ; --- Modified to include Tasks: installR so the R installer is only installed when selected ---
-Source: "C:\Users\johns\pycharmprojects\neonAI\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller; Flags: ignoreversion; Tasks: installR
+Source: "..\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller; Flags: ignoreversion; Tasks: installR
 ;
 ; machine learning files
-Source: "C:\Users\johns\pycharmprojects\neonAI\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
-
-;Source: "C:\Users\johns\pycharmprojects\neonAI\sam2.1\checkpoints\*.*"; DestDir: "{app}\sam2.1\checkpoints"
-;Source: "C:\Users\johns\pycharmprojects\neonAI\models\sam_vit_h_4b8939.pth"; DestDir: "{app}\models"
+;Source: "..\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
+Source: "..\venv\Lib\site-packages\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
+Source: "..\sam2\sam2\configs"; DestDir: "{app}\sam2\sam2\configs"; Flags: recursesubdirs createallsubdirs
+Source: "..\sam2\checkpoints"; DestDir: "{app}\sam2\checkpoints"; Flags: recursesubdirs createallsubdirs
+;
 ;
 ; Copy
 ; Save the site_config.json to the user's Documents folder
-Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion
+;Source: "..\site_config.json"; DestDir: "{app}"
+Source: "..\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion
 ;
 ; user interface files
-Source: "C:\Users\johns\pycharmprojects\neonAI\icons\*.*"; DestDir: "{app}\icons"
-Source: "C:\Users\johns\pycharmprojects\neonAI\QDialog*.ui"; DestDir: "{app}"
-Source: "C:\Users\johns\pycharmprojects\neonAI\site_config.json"; DestDir: "{app}"
+Source: "..\icons\*.*"; DestDir: "{app}\icons"
+Source: "..\QDialog*.ui"; DestDir: "{app}"
 ;
 ; documentation
-Source: "C:\Users\johns\pycharmprojects\neonAI\Documentation\GRIME-AI_v0059_v2.pdf"; DestDir: "{app}\Documentation"
+Source: "..\Documentation\GRIME-AI_v0059_v2.pdf"; DestDir: "{app}\Documentation"
 ;
 ; miscellaneous
 ; Source: "C:\Users\Astrid Haugen\PycharmProjects\neonAI\chromedriver.exe"; DestDir: "{app}\chromedriver"
