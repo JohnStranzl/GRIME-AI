@@ -1,22 +1,10 @@
-echo on
-
-REM pyi-makespec --path="C:\Users\Astrid Haugen\PycharmProjects\neonAI\venv\Lib\site-packages" --path="C:\Users\Astrid Haugen\PycharmProjects\neonAI" main.py
-REM "C:\Users\Astrid Haugen\AppData\Local\Programs\Python\Python311\Scripts\pyi-makespec" --path="C:\Users\Astrid Haugen\PycharmProjects\neonAI\venv\Lib\site-packages" --path="C:\Users\Astrid Haugen\PycharmProjects\neonAI" main.py
-
-REM pyinstaller -F --debug=all --noupx --noconfirm --hidden-import=hook-sklearnneighborstypedef.py main.py
-REM pyinstaller --onefile --noconfirm --hidden-import=hook-sklearnneighborstypedef.py --log-level ERROR main.py
-REM "C:\Users\Astrid Haugen\AppData\Local\Programs\Python\Python311\Scripts\pyinstaller" --onefile main.py --hidden-import=hook-sklearnneighborstypedef.py --noconfirm
-REM pyinstaller setup.py --hidden-import=hook-sklearnneighborstypedef.py --noconfirm
-
-REM pyinstaller --clean --noconfirm --onedir --hidden-import playsound --contents-directory "." --add-data ".\venv\Lib\site-packages\ultralytics\cfg\default.yaml; .\ultralytics\cfg" main.py
-
-
-
-REM Generate the .spec file with hidden imports
-REM pyi-makespec --onefile --noconfirm --hidden-import=playsound --hidden-import=imageio --hidden-import=imageio_ffmpeg main.py
-
-REM pyinstaller --clean --noconfirm main.spec
 @echo on
+
+REM # Author: John Edward Stranzl, Jr.
+REM # Affiliation(s): University of Nebraska-Lincoln, Blade Vision Systems, LLC
+REM # Contact: jstranzl2@huskers.unl.edu, johnstranzl@gmail.com
+REM # Created: Mar 6, 2022
+REM # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
 REM Build the executable with PyInstaller
   REM Hidden Imports by section:
@@ -66,7 +54,6 @@ pyinstaller --clean --noconfirm --onedir ^
   --hidden-import=imageio ^
   --hidden-import=imageio_ffmpeg ^
   --hidden-import=openpyxl ^
-  --hidden-import=playsound ^
   --hidden-import=skimage.draw ^
   --hidden-import=skimage.io ^
   --hidden-import=skimage.transform ^
@@ -80,15 +67,10 @@ REM
 REM Copy the splash screen graphic to the distribution folder
 copy "SplashScreen Images\Splash_007.jpg" dist\main
 copy "SplashScreen Images\GRIME-AI Logo.jpg" dist\main
-copy "SplashScreen Images\GRIME-AI Logo.jpg" dist\main
 
 REM Copy additional required directories and files
 if not exist "dist\main\sam2" mkdir "dist\main\sam2"
 xcopy "venv\Lib\site-packages\sam2" "dist\main\sam2" /s /e /Y || echo Error copying sam2 folder
-
-if not exist "dist\main\ultralytics" mkdir "dist\main\ultralytics"
-if not exist "dist\main\ultralytics\cfg" mkdir "dist\main\ultralytics\cfg"
-copy "venv\Lib\site-packages\ultralytics\cfg\default.yaml" "dist\main\ultralytics\cfg" || echo Error copying ultralytics configuration
 
 REM Change the directory to the distribution folder and then rename the executable
 cd dist\main
