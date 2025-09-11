@@ -414,47 +414,18 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver. 0.0.6.0 (beta 17)"
+SW_VERSION = "Ver. 0.0.6.0 (beta 18)"
 
 class displayOptions():
     displayROIs = True
 
 g_displayOptions   = displayOptions()
-#g_featureDetection = featureDetection()
-#g_edgeDetection    = edgeDetection()
-#g_features         = features()
-#g_greennessIndex   = greennessIndex()
-
 g_edgeMethodSettings = edgeMethodsClass()
 g_featureMethodSettings = featureMethodsClass()
 
 g_modelSettings = modelSettingsClass()
 
 hyperparameterDlg = None
-
-# ======================================================================================================================
-# 2. DEEP LEARNING: DEFINE A CONVOLUTIONAL NETWORK
-# ======================================================================================================================
-'''
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1)  # flatten all dimensions except batch
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-'''
 
 # ==================================================================================================================
 #
