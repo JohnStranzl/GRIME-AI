@@ -241,9 +241,23 @@ class GRIME_AI_ImageTriage:
                 # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
                 # ----------------------------------------------------------------------------------------------------
                 if bCreateReport:
-                    strHyperlink = '=HYPERLINK(' + '"' + filename + '"' + ')'
+                    # Build the hyperlink formula
+                    formula = f'=HYPERLINK("{filename}", "{os.path.basename(filename)}")'
+                    #strHyperlink = strHyperlink.replace("\\", "\\\\")  # escape backslashes
+
+                    # If the formula contains commas, enclose the entire field in extra quotes and escape inner quotes.
+                    if ',' in formula:
+                        safe_formula = formula.replace('"', '""')
+                        formula = f'"{safe_formula}"'
+
+                    # Wrap the formula in double quotes so Excel sees it as a formula
+                    quotedHyperlink = f'"{formula}"'
+
+                    # Format the CSV line
                     strOutputString = '%3.2f,%s,%3.2f,%s,%3.2f,%3.2f,%3.2f,%s\n' % (
-                        mean, strFFTFocusMetric, intensity, strIntensity, rotationAngle, horizontal_shift, vertical_shift, strHyperlink)
+                        mean, strFFTFocusMetric, intensity, strIntensity,
+                        rotationAngle, horizontal_shift, vertical_shift, formula
+                    )
                     csvFile.write(strOutputString)
 
                 # ----------------------------------------------------------------------------------------------------
