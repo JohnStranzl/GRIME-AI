@@ -473,7 +473,7 @@ class GRIME_AI_Feature_Export:
         clean_path = file_path.strip().strip('"')
 
         # Create the hyperlink formula
-        formula = f'=HYPERLINK("{clean_path}")'
+        formula = f'=HYPERLINK("{clean_path}", "{os.path.basename(clean_path)}")'
 
         # If the formula contains commas, enclose the entire field in extra quotes and escape inner quotes.
         if ',' in formula:
