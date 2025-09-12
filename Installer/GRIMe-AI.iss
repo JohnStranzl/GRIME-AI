@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "GRIME-AI"
-#define MyAppVersion "0.0.6.0 (beta 17)"
+#define MyAppVersion "0.0.6.0 (beta 18)"
 #define MyAppPublisher "Blade Vision Systems"
 #define MyAppURL "https://www.BladeVisionSystems.com"
 #define MyAppExeName "GRIME-AI.exe"
@@ -28,7 +28,7 @@ DiskSpanning=yes
 OutputDir=..\Installer
 ; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
 ; the periods.
-OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 17) Setup
+OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 18) Setup
 ;Password=C0rnHusk3r%
 Compression=lzma2
 SolidCompression=yes
@@ -55,25 +55,25 @@ Name: "{app}\models"
 Name: "{userdocs}\GRIME-AI\Settings"; Flags: uninsalwaysuninstall
 
 [Files]
-;
 ; GRIME-AI application
 Source: "..\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;
-; 3rd party installers
-; --- Modified to include Tasks: installR so the R installer is only installed when selected ---
+; 3rd Party Installers
+; installR so the R installer is only installed when selected ---
 Source: "..\R-4.4.1-win.exe"; DestDir: "{app}"; AfterInstall: RunOtherInstaller; Flags: ignoreversion; Tasks: installR
 ;
 ; machine learning files
-;Source: "..\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
-Source: "..\venv\Lib\site-packages\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
-Source: "..\sam2\sam2\configs"; DestDir: "{app}\sam2\sam2\configs"; Flags: recursesubdirs createallsubdirs
-Source: "..\sam2\checkpoints"; DestDir: "{app}\sam2\checkpoints"; Flags: recursesubdirs createallsubdirs
-;
+Source: "..\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
+Source: "..\patches\transforms.py"; DestDir: "{app}\sam2\sam2\utils"
+
+;PROVISIONAL CONTINGENT 
+;Source: "..\sam2\sam2\configs"; DestDir: "{app}\sam2\sam2\configs"; Flags: recursesubdirs createallsubdirs
+;Source: "..\sam2\checkpoints"; DestDir: "{app}\sam2\checkpoints"; Flags: recursesubdirs createallsubdirs
+;Source: "..\venv\Lib\site-packages\sam2\*"; DestDir: "{app}\sam2"; Flags: recursesubdirs createallsubdirs
 ;
 ; Copy
 ; Save the site_config.json to the user's Documents folder
-;Source: "..\site_config.json"; DestDir: "{app}"
-Source: "..\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion
+Source: "..\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion createallsubdirs
 ;
 ; user interface files
 Source: "..\icons\*.*"; DestDir: "{app}\icons"
