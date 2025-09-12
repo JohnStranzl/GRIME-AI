@@ -99,42 +99,41 @@ class ML_SAM:
             # Convert the Hydra DictConfig to a standard dict using OmegaConf.to_container.
             self.site_config = OmegaConf.to_container(cfg.site_config, resolve=True)
 
-        self.site_name           = self.site_config['siteName']
-        self.learning_rates      = self.site_config['learningRates']
-        self.optimizer_type      = self.site_config['optimizer']
-        self.loss_function       = self.site_config['loss_function']
-        self.weight_decay        = self.site_config['weight_decay']
-        self.num_epochs          = self.site_config['number_of_epochs']
-        self.save_model_frequency= self.site_config['save_model_frequency']
-        self.early_stopping      = self.site_config['early_stopping']
-        self.patience            = self.site_config['patience']
-        self.device              = self.site_config.get('device', str(device))
+        self.site_name = self.site_config['siteName']
+        self.learning_rates = self.site_config['learningRates']
+        self.optimizer_type = self.site_config['optimizer']
+        self.loss_function = self.site_config['loss_function']
+        self.weight_decay = self.site_config['weight_decay']
+        self.num_epochs = self.site_config['number_of_epochs']
+        self.save_model_frequency = self.site_config['save_model_frequency']
+        self.early_stopping = self.site_config['early_stopping']
+        self.patience = self.site_config['patience']
+        self.device = self.site_config.get('device', str(device))
 
-        self.dataset             = {}
+        self.dataset = {}
 
-        self.loss_values         = []
-        self.val_loss_values     = []
-        self.epoch_list          = []
+        self.loss_values = []
+        self.val_loss_values = []
+        self.epoch_list = []
         self.train_accuracy_values = []
-        self.val_accuracy_values   = []
-        self.val_true_list  = []
-        self.val_pred_list  = []
+        self.val_accuracy_values = []
+        self.val_true_list = []
+        self.val_pred_list = []
         self.val_score_list = []
         # track mean–IoU per epoch
         self.miou_values = []
 
-        self.sam2_model          = None
-        self.folders             = None
-        self.annotation_files    = None
-        self.all_folders         = []
-        self.all_annotations     = []
-        self.categories          = []
+        self.sam2_model = None
+        self.folders = None
+        self.annotation_files = None
+        self.all_folders = []
+        self.all_annotations = []
+        self.categories = []
 
-        self.image_shape_cache   = {}
+        self.image_shape_cache = {}
 
         # objects for other classes
         self.dataset_util = DatasetUtils()
-
 
     def debug_print(self, msg):
         if DEBUG:
