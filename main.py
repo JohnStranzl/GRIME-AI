@@ -1772,23 +1772,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     #
     # ======================================================================================================================
-    def toolbarButtonImageTriage_1(self, folder_path=""):
-        self.toolbarButtonImageTriage(folder_path, False)
+    def toolbarButtonImageTriage_1(self, folder_path=None):
+        self.toolbarButtonImageTriage()
 
     def toolbarButtonImageTriage_2(self):
         self.toolbarButtonImageTriage()
 
-    def toolbarButtonImageTriage(self, folder_path="", checkBox_FetchRecursive=False):
+    def toolbarButtonImageTriage(self, folder_path=None, checkBox_FetchRecursive=False):
         strMessage = 'You are about to perform Image Triage. Would you like to continue?'
         msgBox = GRIME_AI_QMessageBox('Download Image Files', strMessage, QMessageBox.Yes | QMessageBox.No)
         response = msgBox.displayMsgBox()
 
         if response == QMessageBox.Yes:
-            if folder_path == "":
-                prompter = promptlib.Files()
-                folder = prompter.dir()
-            else:
-                folder = folder_path
+            prompter = promptlib.Files()
+            folder = prompter.dir()
 
             if len(folder) == 0:
                 strMessage = 'ERROR! Please specify an image folder containing images to triage.'
