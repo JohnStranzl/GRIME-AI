@@ -18,14 +18,15 @@ import imageio as iio
 
 # ----------------------------------------------------------------------------------------------------------------------
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import QMessageBox
 
 # GRIME-AI Classes
 # ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI_Color import GRIME_AI_Color
-
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -178,12 +179,10 @@ class GRIME_AI_Video:
           • Phase-1 (0 → 100 - final_steps)% by actual frames written
           • Phase-2 (100 - final_steps → 100)% by an estimated finalization timer
         """
-        import os, datetime
-        from PyQt5.QtWidgets import QMessageBox
-        # Assumes these are already imported in your module:
-        #   imageio.v3 as iio
-        #   GRIME_AI_Utils, QProgressWheel
-        #   GIFWriterWorker, FinalizeEstimator, estimate_gif_write_time
+        if len(rootFolder) == 0:
+            msgBox = GRIME_AI_QMessageBox('Image Folder Error', 'Please specify an image folder!', buttons=QMessageBox.Close)
+            response = msgBox.displayMsgBox()
+            return
 
         # 1) Gather source files
         utils = GRIME_AI_Utils()
