@@ -417,7 +417,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver. 0.0.6.0 (beta 18)"
+SW_VERSION = "Ver. 0.0.6.0 (beta 19)"
 
 class displayOptions():
     displayROIs = True
@@ -2235,6 +2235,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     # ==================================================================================================================
     def onMyToolBarCreateMask(self):
+
+        # JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES   JES
+        # JES - PROVISIONAL - MASK CREATION IS NOT AVAILABLE FOR THE USGS SOFTWARE RELEASE
+        strMessage = 'Mask Creation is not available in this software release.\nThis functionality may be consumed into other pre-existing functionality at some later date.'
+        msgBox = GRIME_AI_QMessageBox('Tool Conflict', strMessage, QMessageBox.Yes | QMessageBox.No)
+        response = msgBox.displayMsgBox(on_top=True)
+        return
+        # ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^     ^
 
         if self.maskEditorDlg == None:
             if self.colorSegmentationDlg == None:
