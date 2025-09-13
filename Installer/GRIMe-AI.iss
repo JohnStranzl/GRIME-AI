@@ -73,7 +73,7 @@ Source: "..\patches\transforms.py"; DestDir: "{app}\sam2\sam2\utils"
 ;
 ; Copy
 ; Save the site_config.json to the user's Documents folder
-Source: "..\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion createallsubdirs
+Source: "..\site_config.json"; DestDir: "{userdocs}\GRIME-AI\Settings"; Flags: ignoreversion
 ;
 ; user interface files
 Source: "..\icons\*.*"; DestDir: "{app}\icons"
