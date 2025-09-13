@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ImageOrganizerDialog</class>
+ <widget class="QDialog" name="ImageOrganizerDialog">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>820</width><height>440</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Image Organizer</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <property name="horizontalSpacing"><number>10</number></property>
+   <property name="verticalSpacing"><number>10</number></property>
+   <property name="leftMargin"><number>12</number></property>
+   <property name="topMargin"><number>12</number></property>
+   <property name="rightMargin"><number>12</number></property>
+   <property name="bottomMargin"><number>12</number></property>
+
+   <!-- Row 0: Folder -->
+   <item row="0" column="0" alignment="Qt::AlignLeft|Qt::AlignVCenter">
+    <widget class="QLabel" name="label_folder">
+     <property name="text"><string>Folder:</string></property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QLineEdit" name="src_edit">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>1</horstretch><verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="2">
+    <widget class="QPushButton" name="src_btn">
+ <property name="text"><string>Browse...</string></property>
+ <property name="autoDefault"><bool>false</bool></property>
+ <property name="sizePolicy">
+  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+   <horstretch>0</horstretch>
+   <verstretch>0</verstretch>
+  </sizepolicy>
+ </property>
+</widget>
+   </item>
+
+   <!-- Row 1: Operate Recursively -->
+   <item row="1" column="0">
+    <spacer name="indent_recursive">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <property name="sizeHint"><size><width>80</width><height>20</height></size></property>
+    </spacer>
+   </item>
+   <item row="1" column="1" colspan="2">
+    <widget class="QCheckBox" name="recurse_chk">
+     <property name="text"><string>Operate Recursively</string></property>
+    </widget>
+   </item>
+
+   <!-- Row 2: Site Name + Include Seconds -->
+   <item row="2" column="0" alignment="Qt::AlignLeft|Qt::AlignVCenter">
+    <widget class="QLabel" name="label_site">
+     <property name="text"><string>Site Name:</string></property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QLineEdit" name="site_edit">
+     <property name="placeholderText"><string>Site name (e.g., Kola or Platte Basin)</string></property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>1</horstretch><verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="2" alignment="Qt::AlignLeft|Qt::AlignVCenter">
+    <widget class="QCheckBox" name="sec_chk">
+     <property name="text"><string>Include Seconds in Timestamp</string></property>
+    </widget>
+   </item>
+
+   <!-- Row 3: Example Filename -->
+   <item row="3" column="0">
+    <spacer name="indent_example">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <property name="sizeHint"><size><width>80</width><height>20</height></size></property>
+    </spacer>
+   </item>
+   <item row="3" column="1" colspan="2">
+    <widget class="QLabel" name="example_lbl">
+     <property name="text"><string>Example filename: (select a folder)</string></property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>1</horstretch><verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+
+   <!-- Row 4: Metadata Group -->
+   <item row="4" column="0" colspan="3">
+    <widget class="QGroupBox" name="group_metadata">
+     <property name="title"><string>Metadata</string></property>
+     <layout class="QGridLayout" name="metaLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>8</number></property>
+      <property name="leftMargin"><number>8</number></property>
+      <property name="topMargin"><number>8</number></property>
+      <property name="rightMargin"><number>8</number></property>
+      <property name="bottomMargin"><number>8</number></property>
+
+      <!-- Copyright -->
+      <item row="0" column="0" alignment="Qt::AlignLeft|Qt::AlignVCenter">
+       <widget class="QLabel" name="label_copyright">
+        <property name="text"><string>Copyright:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="copyright_edit">
+        <property name="placeholderText"><string>Copyright holder (optional)</string></property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>1</horstretch><verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+       </widget>
+      </item>
+
+      <!-- Site Information (multiline) -->
+      <item row="1" column="0" alignment="Qt::AlignLeft|Qt::AlignTop">
+       <widget class="QLabel" name="label_siteinfo">
+        <property name="text"><string>&lt;b&gt;Site Information&lt;/b&gt;</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QTextEdit" name="site_info_edit">
+        <property name="acceptRichText"><bool>false</bool></property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>1</horstretch><verstretch>1</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAsNeeded</enum></property>
+        <property name="placeholderText"><string>Enter optional site notes (multi-line supported)...</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Row 6: Run (fixed width, centered) -->
+   <item row="6" column="0" colspan="3">
+    <layout class="QHBoxLayout" name="row_run">
+     <item><spacer name="run_left"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+     <item>
+      <widget class="QPushButton" name="run_btn">
+       <property name="text"><string>Run</string></property>
+       <property name="autoDefault"><bool>false</bool></property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch><verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+      </widget>
+     </item>
+     <item><spacer name="run_right"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
