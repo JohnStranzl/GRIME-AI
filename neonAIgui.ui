@@ -48,7 +48,7 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>4</number>
+     <number>2</number>
     </property>
     <property name="tabsClosable">
      <bool>false</bool>
@@ -982,6 +982,7 @@
      <string>Tools</string>
     </property>
     <addaction name="action_CompositeSlices"/>
+    <addaction name="action_ImageOrganizer"/>
     <addaction name="action_TriageImages"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
@@ -989,9 +990,11 @@
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="action_ExtractCOCOMasks"/>
+    <addaction name="action_CreateJSON"/>
+    <addaction name="separator"/>
+    <addaction name="separator"/>
     <addaction name="action_Sync_JSON_Annotations"/>
     <addaction name="action_Inspect_Annotations"/>
-    <addaction name="action_CreateJSON"/>
     <addaction name="separator"/>
     <addaction name="separator"/>
     <addaction name="action_RefreshNEON"/>
@@ -1065,6 +1068,11 @@
   <action name="action_Inspect_Annotations">
    <property name="text">
     <string>Inspect Annotations</string>
+   </property>
+  </action>
+  <action name="action_ImageOrganizer">
+   <property name="text">
+    <string>Image Organizer</string>
    </property>
   </action>
  </widget>

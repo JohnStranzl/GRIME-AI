@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'C:\Users\johns\pycharmprojects\neonAI\neonAIgui.ui'
+# Form implementation generated from reading ui file 'C:\Users\johns\pycharmprojects\GRIME-AI-X\neonAIgui.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.10
 #
@@ -43,7 +43,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         font.setBold(False)
-        font.setWeight(50)
         font.setKerning(True)
         self.labelNEONSites.setFont(font)
         self.labelNEONSites.setObjectName("labelNEONSites")
@@ -66,7 +65,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         font.setBold(False)
-        font.setWeight(50)
         font.setKerning(True)
         self.labelNEONSites_2.setFont(font)
         self.labelNEONSites_2.setObjectName("labelNEONSites_2")
@@ -109,7 +107,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         font.setBold(False)
-        font.setWeight(50)
         font.setKerning(True)
         self.labelNEONSiteDetails.setFont(font)
         self.labelNEONSiteDetails.setObjectName("labelNEONSiteDetails")
@@ -153,7 +150,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setBold(False)
         font.setUnderline(False)
-        font.setWeight(50)
         self.groupBox_NEONDownloadManager_OutputFolders.setFont(font)
         self.groupBox_NEONDownloadManager_OutputFolders.setObjectName("groupBox_NEONDownloadManager_OutputFolders")
         self.edit_NEONSaveFilePath = QtWidgets.QLineEdit(self.groupBox_NEONDownloadManager_OutputFolders)
@@ -162,7 +158,6 @@ class Ui_MainWindow(object):
         font.setPointSize(10)
         font.setBold(False)
         font.setUnderline(False)
-        font.setWeight(50)
         self.edit_NEONSaveFilePath.setFont(font)
         self.edit_NEONSaveFilePath.setToolTip("")
         self.edit_NEONSaveFilePath.setObjectName("edit_NEONSaveFilePath")
@@ -177,7 +172,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setBold(True)
         font.setUnderline(False)
-        font.setWeight(75)
         self.pushButton_RetrieveNEONData.setFont(font)
         self.pushButton_RetrieveNEONData.setShortcut("")
         self.pushButton_RetrieveNEONData.setFlat(False)
@@ -249,7 +243,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setBold(True)
         font.setUnderline(False)
-        font.setWeight(75)
         self.pushButton_USGSDownload.setFont(font)
         self.pushButton_USGSDownload.setShortcut("")
         self.pushButton_USGSDownload.setFlat(False)
@@ -259,7 +252,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setBold(False)
         font.setUnderline(False)
-        font.setWeight(50)
         self.groupBox_USGSDownloadManager_OutputFolders.setFont(font)
         self.groupBox_USGSDownloadManager_OutputFolders.setObjectName("groupBox_USGSDownloadManager_OutputFolders")
         self.edit_USGSSaveFilePath = QtWidgets.QLineEdit(self.groupBox_USGSDownloadManager_OutputFolders)
@@ -268,7 +260,6 @@ class Ui_MainWindow(object):
         font.setPointSize(10)
         font.setBold(False)
         font.setUnderline(False)
-        font.setWeight(50)
         self.edit_USGSSaveFilePath.setFont(font)
         self.edit_USGSSaveFilePath.setObjectName("edit_USGSSaveFilePath")
         self.pushButton_USGS_BrowseImageFolder = QtWidgets.QPushButton(self.groupBox_USGSDownloadManager_OutputFolders)
@@ -415,6 +406,8 @@ class Ui_MainWindow(object):
         self.action_Sync_JSON_Annotations.setObjectName("action_Sync_JSON_Annotations")
         self.action_Inspect_Annotations = QtWidgets.QAction(MainWindow)
         self.action_Inspect_Annotations.setObjectName("action_Inspect_Annotations")
+        self.action_ImageOrganizer = QtWidgets.QAction(MainWindow)
+        self.action_ImageOrganizer.setObjectName("action_ImageOrganizer")
         self.menuFile.addAction(self.action_SaveImageSet)
         self.menuFile.addAction(self.action_SaveSettings)
         self.menu_About.addAction(self.action_ReleaseNotes)
@@ -422,6 +415,7 @@ class Ui_MainWindow(object):
         self.menu_About.addAction(self.action_About)
         self.menuImage_Set.addAction(self.action_Clean)
         self.menuTools.addAction(self.action_CompositeSlices)
+        self.menuTools.addAction(self.action_ImageOrganizer)
         self.menuTools.addAction(self.action_TriageImages)
         self.menuTools.addSeparator()
         self.menuTools.addSeparator()
@@ -429,9 +423,11 @@ class Ui_MainWindow(object):
         self.menuTools.addSeparator()
         self.menuTools.addSeparator()
         self.menuTools.addAction(self.action_ExtractCOCOMasks)
+        self.menuTools.addAction(self.action_CreateJSON)
+        self.menuTools.addSeparator()
+        self.menuTools.addSeparator()
         self.menuTools.addAction(self.action_Sync_JSON_Annotations)
         self.menuTools.addAction(self.action_Inspect_Annotations)
-        self.menuTools.addAction(self.action_CreateJSON)
         self.menuTools.addSeparator()
         self.menuTools.addSeparator()
         self.menuTools.addAction(self.action_RefreshNEON)
@@ -511,5 +507,6 @@ class Ui_MainWindow(object):
         self.action_Generate_Greenness_Test_Images.setText(_translate("MainWindow", "Generate Greenness Test Images"))
         self.action_Sync_JSON_Annotations.setText(_translate("MainWindow", "Sync JSON Annotations"))
         self.action_Inspect_Annotations.setText(_translate("MainWindow", "Inspect Annotations"))
-from GRIME_AI_QTableWidget import GRIME_AI_QTableWidget
+        self.action_ImageOrganizer.setText(_translate("MainWindow", "Image Organizer"))
 from GRIME_AI_QLabel import GRIME_AI_QLabel
+from GRIME_AI_QTableWidget import GRIME_AI_QTableWidget

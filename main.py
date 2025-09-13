@@ -158,6 +158,7 @@ import promptlib
 
 import cv2
 
+import traceback
 
 # ------------------------------------------------------------
 # WHERE THE BITS MEET THE DIGITAL ROAD
@@ -211,6 +212,8 @@ from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
 from GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 from GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+
+from GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
 
 from GRIME_AI_Save_Utils import JsonEditor
 
@@ -674,6 +677,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_ExtractCOCOMasks.triggered.connect(self.menubarExtractCOCOMasks)
         self.action_Sync_JSON_Annotations.triggered.connect(self.menubar_sync_json_annotations)
         self.action_Inspect_Annotations.triggered.connect(self.menubar_inspect_annotations)
+
+        self.action_ImageOrganizer.triggered.connect(self.menubar_ImageOrganizer)
 
         # GRAPH TAB(S)
         self.NEON_labelLatestImage.setScaledContents(True)
@@ -1927,6 +1932,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def menubarSaveSettings(self):
         utils = GRIME_AI_Save_Utils()
         utils.saveSettings()
+
+
+    # ==================================================================================================================
+    # ==================================================================================================================
+    # ==================================================================================================================
+    def menubar_ImageOrganizer(self):
+        """Launch the Image Organizer dialog (dynamic UI)."""
+        print("[DEBUG] menubar_ImageOrganizer triggered")
+
+        # Close any existing instance first
+        try:
+            if hasattr(self, "imageOrganizerDlg") and self.imageOrganizerDlg is not None:
+                print("[DEBUG] Closing existing Image Organizer dialog")
+                self.imageOrganizerDlg.close()
+        except Exception as e:
+            print(f"[WARN] Could not close existing dialog: {e}")
+
+        # Create and show new dialog
+        try:
+            print("[DEBUG] Creating new Image Organizer dialog")
+            self.imageOrganizerDlg = GRIME_AI_ImageOrganizerDlg(self)
+            print("[DEBUG] Showing Image Organizer dialog")
+            self.imageOrganizerDlg.show()
+            print("[INFO] Image Organizer dialog launched successfully")
+        except Exception as e:
+            print(f"[ERROR] Failed to launch Image Organizer dialog: {e}")
+            traceback.print_exc()  # full traceback to terminal
 
 
     # ======================================================================================================================
