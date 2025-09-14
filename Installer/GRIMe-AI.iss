@@ -23,13 +23,18 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 DiskSpanning=yes
+
+; Enable logging by default (no /LOG switch required)
+SetupLogging=yes
+
+; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
+; the periods.
+;Password=C0rnHusk3r%
+
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ; PrivilegesRequired=lowest
 OutputDir=..\Installer
-; Replacing periods in version number with underscores because for some reason, Teams doesn't like all
-; the periods.
 OutputBaseFilename=GRIME-AI 0_0_6_0 (beta 19) Setup
-;Password=C0rnHusk3r%
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -115,4 +120,11 @@ begin
   then
     MsgBox('Other installer failed to run!' + #13#10 +
       SysErrorMessage(ResultCode), mbError, MB_OK);
+end;
+
+// Override default log filename so every run drops a versioned log next to the app
+function GetLogFileName(var FileName: String): Boolean;
+begin
+  FileName := ExpandConstant( '{app}\Installer Log - {#StringChange(MyAppVersion, '.', '_')}.log' );
+  Result := True;
 end;
