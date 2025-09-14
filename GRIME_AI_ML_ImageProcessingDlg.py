@@ -269,6 +269,25 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         if self.lineEdit_model_training_images_path.text():
             self.populate_available_folders()
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def closeEvent(self, event):
+        reply = QMessageBox.question(
+            self,
+            "Confirm Close",
+            "Do you really want to close?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def save_site_name_to_json(self):
         import os
         import json
@@ -293,8 +312,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         print(f"Updated siteName in {config_file} to '{settings['siteName']}'")
 
-
-    # ─── Debug helper: dump all stored annotations ───
+    # ------------------------------------------------------------------------------------------------------------------
+    # Debug Helper: Dump all stored annotations
+    # ------------------------------------------------------------------------------------------------------------------
     def print_all_annotations(self):
         """
         Prints every image path and the count/details of shapes stored
@@ -312,6 +332,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 print(f"  {idx}. {shape['type']} with {len(pts)} points → {pts}")
 
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def load_labels_from_annotation(self, folder_path):
         annotation_file = os.path.join(folder_path, "instances_default.json")
         if not os.path.exists(annotation_file):
@@ -326,20 +349,26 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 labels.add(f"{cat['id']} - {cat['name']}")
         return sorted(labels)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def update_annotation_listbox(self, listbox_widget, folder_path):
         labels = self.load_labels_from_annotation(folder_path)
         listbox_widget.clear()
         listbox_widget.addItems(labels)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _add_category(self, lineedit, listwidget):
         text = lineedit.text().strip()
         if text and not listwidget.findItems(text, Qt.MatchExactly):
             listwidget.addItem(text)
         lineedit.clear()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _openAnnotator(self):
         pm = self.label_imageAnnotation.pixmap()
         if pm is None:
@@ -399,7 +428,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             self.save_annotations_for_image(img_path)
             print(f"[DEBUG] Saved {len(shapes)} shapes for {img_path}")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def save_annotations_for_image(self, img_path: str):
         """
         Writes the annotation JSON for a single image into
@@ -424,7 +455,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         except Exception as e:
             print(f"Failed to save annotations to {ann_file}: {e}")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def load_annotations_for_image(self, img_path: str):
         """
         Loads the annotation JSON for a single image from
@@ -444,8 +477,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         except Exception as e:
             print(f"Failed to load annotations from {ann_file}: {e}")
 
-
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _refresh_annotation_categories(self):
         """
         Scan self.annotation_store for all loaded shapes,
@@ -464,7 +498,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         for cid, name in sorted(unique.items()):
             self.listWidget_annotationCategories.addItem(name)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def save_coco_for_all_images(self, base_image_folder: str):
         """
         Walks through the annotation_store for every image,
@@ -574,7 +610,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         except Exception as e:
             print(f"Failed to write global COCO JSON: {e}")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def setup_from_config_file(self):
         """
         Initialize dialog controls from a configuration dictionary.
@@ -625,13 +663,17 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         self.current_path = self.config.get("Path", None)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def setup_custom_list_widgets(self):
         """Replace default list widgets with custom draggable/droppable ones."""
         self.listWidget_availableFolders.__class__ = DraggableListWidget
         self.listWidget_selectedFolders.__class__ = DroppableListWidget
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def setup_ui_properties(self):
         """Set size policies and layout stretch factors."""
         self.tabWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -661,7 +703,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             }
         """)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def setup_connections(self):
         """Connect signals with their slot methods."""
         # Folder management signals.
@@ -741,7 +785,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.num_clusters = self.spinBox_numClusters.value()
         self.spinBox_numClusters.valueChanged.connect(self._on_num_clusters_changed)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _on_num_clusters_changed(self, value):
         self.num_clusters = value
 
@@ -753,17 +799,23 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             # fallback: rerun the initial analysis sequence
             self.analyze_roi()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def on_save_masks_toggled(self, checked: bool):
         print(f"Save Masks checkbox toggled: {checked}")
         # Add any logic here to update internal state or UI
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def on_copy_original_toggled(self, checked: bool):
         print(f"Copy Original Image checkbox toggled: {checked}")
         # Add any logic here to update internal state or UI
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def on_filmstrip_item_clicked(self, item: QListWidgetItem):
         """
         When a thumbnail is clicked, re-run ROI analysis on that image/mask pair
@@ -796,7 +848,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         swatches = analyzer.dominant_rgb_list[:3]
         self._draw_color_swatches_on_label(swatches, swatch_size=100)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def populate_filmstrip(self, image_paths):
         """
         1) Clear old thumbnails.
@@ -827,7 +881,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         # Schedule the first batch load
         QTimer.singleShot(self._batchDelay, lambda: self._loadNextBatch(token))
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _loadNextBatch(self, token):
         """
         Pop up to self._batchSize thumbnails from self._pendingThumbnails,
@@ -859,7 +915,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         if self._pendingThumbnails:
             QTimer.singleShot(self._batchDelay, lambda: self._loadNextBatch(token))
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def browse_ROI_images_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
         if not folder:
@@ -868,7 +926,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         self._on_roi_images_folder_changed()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _on_roi_images_folder_changed(self):
         folder = self.lineEdit_ROI_images_folder.text().strip()
         if not folder or not os.path.isdir(folder):
@@ -883,7 +943,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self._pairs = pairs
         self.populate_filmstrip([orig for orig, _ in pairs])
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def analyze_roi(self):
         """
         1) Generate file pairs and populate filmstrip
@@ -953,6 +1015,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         swatches = getattr(analyzer, "dominant_rgb_list", [])[:3]
         self._draw_color_swatches_on_label(swatches, swatch_size=100)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def extract_ROI_features(self):
         """
         Loop through all (image, mask) pairs in self._pairs, run GRIME_AI_ROI_Analyzer on each,
@@ -1082,7 +1147,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             + (f"{xlsx_path}" if os.path.exists(xlsx_path) else "(XLSX skipped)")
         )
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def setup_drag_and_drop(self):
         """Configure drag & drop for folder lists and set style for the Segment button."""
         self.listWidget_availableFolders.setDragEnabled(True)
@@ -1097,7 +1164,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.pushButton_Segment.setMinimumSize(150, 40)
         self.pushButton_Segment.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def updateSegmentButtonState(self, path: str):
         """Enable the Segment button only if model file and images folder fields are non-empty."""
         """
@@ -1113,12 +1182,16 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
             self.pushButton_Segment.setEnabled(bool(model_text and images_text))
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def updateTrainButtonState(self):
         """Enable the Train button only if at least one selected folder exists."""
         self.pushButton_train.setEnabled(self.listWidget_selectedFolders.count() > 0)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def populate_segment_images_tab(self):
         """Populate the Segment Images tab with default values."""
         self.lineEdit_segmentation_model_file.setText("")
@@ -1127,7 +1200,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.checkBox_copyOriginalModelImage.setChecked(True)
         print("Segment Images tab populated with default values.")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def browse_model_training_images_folder(self):
         """Open a dialog to choose a folder and update the folder path field."""
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
@@ -1139,44 +1214,61 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
             JsonEditor().update_json_entry("Model_Training_Images_Folder", folder)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def updateCOCOButtonState(self):
         """Enable the Generate COCO button only if a folder is provided in the COCO tab."""
         folder_entered = bool(self.lineEdit_cocoFolder.text().strip())
         self.pushButton_generateCOCO.setEnabled(folder_entered)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def updateMaskFieldState(self, checked):
         """Enable/disable the mask file field and its Browse button based on the Single Mask checkbox state."""
         self.lineEdit_maskFile.setEnabled(checked)
         self.pushButton_maskBrowse.setEnabled(checked)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def selectCocoFolder(self):
         """Open a folder chooser for the COCO generation folder."""
         folder = Files().dir()  # You can replace this with QFileDialog.getExistingDirectory if needed.
         if folder:
             self.lineEdit_cocoFolder.setText(folder)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def selectMaskFile(self):
         """Open a file chooser to select a mask file."""
         mask_file = Files().file()  # Replace with QFileDialog.getOpenFileName if preferred.
         if mask_file:
             self.lineEdit_maskFile.setText(mask_file)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def getCopyOriginalImage(self):
         return self.checkBox_copyOriginalModelImage.isChecked()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def getSaveMasks(self):
         return self.checkBox_saveModelMasks.isChecked()
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def getSelectedLabelCategories(self):
         return self.selected_label_categories
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def generateCOCOAnnotations(self):
         """
         Instantiate the CocoGenerator with the folder (and the mask file if Single Mask is checked)
@@ -1207,7 +1299,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         QMessageBox.information(self, "COCO Generation",
                                 f"COCO annotation file successfully created at:\n{output_path.resolve()}")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def find_coco_products(self, root_folder):
         """
         Recursively search for all occurrences of 'COCO Products' folders under the given root.
@@ -1223,6 +1317,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             print("No 'COCO Products' folder found under", root_folder)
         return found
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def populate_available_folders(self):
         root = Path(self.lineEdit_model_training_images_path.text().strip()).resolve()
         self.listWidget_availableFolders.clear()
@@ -1282,6 +1379,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 "\n".join(lines)
             )
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def move_to_right(self):
         """
         Move selected items from the available folders list to the selected folders list.
@@ -1297,7 +1397,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 print(f"Moved '{item.text()}' from available to selected folders (button).")
         self.updateTrainButtonState()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def move_to_left(self):
         """
         Move selected items back from the selected folders list to the available folders list,
@@ -1319,7 +1421,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 print(f"Moved '{item.text()}' from selected back to available folders (sorted, button).")
         self.updateTrainButtonState()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def eventFilter(self, source, event):
         """
         Process drag-and-drop events on the selected folders list.
@@ -1352,7 +1456,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         return super().eventFilter(source, event)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def get_values(self):
         """
         Collect values from dialog controls and return them as a dictionary.
@@ -1387,7 +1493,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         return values
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def load_config_from_json(self, filepath):
         """
         Load configuration values from a JSON file.
@@ -1396,7 +1504,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             config = json.load(f)
         return config
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def create_custom_json(self):
         """
         Gather all dialog values and create a JSON configuration file.
@@ -1470,17 +1580,23 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             json.dump(values, outfile, indent=4)
         print("Custom JSON file 'site_config.json' created successfully.")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def initialize_dialog_from_config(self, config):
         self.config = config
         self.setup_from_config_file()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def accept(self):
         self.create_custom_json()
         super().accept()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def train(self):
         """
         Called when the Train button is clicked.
@@ -1502,7 +1618,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         self.ml_train_signal.emit()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def select_segmentation_model(self):
         """
         Open a file dialog to select a segmentation model file (only .torch files).
@@ -1526,7 +1644,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             self.lineEdit_segmentation_model_file.setText(model_file)
             JsonEditor().update_json_entry("Segmentation_Torch_File", model_file)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def populate_model_labels(self, model_path):
         """
         Load label categories from side-car JSON or checkpoint metadata.
@@ -1582,7 +1702,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 name = str(entry)
             self.listWidget_labels.addItem(name)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def select_segmentation_images_folder(self):
         """
         Open a folder selection dialog to choose a folder with images for segmentation.
@@ -1592,7 +1714,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             self.lineEdit_segmentation_images_folder.setText(folder)
             print("Segmentation images folder selected:", folder)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def segment_images(self):
         """
         Called when the Segment button is clicked.
@@ -1642,7 +1766,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             QtCore.Q_ARG(int, QDialog.Accepted)
         )
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def resizeEvent(self, event):
         """
         Ensure list widgets update their geometry on dialog resize.
@@ -1659,15 +1785,21 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             )
             self.label_displayImages.setPixmap(scaled)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def handle_left_item_doubleclick(self, item):
         self.move_items_to_selected([item])
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def handle_right_item_doubleclick(self, item):
         self.move_items_to_available([item])
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def move_items_to_selected(self, items):
         for item in items:
             name = item.text()
@@ -1680,7 +1812,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                     break
         self.updateTrainButtonState()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def move_items_to_available(self, items):
         for item in items:
             name = item.text()
@@ -1699,7 +1833,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                         break
         self.updateTrainButtonState()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def reset_lists(self):
         """
         Clear both list widgets and restore available folders from the original list.
@@ -1711,7 +1847,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             self.listWidget_availableFolders.addItem(QListWidgetItem(folder))
         self.updateTrainButtonState()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def display_color_swatches(self, rgb_list, swatch_size=100):
         """
         Paints each RGB tuple in rgb_list as a swatch of size swatch_size × swatch_size,
@@ -1734,7 +1872,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         # Display
         self.label_displayImages.setPixmap(pixmap)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def _draw_color_swatches_on_label(self, rgb_list, swatch_size=100):
         """
         Builds a canvas containing the current QLabel pixmap (if any) plus
@@ -1782,7 +1922,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         )
         self.label_displayImages.setPixmap(scaled)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def browse_annotation_folder(self):
         """
         Open dialog, select a folder, populate line edit and filmstrip.
@@ -1809,6 +1951,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         self.populate_annotation_filmstrip(folder)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def preload_annotation_store_from_coco(self, folder: str):
         """
         Reads instances_default.json from `folder` and populates self.annotation_store.
@@ -1866,7 +2011,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         print(f"Preloaded {len(self.annotation_store)} images from instances_default.json")
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def populate_annotation_filmstrip(self, folder):
         """
         List all supported images in `folder`, fill the filmstrip.
@@ -1905,7 +2052,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             # display it immediately
             self.display_annotation_image(self.listWidget_annotationFilmstrip.currentItem())
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def display_annotation_image(self, item):
         """
         Show the full image corresponding to the clicked thumbnail.
@@ -1925,7 +2074,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         )
         lbl.setPixmap(scaled)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def add_annotation_category(self):
         """
         Called when the user presses Enter in the annotation combo's line edit.
@@ -1943,5 +2094,3 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.comboBox_annotationCategories.lineEdit().clear()
 
 # End of GRIME_AI_ML_ImageProcessingDlg class.
-
-
