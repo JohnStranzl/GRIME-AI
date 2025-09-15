@@ -32,6 +32,28 @@ from GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
 
 import torch
 
+BUTTON_CSS_STEEL_BLUE = """
+QPushButton {
+  background-color: steelblue;
+  color: white;
+  border: 1px solid #3b6a93;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #5a93c2; }
+"""
+
+BUTTON_CSS_DARK_RED = """
+QPushButton {
+  background-color: darkred;
+  color: white;
+  border: 1px solid #3b6a93;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #5a93c2; }
+"""
+
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -700,35 +722,35 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.lineEdit_model_training_images_path.editingFinished.connect(self.populate_available_folders)
 
         self.pushButton_moveRight.clicked.connect(self.move_to_right)
-        self.pushButton_moveRight.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_moveRight.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_moveLeft.clicked.connect(self.move_to_left)
-        self.pushButton_moveLeft.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_moveLeft.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_reset.clicked.connect(self.reset_lists)
-        self.pushButton_reset.setStyleSheet('QPushButton {background-color: darkred; color: white;}')
+        self.pushButton_reset.setStyleSheet(BUTTON_CSS_DARK_RED)
 
         self.pushButton_train.clicked.connect(self.train)
-        self.pushButton_train.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_train.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.listWidget_availableFolders.itemDoubleClicked.connect(self.handle_left_item_doubleclick)
         self.listWidget_selectedFolders.itemDoubleClicked.connect(self.handle_right_item_doubleclick)
 
         # Data Annotation tab connections
         self.pushButton_annotationBrowse.clicked.connect(self.browse_annotation_folder)
-        self.pushButton_annotationBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_annotationBrowse.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.listWidget_annotationFilmstrip.itemClicked.connect(self.display_annotation_image)
 
         # Segment Images tab signals.
         self.pushButton_Select_Model.clicked.connect(self.select_segmentation_model)
-        self.pushButton_Select_Model.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_Select_Model.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_Select_Images_Folder.clicked.connect(self.select_segmentation_images_folder)
-        self.pushButton_Select_Images_Folder.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_Select_Images_Folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_Segment.clicked.connect(self.segment_images)
-        self.pushButton_Segment.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_Segment.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.lineEdit_segmentation_model_file.textChanged.connect(self.updateSegmentButtonState)
         self.lineEdit_segmentation_images_folder.textChanged.connect(self.updateSegmentButtonState)
@@ -739,15 +761,15 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         # Connect COCO tab widgets (ensure these names match the UI file).
         self.lineEdit_cocoFolder.textChanged.connect(self.updateCOCOButtonState)
         self.pushButton_cocoBrowse.clicked.connect(self.selectCocoFolder)
-        self.pushButton_cocoBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_cocoBrowse.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.lineEdit_maskFile.textChanged.connect(self.updateCOCOButtonState)
         self.pushButton_maskBrowse.clicked.connect(self.selectMaskFile)
-        self.pushButton_maskBrowse.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_maskBrowse.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.checkBox_singleMask.toggled.connect(self.updateMaskFieldState)
         self.pushButton_generateCOCO.clicked.connect(self.generateCOCOAnnotations)
-        self.pushButton_generateCOCO.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_generateCOCO.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.updateMaskFieldState(self.checkBox_singleMask.isChecked())
         self.updateCOCOButtonState()
@@ -756,13 +778,13 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         # <<<< Connection for ROI Analyzer Analyze button >>>>
         self.lineEdit_ROI_images_folder.editingFinished.connect(self._on_roi_images_folder_changed)
         self.pushButton_browse_ROI_images_folder.clicked.connect(self.browse_ROI_images_folder)
-        self.pushButton_browse_ROI_images_folder.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_browse_ROI_images_folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_analyze.clicked.connect(self.analyze_roi)
-        self.pushButton_analyze.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_analyze.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_extract_ROI_features.clicked.connect(self.extract_ROI_features)
-        self.pushButton_extract_ROI_features.setStyleSheet('QPushButton {background-color: steelblue; color: white;}')
+        self.pushButton_extract_ROI_features.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.listWidget_filmstrip.itemClicked.connect(self.on_filmstrip_item_clicked)
 
