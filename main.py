@@ -1938,7 +1938,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     # ==================================================================================================================
     def menubar_ImageOrganizer(self):
-        """Launch the Image Organizer dialog (dynamic UI)."""
+
+        # --------------------------------------------------------------------------------------------------------------
+        # JES - The Image Organizer functionality is currently in development and not intended for public release.
+        # JES - Access is restricted to the development team. While it may be technically possible to circumvent
+        # JES - these restrictions, GRIME Lab and its developers accept no liability or responsibility for any
+        # JES - consequences arising from such actions.
+        #
+        # JES - Licensed under the Apache License, Version 2.0 (the "License");
+        # JES - you may not use this file except in compliance with the License.
+        # JES - You may obtain a copy of the License at:
+        # JES -     http://www.apache.org/licenses/LICENSE-2.0
+        # --------------------------------------------------------------------------------------------------------------
+        if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
+            pass
+        else:
+            strMessage = 'The Image Organizer functionality is not ready for general distribution.'
+            msgBox = GRIME_AI_QMessageBox('Image Organizer Info', strMessage, QMessageBox.Close)
+            response = msgBox.displayMsgBox()
+            return
+
+        # --------------------------------------------------------------------------------------------------------------
+        # BEGIN PROCESSING
+        # --------------------------------------------------------------------------------------------------------------
         print("[DEBUG] menubar_ImageOrganizer triggered")
 
         # Close any existing instance first
