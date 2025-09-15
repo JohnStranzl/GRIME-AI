@@ -1,6 +1,5 @@
 # image_organizer_core.py
 import csv
-import sys
 import re
 import piexif
 from datetime import datetime
@@ -13,11 +12,7 @@ except Exception:
     Image = None
     ExifTags = None
 
-# ---------- logging helpers ----------
-def _debug(msg: str): print(f"[DEBUG] {msg}")
-def _info(msg: str):  print(f"[INFO]  {msg}")
-def _warn(msg: str):  print(f"[WARN]  {msg}")
-def _err(msg: str):   print(f"[ERROR] {msg}", file=sys.stderr)
+from GRIME_AI_logger import info as _info, debug as _debug, err as _err, warn as _warn
 
 # ---------- constants ----------
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'}
