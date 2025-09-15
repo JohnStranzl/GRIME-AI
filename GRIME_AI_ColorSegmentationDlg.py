@@ -61,7 +61,8 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.buttonBox_Close.clicked.connect(self.closeClicked)
         self.pushButton_Dlg_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
 
-        if os.getlogin() == 'johns' or os.getlogin() == 'johns':
+        import getpass
+        if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
             self.pushButton_Dlg_TEST.clicked.connect(self.universalTestButton)
         else:
             self.pushButton_Dlg_TEST.setEnabled(False)
