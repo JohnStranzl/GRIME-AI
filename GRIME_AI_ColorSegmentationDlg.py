@@ -61,6 +61,16 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.buttonBox_Close.clicked.connect(self.closeClicked)
         self.pushButton_Dlg_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
 
+        # JES - The TEST in the Color Segmentation functionality is currently in development and not intended for public
+        # JES - release. Access is restricted to the development team. While it may be technically possible to
+        # JES - circumvent these restrictions, GRIME Lab and its developers accept no liability or responsibility
+        # JES - for any consequences arising from such actions.
+        #
+        # JES - Licensed under the Apache License, Version 2.0 (the "License");
+        # JES - you may not use this file except in compliance with the License.
+        # JES - You may obtain a copy of the License at:
+        # JES -     http://www.apache.org/licenses/LICENSE-2.0
+        # --------------------------------------------------------------------------------------------------------------
         import getpass
         if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
             self.pushButton_Dlg_TEST.clicked.connect(self.universalTestButton)

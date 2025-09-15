@@ -169,7 +169,18 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self._batchDelay = 50  # ms between batches
         self._loadToken = 0  # to cancel stale batches
 
+        # --------------------------------------------------------------------------------------------------------------
         ###JES hide GRIME AI annotation/labeling; users must use CVAT
+        # JES - The Image Annotation/Labeling functionality is currently in development and not intended for public release.
+        # JES - Access is restricted to the development team. While it may be technically possible to circumvent
+        # JES - these restrictions, GRIME Lab and its developers accept no liability or responsibility for any
+        # JES - consequences arising from such actions.
+        #
+        # JES - Licensed under the Apache License, Version 2.0 (the "License");
+        # JES - you may not use this file except in compliance with the License.
+        # JES - You may obtain a copy of the License at:
+        # JES -     http://www.apache.org/licenses/LICENSE-2.0
+        # --------------------------------------------------------------------------------------------------------------
         tb = self.tabWidget.tabBar()
         if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
             tb.setTabVisible(3, True)
