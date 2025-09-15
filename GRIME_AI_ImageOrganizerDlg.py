@@ -159,8 +159,8 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
                 icon = QMessageBox.Information
 
             box = self._steel_blue_msgbox(title, text, icon)
-            abort_btn   = box.addButton("Abort", QMessageBox.RejectRole)
-            move_btn    = box.addButton("Move Missing to Subfolder", QMessageBox.ActionRole)
+            abort_btn = box.addButton("Abort", QMessageBox.RejectRole)
+            move_btn = box.addButton("Move Missing to Subfolder", QMessageBox.ActionRole)
             proceed_btn = box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
             box.exec_()
 
