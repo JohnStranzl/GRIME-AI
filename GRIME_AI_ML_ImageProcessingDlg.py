@@ -18,7 +18,7 @@ from typing import List, Tuple, Dict
 
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor, QImage
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox
+from PyQt5.QtWidgets import QDialog, QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox, QDialogButtonBox
 from PyQt5.uic import loadUi
 from PyQt5 import QtCore, QtWidgets
 
@@ -268,22 +268,6 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         if self.lineEdit_model_training_images_path.text():
             self.populate_available_folders()
-
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
-    def closeEvent(self, event):
-        reply = QMessageBox.question(
-            self,
-            "Confirm Close",
-            "Do you really want to close?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -784,6 +768,16 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
         self.num_clusters = self.spinBox_numClusters.value()
         self.spinBox_numClusters.valueChanged.connect(self._on_num_clusters_changed)
+
+        self.buttonBox_close.rejected.connect(self.reject)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def reject(self):
+        # DO NOTHING. LET IT CLOSE. IF THE CALLING PROGRAM CREATED THE DIALOG USING EXEC, THE CALLING INSTANTIATING
+        # PROGRTAM CAN INSPECT THE RETURN RESULT
+        super().reject()
 
     # ------------------------------------------------------------------------------------------------------------------
     #

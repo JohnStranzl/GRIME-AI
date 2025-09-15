@@ -1181,7 +1181,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
+    <widget class="QDialogButtonBox" name="buttonBox_close">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
