@@ -1,4 +1,15 @@
-# GRIME_AI_ImageOrganizerDlg.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Author(s):  Razin Bin Issa | Troy E. Gilmore | John Edward Stranzl, Jr.
+# Affiliation(s): University of Nebraska-Lincoln, Blade Vision Systems, LLC
+# Contact: rissa3@huskers.unl.edu, gilmore@unl.edut, jstranzl2@huskers.unl.edu, johnstranzl@gmail.com
+# Created: Sep. 15, 2025
+# License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
+
+# ----------------------------------------------------------------------------------------------------------------------
+# IMPORTS
+# ----------------------------------------------------------------------------------------------------------------------
 from datetime import datetime
 from pathlib import Path
 import traceback
@@ -13,20 +24,18 @@ from image_organizer import (
     scan_for_datetime_presence, move_files_to_subfolder
 )
 
+from GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE
+
+# ----------------------------------------------------------------------------------------------------------------------
+# CONSTANTS
+# ----------------------------------------------------------------------------------------------------------------------
 UI_FILE = Path(__file__).resolve().parent / "QDialog_ImageOrganizer.ui"
 
-# Always Steel Blue buttons (including popups)
-BUTTON_CSS = """
-QPushButton {
-  background-color: #4682B4;
-  color: white;
-  border: 1px solid #3b6a93;
-  padding: 6px 14px;
-  border-radius: 6px;
-}
-QPushButton:hover { background-color: #5a93c2; }
-"""
-
+# ======================================================================================================================
+# ======================================================================================================================
+#  =====     =====     =====     =====  class GRIME_AI_ImageOrganizerDlg   =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
 class GRIME_AI_ImageOrganizerDlg(QDialog):
     """
     Dynamic-UI Image Organizer dialog.
@@ -47,7 +56,7 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
             raise
 
         # Global button style
-        self.setStyleSheet(BUTTON_CSS)
+        self.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         # Line-wrap behavior for Site Information
         self.site_info_edit.setLineWrapMode(self.site_info_edit.WidgetWidth)
@@ -113,7 +122,7 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
         box.setWindowTitle(title)
         box.setIcon(icon)
         box.setText(text)
-        box.setStyleSheet(BUTTON_CSS)
+        box.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
         return box
 
     def _compute_example(self) -> str:

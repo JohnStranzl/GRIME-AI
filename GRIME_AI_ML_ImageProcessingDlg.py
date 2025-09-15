@@ -29,30 +29,9 @@ from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI_Save_Utils import JsonEditor
 from coco_generator import CocoGenerator
 from GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
+from GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED
 
 import torch
-
-BUTTON_CSS_STEEL_BLUE = """
-QPushButton {
-  background-color: steelblue;
-  color: white;
-  border: 1px solid #3b6a93;
-  padding: 6px 14px;
-  border-radius: 6px;
-}
-QPushButton:hover { background-color: #5a93c2; }
-"""
-
-BUTTON_CSS_DARK_RED = """
-QPushButton {
-  background-color: darkred;
-  color: white;
-  border: 1px solid #3b6a93;
-  padding: 6px 14px;
-  border-radius: 6px;
-}
-QPushButton:hover { background-color: #5a93c2; }
-"""
 
 
 # ======================================================================================================================
@@ -182,8 +161,8 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        ui_file = r"QDialog_ML_ImageProcessing.ui"  # use the same path you printed above
-        loadUi(ui_file, self)
+        UI_FILE = Path(__file__).resolve().parent / r"QDialog_ML_ImageProcessing.ui"
+        loadUi(UI_FILE, self)
 
         self._pendingThumbnails = []
         self._batchSize = 10  # number of thumbs per batch
