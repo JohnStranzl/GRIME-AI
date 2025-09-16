@@ -864,6 +864,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.colorSegmentationParams.wholeImage     = self.colorSegmentationDlg.checkBoxScalarRegion_WholeImage.isChecked()
 
+            self.colorSegmentationParams.numColorClusters = self.colorSegmentationDlg.get_num_color_clusters()
+
         self.greenness_index_list.clear()
 
         if self.colorSegmentationParams.GCC:
@@ -1377,6 +1379,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # ----------------------------------------------------------------------------------------------------------
             global currentImageIndex
 
+            self.labelOriginalImage.clearROIs()
+            self.labelOriginalImage.setROIs(self.roiList)
+
             processLocalImage(self, currentImageIndex)
             self.refreshImage()
 
@@ -1384,7 +1389,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # ONCE AN ROI IS DEFINED FOR A SPECIFIC NUMBER OF COLOR CLUSTERS, DISABLE THE CONTROL SO THAT THE USER
             # CANNOT CHANGE THE VALUE FOR SUBSEQUENT TRAINED ROIs.
             # ----------------------------------------------------------------------------------------------------------
-            #JES self.spinBoxColorClusters.setDisabled(True)
+            if self.colorSegmentationDlg != None:
+                if len(self.roiList) > 0:
+                    self.colorSegmentationDlg.disable_spinbox_color_clusters(True)
+                else:
+                    self.colorSegmentationDlg.disable_spinbox_color_clusters(False)
 
     # ==================================================================================================================
     #
@@ -1414,14 +1423,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         return sum_en
 
-
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def displayROIs(self):
+    def displayROIs(self, roiParameters):
+        if self.colorSegmentationDlg != None:
+            self.getColorSegmentationParams()
+
         processLocalImage(self)
         self.refreshImage()
-
 
     # ==================================================================================================================
     #
@@ -2163,6 +2173,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.colorSegmentationDlg.deleteAllROI_Signal.connect(self.deleteAllROI)
                 self.colorSegmentationDlg.buildFeatureFile_Signal.connect(self.buildFeatureFile)
                 self.colorSegmentationDlg.universalTestButton_Signal.connect(self.universalTestButton)
+                self.colorSegmentationDlg.refresh_rois_signal.connect(self.displayROIs)
 
                 self.colorSegmentationDlg.greenness_index_signal.connect(self.greenness_index_changed)
 
@@ -2421,12 +2432,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def deleteAllROI(self):
         del self.roiList[:]
+
         self.tableWidget_ROIList.clearContents()
         self.tableWidget_ROIList.setRowCount(0)
 
-        processLocalImage(self)
+        self.colorSegmentationDlg.disable_spinbox_color_clusters(False)
 
-        #JES self.spinBoxColorClusters.setDisabled(False)
+        processLocalImage(self)
 
     # ==================================================================================================================
     #
@@ -2628,7 +2640,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.spinBoxColorClusters.value()
         #JES - Replace with the value selected in the dialog box
 
-        hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(img, 4)
+        hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(img, self.colorSegmentationParams.numColorClusters)
         colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
 
         # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
@@ -3012,7 +3024,6 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
 # ======================================================================================================================
 def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
     global currentImage
-
 
     myGRIMe_Color = GRIME_AI_Color()
 

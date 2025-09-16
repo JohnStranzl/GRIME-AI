@@ -27,7 +27,7 @@ class roiParameters:
 
 # ======================================================================================================================
 # ======================================================================================================================
-# =====     =====     =====     =====     class GRIME_AI_ColorS  egmentationDlg     =====     =====     =====     =====
+# =====     =====     =====     =====      class GRIME_AI_ColorSegmentationDlg       =====     =====     =====     =====
 # ======================================================================================================================
 # ======================================================================================================================
 class GRIME_AI_ColorSegmentationDlg(QDialog):
@@ -42,6 +42,7 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
     buildFeatureFile_Signal = pyqtSignal()
     universalTestButton_Signal = pyqtSignal(int)
     greenness_index_signal = pyqtSignal()
+    refresh_rois_signal = pyqtSignal(roiParameters)
 
     returnROIParameters = roiParameters()
 
@@ -66,6 +67,9 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.pushButton_deleteAllROIs.clicked.connect(self.deleteAllROI)
         self.buttonBox_Close.clicked.connect(self.closeClicked)
         self.pushButton_Dlg_BuildFeatureFile.clicked.connect(self.buildFeatureFile)
+
+        self.spinBoxColorClusters.valueChanged[int].connect(self.colorClusterValueChanged)
+
 
         # JES - The TEST in the Color Segmentation functionality is currently in development and not intended for public
         # JES - release. Access is restricted to the development team. While it may be technically possible to
@@ -96,6 +100,10 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
             'QPushButton {background-color: steelblue; color: yellow;}'
         )
 
+    def colorClusterValueChanged(self):
+        self.returnROIParameters.numColorClusters = self.spinBoxColorClusters.value()
+        self.refresh_rois_signal.emit(self.returnROIParameters)
+
     # ----------------------------------------------------------------------------------------------------
     def buildFeatureFile(self):
         self.buildFeatureFile_Signal.emit()
@@ -119,9 +127,9 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
     # ----------------------------------------------------------------------------------------------------
     def addROI(self):
         self.returnROIParameters.strROIName = self.lineEdit_roiName.text()
-        # Optionally, you could read the actual spinbox value like:
-        # self.returnROIParameters.numColorClusters = self.spinBoxColorClusters.value()
-        self.returnROIParameters.numColorClusters = 4
+
+        self.returnROIParameters.numColorClusters = self.spinBoxColorClusters.value()
+
         self.returnROIParameters.bDisplayROIs = True
         self.returnROIParameters.bDisplayROIColors = True
 
@@ -146,3 +154,9 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
 
     def NDVI_Clicked(self):
         self.greenness_index_signal.emit()
+
+    def disable_spinbox_color_clusters(self, disable_spinbox=True):
+        self.spinBoxColorClusters.setDisabled(disable_spinbox)
+
+    def get_num_color_clusters(self):
+        return self.spinBoxColorClusters.value()

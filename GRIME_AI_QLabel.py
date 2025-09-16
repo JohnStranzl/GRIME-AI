@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Author: John Edward Stranzl, Jr.
+# Affiliation(s): University of Nebraska-Lincoln, Blade Vision Systems, LLC
+# Contact: jstranzl2@huskers.unl.edu, johnstranzl@gmail.com
+# Created: Mar 6, 2022
+# License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
+
 from PyQt5 import Qt
 from PyQt5.QtCore import QRect, QPoint, Qt
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPainterPath, QPolygon, QPolygonF
@@ -16,26 +25,30 @@ class DrawingMode(Enum):
 #
 # ======================================================================================================================
 class GRIME_AI_QLabel(QLabel):
-    x0 = -1
-    y0 = -1
-    x1 = -1
-    y1 = -1
-
-    rect = QRect(x0, y0, x1, y1)
-
-    flag = False
-
-    shape = ROIShape.RECTANGLE
-
-    drawingMode = DrawingMode.OFF
-    enableFill = False
 
     # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
         QLabel.__init__(self, parent=parent)
+
         layout = QVBoxLayout(self)
         self.setLayout(layout)
+
+        self.savedROIs = []  # persistent storage for drawn ROIs
+
+        self.x0 = -1
+        self.y0 = -1
+        self.x1 = -1
+        self.y1 = -1
+
+        self.rect = QRect(self.x0, self.y0, self.x1, self.y1)
+
+        self.flag = False
+
+        self.shape = ROIShape.RECTANGLE
+
+        self.drawingMode = DrawingMode.OFF
+        self.enableFill = False
 
         self.path = QPainterPath()
         self.points = QPolygon()
@@ -81,7 +94,14 @@ class GRIME_AI_QLabel(QLabel):
     # Mouse release event
     # ------------------------------------------------------------------------------------------------------------------------
     def mouseReleaseEvent(self, event):
+        if self.flag:
+            roi = self.getROI()
+            if roi:
+                self.savedROIs.append(roi)
         self.flag = False
+        # Clear live coords so we don't redraw the just-saved ROI
+        self.x0 = self.y0 = self.x1 = self.y1 = -1
+        self.update()
 
     # ------------------------------------------------------------------------------------------------------------------------
     # Mouse movement events
@@ -98,6 +118,21 @@ class GRIME_AI_QLabel(QLabel):
     def paintEvent(self, event):
         super().paintEvent(event)
 
+        if self.drawingMode == DrawingMode.OFF:
+            return
+
+        painter = QPainter(self)
+
+        # Always redraw any saved ROIs (persistent storage)
+        if hasattr(self, "savedROIs"):
+            painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
+            for roi in self.savedROIs:
+                if self.getROIShape() == ROIShape.RECTANGLE:
+                    painter.drawRect(roi)
+                elif self.getROIShape() == ROIShape.ELLIPSE:
+                    painter.drawEllipse(roi)
+
+        # Draw the ROI currently being dragged
         if self.drawingMode == DrawingMode.COLOR_SEGMENTATION:
             self.drawColorSegmentationROI()
         elif self.drawingMode == DrawingMode.MASK:
@@ -140,10 +175,8 @@ class GRIME_AI_QLabel(QLabel):
         painter.drawLine(int(self.sliceCenter - self.sliceWidth // 2), 0, int(self.sliceCenter - self.sliceWidth // 2), labelSize.height())
         painter.drawLine(int(self.sliceCenter + self.sliceWidth // 2), 0, int(self.sliceCenter + self.sliceWidth // 2), labelSize.height())
 
-        self.update()
-
-
     # ------------------------------------------------------------------------------------------------------------------------
+    #
     # ------------------------------------------------------------------------------------------------------------------------
     def drawContinuous(self):
         if self.flag:
@@ -158,13 +191,19 @@ class GRIME_AI_QLabel(QLabel):
     # ------------------------------------------------------------------------------------------------------------------------
     def drawColorSegmentationROI(self):
         if self.flag:
-            rect = QRect(self.x0, self.y0, (self.x1 - self.x0), (self.y1 - self.y0))
+            # Always normalize coordinates
+            x = min(self.x0, self.x1)
+            y = min(self.y0, self.y1)
+            w = abs(self.x1 - self.x0)
+            h = abs(self.y1 - self.y0)
+            rect = QRect(x, y, w, h)
+
             painter = QPainter(self)
             painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
             if self.getROIShape() == ROIShape.RECTANGLE:
                 painter.drawRect(rect)
             elif self.getROIShape() == ROIShape.ELLIPSE:
-                painter.drawEllipse(self.x0, self.y0, (self.x1 - self.x0), (self.y1 - self.y0))
+                painter.drawEllipse(rect)
 
     # oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
     # oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
@@ -229,21 +268,25 @@ class GRIME_AI_QLabel(QLabel):
     # ------------------------------------------------------------------------------------------------------------------------
     def incrementPolygon(self):
         self.polygonList.append(self.points)
-        del self.points
-        self.points = QPolygon()
-
+        self.points.clear()
         self.polygonListCount = len(self.polygonList)
 
     # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------
     def getROI(self):
-        if self.x0 == -1:
-            return None
-        else:
-            if self.x0 > self.x1:
-                return QRect(self.x1, self.y1, self.x0-self.x1, self.y0-self.y1)
-            else:
-                return QRect(self.x0, self.y0, self.x1-self.x0, self.y1-self.y0)
+        # Prefer live ROI if dragging
+        if self.x0 != -1 and self.x1 != -1:
+            x = min(self.x0, self.x1)
+            y = min(self.y0, self.y1)
+            w = abs(self.x1 - self.x0)
+            h = abs(self.y1 - self.y0)
+            return QRect(x, y, w, h)
+
+        # Fall back to last saved ROI
+        if self.savedROIs:
+            return self.savedROIs[-1]
+
+        return None
 
     # ------------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------------
@@ -288,3 +331,18 @@ class GRIME_AI_QLabel(QLabel):
 
     def getSliceWidth(self):
         return(self.sliceWidth)
+
+    def setROIs(self, roi_list):
+        def setROIs(self, roi_list):
+            # Extract the display QRect from each ROI object
+            self.savedROIs = [roi.getDisplayROI() for roi in roi_list]
+            self.update()
+            
+    def clearROIs(self):
+        self.savedROIs.clear()
+
+        self.x0 = self.y0 = self.x1 = self.y1 = -1
+
+        self.flag = False
+
+        self.update()
