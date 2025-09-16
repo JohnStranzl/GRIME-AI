@@ -22,6 +22,7 @@ dist/
 hooks/
 outputs/
 pytorch/
+sam2/
 sam2_transforms.pt
 train/
 utils/__pycache__/
