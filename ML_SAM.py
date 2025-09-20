@@ -593,7 +593,8 @@ class ML_SAM:
 
         # Split dataset into train and validation sets
         train_images, val_images = self.dataset_util.split_dataset(self.dataset)
-        self.dataset_util.save_split_dataset(train_images, val_images)
+        split_dataset_filename = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}training_and_validation_sets.json")
+        self.dataset_util.save_split_dataset(train_images, val_images, split_dataset_filename)
 
         print(f"[DEBUG] train_images count: {len(train_images)}")
         if len(train_images) == 0:
