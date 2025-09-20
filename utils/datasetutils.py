@@ -1,6 +1,5 @@
 
 import os
-import shutil
 import random
 from pycocotools import mask as coco_mask
 import cv2
@@ -95,10 +94,18 @@ class DatasetUtils:
 
         return combined_mask.astype(np.float32)
 
+
     def split_dataset(self, dataset_dict, train_split=0.9, val_split=0.1):
         all_images = []
         for data in dataset_dict.values():
-            all_images.extend(data["images"])
+            # normalize here so every path in all_images is clean
+            for img in data["images"]:
+                if isinstance(img, dict) and "path" in img:
+                    img = {**img, "path": os.path.normpath(img["path"])}
+                else:
+                    img = os.path.normpath(str(img))
+                all_images.append(img)
+
         random.shuffle(all_images)
 
         num_images = len(all_images)
@@ -109,6 +116,7 @@ class DatasetUtils:
         print(f"Train: {len(train_images)} images, Validation: {len(val_images)} images")
         return train_images, val_images
 
+    '''
     def save_split_dataset(self, train_images, val_images):
         output_dir = os.getcwd()
         train_dir = os.path.join(output_dir, "train")
@@ -130,7 +138,32 @@ class DatasetUtils:
 
         if len(train_images) == 0 or len(val_images) == 0:
             print("Empty split — cannot train/validate properly.")
+    '''
 
+    def save_split_dataset(self, train_images, val_images, output_file):
+        """
+        Save metadata-only split: no image copying.
+        Writes train/val image paths to splits.json in out_dir.
+        """
+        import json, os
+        from pathlib import Path
+
+        out_dir = os.path.dirname(output_file)
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        def extract_paths(images):
+            return [img['path'] if isinstance(img, dict) else str(img) for img in images]
+
+        split_data = {
+            "train": extract_paths(train_images),
+            "val": extract_paths(val_images)
+        }
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(split_data, f, indent=2)
+
+        print(f"[split] Saved metadata-only split to {output_file}")
 
 
     def get_image_size(self, image_path: str) -> tuple[int, int]:
