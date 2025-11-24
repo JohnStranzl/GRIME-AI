@@ -10,9 +10,9 @@ Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup-3.bin
 Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup.exe
 Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup.zip
 R-4.4.1-win.exe
-SplashScreen Images/GRIME-AI Logo - Backup.jpg
-SplashScreen Images/GRIME-AI Logo - Copy.jpg
-SplashScreen Images/New Bitmap image.bmp
+src/GRIME_AI/SplashScreen Images/GRIME-AI Logo - Backup.jpg
+src/GRIME_AI/SplashScreen Images/GRIME-AI Logo - Copy.jpg
+src/GRIME_AI/SplashScreen Images/New Bitmap image.bmp
 Splash_007.jpg
 __pycache__/
 venv/
@@ -25,7 +25,7 @@ pytorch/
 sam2/
 sam2_transforms.pt
 train/
-utils/__pycache__/
+src/GRIME_AI/utils/__pycache__/
 validation/
 /pytorch/
 /pytorch/third_party/

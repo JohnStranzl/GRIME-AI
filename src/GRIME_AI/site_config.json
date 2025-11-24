@@ -1,0 +1,75 @@
+{
+    "siteName": "custom",
+    "learningRates": [
+        0.0001,
+        0.001
+    ],
+    "optimizer": "Adam",
+    "loss_function": "IOU",
+    "weight_decay": 0.01,
+    "number_of_epochs": 20,
+    "batch_size": 32,
+    "save_model_frequency": 20,
+    "validation_frequency": 20,
+    "early_stopping": false,
+    "patience": 3,
+    "device": "gpu",
+    "folder_path": "G:/Updated_Dataset",
+    "available_folders": [
+        "Kearney Outdoor Learning Area (KOLA)\\COCO Products\\CT_KOLA_COCO",
+        "Kearney Outdoor Learning Area (KOLA)\\COCO Products\\MW_KOLA_COCO",
+        "MD_Lake_Serene_Edgewood\\COCO Products\\CT_MD_Lake_Serene_Edgewood_COCO",
+        "MD_Lake_Serene_Edgewood\\COCO Products\\DK_MD_Lake_Serene_Edgewood_COCO",
+        "MO_Missouri_River_at_Hermann\\COCO Products\\CT_MO_Missouri_River_at_Hermann_COCO",
+        "MO_Missouri_River_at_Hermann\\COCO Products\\DK_MO_Missouri_River_at_Hermann_COCO",
+        "NE_Platte_River_near_Grand_Island\\COCO Products\\CT_NE_Platte_River_near_Grand_Island_COCO",
+        "NE_Platte_River_near_Grand_Island\\COCO Products\\DK_NE_Platte_River_near_Grand_Island_COCO",
+        "NE_Platte_River_near_Grand_Island\\COCO Products\\JB_NE_Platte_River_near_Grand_Island_COCO",
+        "NE_Platte_River_near_Grand_Island\\COCO Products\\KJ_NE_Platte_River_near_Grand_Island_COCO",
+        "NM_Pecos_River_near_Acme\\COCO Products\\MS_NM_Pecos_River_near_Acme_COCO",
+        "NM_Rio_Grande_below_Elephant_Butte_Dam\\COCO Products\\CT_NM_Rio_Grande_below_Elephant_Butte_Dam_COCO",
+        "PA_East_Branch_Brandywine_Creek_below_Downingtown\\COCO Products\\CT_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO",
+        "PA_East_Branch_Brandywine_Creek_below_Downingtown\\COCO Products\\DK_PA_East_Branch_Brandywine_Creek_below_Downingtown_COCO",
+        "VA_Beggars_Cr_nr_Dawley_Corners\\COCO Products\\CT_VA_Beggars_Cr_nr_Dawley_Corners_COCO",
+        "VA_Beggars_Cr_nr_Dawley_Corners\\COCO Products\\MW_VA_Beggars_Cr_nr_Dawley_Corners_COCO",
+        "WI_AO1_STAFF\\COCO Products\\CT_WI_AO1_STAFF_COCO",
+        "WI_AO1_STAFF\\COCO Products\\MS_AO1_STAFF_COCO",
+        "WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire\\COCO Products\\CT_WI_Chippewa_River_at_Grand_Ave_at_Eau_Claire_COCO",
+        "WI_East_River_at_HWY_ZZ_ near_Greenleaf\\COCO Products\\CT_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO",
+        "WI_East_River_at_HWY_ZZ_ near_Greenleaf\\COCO Products\\DK_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO",
+        "WI_East_River_at_HWY_ZZ_ near_Greenleaf\\COCO Products\\JB_WI_East_River_at_HWY_ZZ_near_Greenleaf_COCO"
+    ],
+    "selected_folders": [
+        "NM_Pecos_River_near_Acme\\COCO Products\\JB_NM_Pecos_River_near_Acme_COCO",
+        "NM_Pecos_River_near_Acme\\COCO Products\\CT_NM_Pecos_River_near_Acme_COCO",
+        "NM_Pecos_River_near_Acme\\COCO Products\\DK_NM_Pecos_River_near_Acme_COCO"
+    ],
+    "segmentation_model_file": "C:\\Users\\johns\\pycharmprojects\\neonAI\\models\\Edgewood_19_0.0001_2004_2040.torch",
+    "segmentation_images_folder": "G:/Updated_Dataset/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default",
+    "save_model_masks": true,
+    "copy_original_model_image": true,
+    "load_model": {
+        "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
+        "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+        "INPUT_DIR": "G:/Updated_Dataset/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default",
+        "OUTPUT_DIR": "G:/Updated_Dataset/MD_Lake_Serene_Edgewood/COCO Products/DK_MD_Lake_Serene_Edgewood_COCO/images/default/predictions",
+        "MODEL": "C:\\Users\\johns\\pycharmprojects\\neonAI\\models\\Edgewood_19_0.0001_2004_2040.torch"
+    },
+    "Path": [
+        {
+            "siteName": "custom",
+            "directoryPaths": {
+                "folders": [
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/JB_NM_Pecos_River_near_Acme_COCO/images/default",
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/CT_NM_Pecos_River_near_Acme_COCO/images/default",
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/DK_NM_Pecos_River_near_Acme_COCO/images/default"
+                ],
+                "annotations": [
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/JB_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json",
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/CT_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json",
+                    "G:/Updated_Dataset/NM_Pecos_River_near_Acme/COCO Products/DK_NM_Pecos_River_near_Acme_COCO/annotations/instances_default.json"
+                ]
+            }
+        }
+    ]
+}
