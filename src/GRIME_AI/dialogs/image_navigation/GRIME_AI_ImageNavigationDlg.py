@@ -53,7 +53,7 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_ImageNavigation.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ImageNavigation.ui'), self)
 
         # ── Micro‐batch loader state ───────────────────────────────
         # these control how many thumbs we load per cycle,

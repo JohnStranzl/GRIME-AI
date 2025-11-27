@@ -34,7 +34,7 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_EdgeDetection.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_EdgeDetection.ui'), self)
 
         # CONNECT THE SIGNALS TO THE FUNCTIONS IN THE PARENT ("CALLING") THREAD THAT WILL RECEIVE THE SIGNAL
         self.featureDetectionSignal.connect(parent.featureDetectionMethod)

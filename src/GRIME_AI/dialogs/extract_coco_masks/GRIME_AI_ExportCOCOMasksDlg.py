@@ -33,7 +33,7 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_ExtractCOCOMasks.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ExtractCOCOMasks.ui'), self)
 
         self.annotationImagesFolder = ''
 

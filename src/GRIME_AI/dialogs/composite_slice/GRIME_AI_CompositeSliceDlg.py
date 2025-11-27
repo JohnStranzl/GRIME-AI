@@ -24,7 +24,7 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         self.setModal(False)
         self.setWindowModality(Qt.NonModal)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_CompositeSlice.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_CompositeSlice.ui'), self)
 
         self.widthMultiplier = 0
         self.heightMultiplier = 0

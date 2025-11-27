@@ -161,7 +161,7 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        UI_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui',"QDialog_ML_ImageProcessing.ui")
+        UI_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', "QDialog_ML_ImageProcessing.ui")
         loadUi(UI_FILE, self)
 
         self._pendingThumbnails = []
@@ -289,7 +289,7 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         import json
 
         settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        CONFIG_FILENAME = "site_config.json"
+        CONFIG_FILENAME = "../../site_config.json"
         config_file = os.path.join(settings_folder, CONFIG_FILENAME)
 
         # Load current settings if file exists
@@ -1520,7 +1520,7 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         from datetime import datetime
 
         settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        CONFIG_FILENAME = "site_config.json"
+        CONFIG_FILENAME = "../../site_config.json"
         config_file = os.path.join(settings_folder, CONFIG_FILENAME)
         if os.path.exists(config_file):
             now_str = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")

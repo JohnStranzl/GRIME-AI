@@ -8,10 +8,7 @@
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
 import os
-
-#os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
-
-from io import StringIO
+import sys
 
 import csv
 import re
@@ -28,9 +25,14 @@ from bs4 import BeautifulSoup
 
 # THIRD PARTY MODULES
 
-import rpy2.robjects as robjects
+os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
+r_home = os.environ.get("R_HOME")
+if not r_home:
+    sys.exit("R_HOME not set. Please configure environment variable.")
+
+#import rpy2.robjects as robjects
 #import rpy2.robjects.packages as rpackages
-from rpy2.robjects.packages import importr
+#from rpy2.robjects.packages import importr
 
 # GRIME-AI MODULES
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
@@ -39,8 +41,7 @@ from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
 
 from GRIME_AI.nitrateData import nitrateData
 
-from GRIME_AI.siteData import siteData
-
+from nitrateData import nitrateData
 
 SERVER = 'http://data.neonscience.org/api/v0/'
 

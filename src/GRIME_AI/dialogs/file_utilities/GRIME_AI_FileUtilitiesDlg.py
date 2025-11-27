@@ -57,7 +57,7 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
         self.setWindowModality(QtCore.Qt.NonModal)
 
         dirname = os.path.dirname(__file__)
-        ui_file_absolute = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_FileUtilities.ui')
+        ui_file_absolute = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_FileUtilities.ui')
         loadUi(ui_file_absolute, self)
 
         self.accepted.connect(self.closeFileFolderDlg)

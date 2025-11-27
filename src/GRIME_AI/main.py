@@ -109,23 +109,16 @@ except Exception:
 
 
 import os
-#os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
+os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 #os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
 import sys
 import argparse
 import shutil
-import re
-import json
-import random
 from pathlib import Path
-import iopath
-
-import numpy as np
 
 # ------------------------------------------------------------
 # PIL LIBRARIES AND IMPORTS
 # ------------------------------------------------------------
-from PIL import Image, ImageDraw
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -141,22 +134,13 @@ import datetime
 from datetime import date
 #from datetime import datetime
 import time
-from time import sleep
 
-import pandas as pd
-
-import math
 import csv
 
-import requests
 import urllib.request
-from configparser import ConfigParser
-from urllib.request import urlopen
 #import chromedriver_autoinstaller
 
 import promptlib
-
-import cv2
 
 import traceback
 
@@ -179,18 +163,14 @@ import torch.optim as optim
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
+    QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 from GRIME_AI.sobelData import sobelData
 
@@ -198,23 +178,23 @@ from GRIME_AI.sobelData import sobelData
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
-from GRIME_AI.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_AI.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
-from GRIME_AI.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
-from GRIME_AI.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
-from GRIME_AI.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
+from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
+from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
+from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
+from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
+from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
 from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
-from GRIME_AI.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
-from GRIME_AI.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
+from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
+from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI.GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
 from GRIME_AI.GRIME_AI_Vegetation_Indices import GreennessIndex
-from GRIME_AI.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-from GRIME_AI.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
+from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
 
-from GRIME_AI.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
 
 from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
 
@@ -227,8 +207,6 @@ from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 # ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
-from GRIME_AI.GRIME_AI_ImageStats import GRIME_AI_ImageStats
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -260,7 +238,7 @@ from GRIME_AI.GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
 # HYDRA (for SAM2)
 # ----------------------------------------------------------------------------------------------------------------------
 import hydra
-from hydra import initialize, compose, initialize_config_dir
+from hydra import initialize, compose
 from omegaconf import OmegaConf, DictConfig
 
 
@@ -281,7 +259,6 @@ from GRIME_AI.chrome_driver import *
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-import GRIME_AI.constants as constants
 from GRIME_AI.constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -365,8 +342,6 @@ from matplotlib.figure import Figure
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -374,11 +349,6 @@ import seaborn as sns
 import os
 import cv2
 import numpy as np
-import pandas as pd
-from pycocotools.coco import COCO
-from pycocotools import mask as maskUtils
-from pycocotools import mask as coco_mask
-
 
 # from tensorflow.python.client import device_lib as dev_lib
 

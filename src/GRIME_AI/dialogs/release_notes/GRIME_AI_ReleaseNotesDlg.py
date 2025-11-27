@@ -25,4 +25,4 @@ class GRIME_AI_ReleaseNotesDlg(QDialog):
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_ReleaseNotes.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ReleaseNotes.ui'), self)

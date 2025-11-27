@@ -58,7 +58,7 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         # Load the UI file (which now contains dynamic layouts)
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui','QDialog_ColorSegmentation.ui'), self)
+        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ColorSegmentation.ui'), self)
         # Ensure the dialog starts with the intended size
         self.resize(400, 676)
 
