@@ -114,11 +114,8 @@ os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
 import sys
 import argparse
 import shutil
+import getpass
 from pathlib import Path
-
-# ------------------------------------------------------------
-# PIL LIBRARIES AND IMPORTS
-# ------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -134,13 +131,22 @@ import datetime
 from datetime import date
 #from datetime import datetime
 import time
+from time import sleep
 
+import pandas as pd
+
+import math
 import csv
 
+import requests
 import urllib.request
+from configparser import ConfigParser
+from urllib.request import urlopen
 #import chromedriver_autoinstaller
 
 import promptlib
+
+import cv2
 
 import traceback
 
@@ -163,14 +169,18 @@ import torch.optim as optim
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
-    QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
+    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 from GRIME_AI.sobelData import sobelData
 
@@ -207,6 +217,8 @@ from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 # ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
+from GRIME_AI.GRIME_AI_ImageStats import GRIME_AI_ImageStats
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -238,7 +250,7 @@ from GRIME_AI.GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
 # HYDRA (for SAM2)
 # ----------------------------------------------------------------------------------------------------------------------
 import hydra
-from hydra import initialize, compose
+from hydra import initialize, compose, initialize_config_dir
 from omegaconf import OmegaConf, DictConfig
 
 
@@ -259,6 +271,7 @@ from GRIME_AI.chrome_driver import *
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+import GRIME_AI.constants as constants
 from GRIME_AI.constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -342,6 +355,8 @@ from matplotlib.figure import Figure
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -349,6 +364,11 @@ from matplotlib.figure import Figure
 import os
 import cv2
 import numpy as np
+import pandas as pd
+from pycocotools.coco import COCO
+from pycocotools import mask as maskUtils
+from pycocotools import mask as coco_mask
+
 
 # from tensorflow.python.client import device_lib as dev_lib
 
@@ -390,7 +410,7 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver. 1.0.0.1"
+SW_VERSION = "Ver. 1.0.0.5"
 
 class displayOptions():
     displayROIs = True

@@ -7,12 +7,16 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
+import os
+import cv2
+
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.uic import loadUi
-import cv2
-import os
+
+from GRIME_AI.utils.resource_utils import ui_path
+
 
 class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
     compositeSliceCancelSignal = pyqtSignal()
@@ -24,7 +28,7 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         self.setModal(False)
         self.setWindowModality(Qt.NonModal)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_CompositeSlice.ui'), self)
+        loadUi(ui_path("composite_slice/QDialog_CompositeSlice.ui"), self)
 
         self.widthMultiplier = 0
         self.heightMultiplier = 0

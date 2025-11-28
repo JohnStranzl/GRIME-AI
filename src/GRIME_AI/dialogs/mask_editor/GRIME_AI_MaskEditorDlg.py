@@ -7,11 +7,15 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
+import os
+
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
-import os
+
+from GRIME_AI.utils.resource_utils import ui_path
+
 
 # ======================================================================================================================
 #
@@ -33,7 +37,7 @@ class GRIME_AI_MaskEditorDlg(QDialog):
         self.setWindowModality(QtCore.Qt.NonModal)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_MaskEditor.ui'), self)
+        loadUi(ui_path("mask_editor/QDialog_MaskEditor.ui"), self)
 
         self.pushButton_AddMask.setStyleSheet('QPushButton {background-color: steelblue;}')
         self.pushButton_GenerateMask.setStyleSheet('QPushButton {background-color: steelblue;}')

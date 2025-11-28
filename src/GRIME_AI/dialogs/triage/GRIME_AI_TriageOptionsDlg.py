@@ -7,15 +7,15 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
-from PyQt5.QtWidgets import QDialog
-
-from PyQt5.uic import loadUi
-
+import os
 import promptlib
 
-from PyQt5 import QtGui
+from PyQt5.QtWidgets import QDialog
+from PyQt5.uic import loadUi
 
-import os
+from GRIME_AI.utils.resource_utils import ui_path
+
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -23,7 +23,7 @@ class GRIME_AI_TriageOptionsDlg(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_TriageOptions.ui'), self)
+        loadUi(ui_path("triage/QDialog_TriageOptions.ui"), self)
 
         self.referenceImageFilename = ''
 

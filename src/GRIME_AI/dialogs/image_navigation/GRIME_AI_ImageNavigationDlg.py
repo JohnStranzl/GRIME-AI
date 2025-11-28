@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.uic import loadUi
 
+from GRIME_AI.utils.resource_utils import ui_path
 
 class BorderDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -53,7 +54,7 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ImageNavigation.ui'), self)
+        loadUi(ui_path('image_navigation/QDialog_ImageNavigation.ui'), self)
 
         # ── Micro‐batch loader state ───────────────────────────────
         # these control how many thumbs we load per cycle,

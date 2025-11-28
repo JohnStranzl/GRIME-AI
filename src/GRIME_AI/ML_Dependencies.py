@@ -29,5 +29,5 @@ from pycocotools import mask as coco_mask
 import cv2
 
 # Project-Specific Modules
-#from sam2.build_sam import build_sam2
-#from sam2.sam2_image_predictor import SAM2ImagePredictor
+#from GRIME_AI.sam2.build_sam import build_sam2
+#from GRIME_AI.sam2.sam2_image_predictor import SAM2ImagePredictor

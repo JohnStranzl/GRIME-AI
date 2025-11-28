@@ -13,6 +13,8 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 
+from GRIME_AI.utils.resource_utils import ui_path
+
 # ======================================================================================================================
 # ======================================================================================================================
 # =====     =====     =====     =====     =====     class roiParameters    =====     =====     =====     =====     =====
@@ -58,7 +60,8 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         # Load the UI file (which now contains dynamic layouts)
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ColorSegmentation.ui'), self)
+        loadUi(ui_path('color_segmentation/QDialog_ColorSegmentation.ui'), self)
+
         # Ensure the dialog starts with the intended size
         self.resize(400, 676)
 

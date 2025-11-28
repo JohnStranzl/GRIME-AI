@@ -15,6 +15,7 @@ import cv2
 from pathlib import Path
 from promptlib import Files
 from typing import List, Tuple, Dict
+from datetime import datetime
 
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QColor, QImage
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
@@ -25,8 +26,9 @@ from PyQt5 import QtCore, QtWidgets
 import matplotlib
 matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
 
+from GRIME_AI.utils.resource_utils import ui_path
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
-from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
+from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.coco_generator import CocoGenerator
 from GRIME_AI.GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
 from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED
@@ -161,8 +163,7 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        UI_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', "QDialog_ML_ImageProcessing.ui")
-        loadUi(UI_FILE, self)
+        loadUi(ui_path("ML_image_processing/QDialog_ML_ImageProcessing.ui"), self)
 
         self._pendingThumbnails = []
         self._batchSize = 10  # number of thumbs per batch
@@ -272,6 +273,17 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.populate_segment_images_tab()
         self.updateTrainButtonState()
 
+        settings_folder = Path(GRIME_AI_Save_Utils().get_settings_folder()).resolve()
+        config_file = (settings_folder / "site_config.json").resolve()
+
+        # Backup existing config if present
+        if not config_file.exists():
+            # Start with template
+            self.site_config = self.create_site_config_template()
+        else:
+            self.site_config = JsonEditor().load_json_file(config_file)
+
+        self.setup_from_config_file()
         model_path = self.lineEdit_segmentation_model_file.text().strip()
         self.updateSegmentButtonState(model_path)
 
@@ -613,40 +625,40 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         """
         Initialize dialog controls from a configuration dictionary.
         """
-        self.lineEdit_siteName.setText(self.config.get("siteName", ""))
-        learningRates = self.config.get("learningRates", [])
+        self.lineEdit_siteName.setText(self.site_config.get("siteName", ""))
+        learningRates = self.site_config.get("learningRates", [])
         lr_str = ", ".join(str(x) for x in learningRates)
         self.lineEdit_learningRates.setText(lr_str)
 
-        optimizer = self.config.get("Optimizer", "")
+        optimizer = self.site_config.get("Optimizer", "")
         idx = self.comboBox_optimizer.findText(optimizer)
         if idx >= 0:
             self.comboBox_optimizer.setCurrentIndex(idx)
 
-        loss_function = self.config.get("loss_function", "")
+        loss_function = self.site_config.get("loss_function", "")
         idx = self.comboBox_lossFunction.findText(loss_function)
         if idx >= 0:
             self.comboBox_lossFunction.setCurrentIndex(idx)
 
-        self.doubleSpinBox_weightDecay.setValue(self.config.get("weight_decay", 0.0))
-        self.spinBox_epochs.setValue(self.config.get("number_of_epochs", 0))
-        self.spinBox_batchSize.setValue(self.config.get("batch_size", 0))
-        self.spinBox_saveFrequency.setValue(self.config.get("save_model_frequency", 0))
-        self.spinBox_validationFrequency.setValue(self.config.get("validation_frequency", 0))
-        self.checkBox_earlyStopping.setChecked(self.config.get("early_stopping", False))
-        self.spinBox_patience.setValue(self.config.get("patience", 0))
+        self.doubleSpinBox_weightDecay.setValue(self.site_config.get("weight_decay", 0.0))
+        self.spinBox_epochs.setValue(self.site_config.get("number_of_epochs", 0))
+        self.spinBox_batchSize.setValue(self.site_config.get("batch_size", 0))
+        self.spinBox_saveFrequency.setValue(self.site_config.get("save_model_frequency", 0))
+        self.spinBox_validationFrequency.setValue(self.site_config.get("validation_frequency", 0))
+        self.checkBox_earlyStopping.setChecked(self.site_config.get("early_stopping", False))
+        self.spinBox_patience.setValue(self.site_config.get("patience", 0))
 
-        device = self.config.get("device", "")
+        device = self.site_config.get("device", "")
         idx = self.comboBox_device.findText(device)
         if idx >= 0:
             self.comboBox_device.setCurrentIndex(idx)
 
-        self.lineEdit_segmentation_model_file.setText(self.config.get("segmentation_model_file", ""))
-        self.lineEdit_segmentation_images_folder.setText(self.config.get("segmentation_images_folder", ""))
-        self.checkBox_saveModelMasks.setChecked(self.config.get("save_model_masks", True))
-        self.checkBox_copyOriginalModelImage.setChecked(self.config.get("copy_original_model_image", True))
+        self.lineEdit_segmentation_model_file.setText(self.site_config.get("segmentation_model_file", ""))
+        self.lineEdit_segmentation_images_folder.setText(self.site_config.get("segmentation_images_folder", ""))
+        self.checkBox_saveModelMasks.setChecked(self.site_config.get("save_model_masks", True))
+        self.checkBox_copyOriginalModelImage.setChecked(self.site_config.get("copy_original_model_image", True))
 
-        load_model_conf = self.config.get("load_model", {})
+        load_model_conf = self.site_config.get("load_model", {})
         if load_model_conf:
             model_path = load_model_conf.get("MODEL", "")
             if model_path:
@@ -657,7 +669,7 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
                 self.lineEdit_segmentation_images_folder.setText(input_dir)
                 print("Populated segmentation images folder from JSON (INPUT_DIR):", input_dir)
 
-        self.current_path = self.config.get("Path", None)
+        self.current_path = self.site_config.get("Path", None)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1505,68 +1517,107 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
     def load_config_from_json(self, filepath):
         """
         Load configuration values from a JSON file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the JSON configuration file.
+
+        Returns
+        -------
+        dict
+            Configuration dictionary if file exists and is valid.
+            Empty dict if file does not exist or cannot be loaded.
         """
-        with open(filepath, 'r') as f:
-            config = json.load(f)
-        return config
+        if not os.path.isfile(filepath):
+            print(f"Config file not found: {filepath}")
+            return {}
+
+        try:
+            with open(filepath, "r") as f:
+                config = json.load(f)
+            return config
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from {filepath}: {e}")
+            return {}
+        except Exception as e:
+            print(f"Unexpected error loading config from {filepath}: {e}")
+            return {}
 
     # ------------------------------------------------------------------------------------------------------------------
-    #
     # ------------------------------------------------------------------------------------------------------------------
     def create_custom_json(self):
         """
         Gather all dialog values and create a JSON configuration file.
+        The main structure is site_config, not values.
         """
-        from datetime import datetime
+        settings_folder = Path(GRIME_AI_Save_Utils().get_settings_folder()).resolve()
+        config_file = (settings_folder / "site_config.json").resolve()
 
-        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        CONFIG_FILENAME = "../../site_config.json"
-        config_file = os.path.join(settings_folder, CONFIG_FILENAME)
-        if os.path.exists(config_file):
+        # Backup existing config if present
+        if config_file.exists():
             now_str = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
-            backup_filename = os.path.join(settings_folder, f"{now_str}_{CONFIG_FILENAME}")
-            os.rename(config_file, backup_filename)
-            print(f"Existing {config_file} renamed to {backup_filename}")
+            backup_file = config_file.with_name(f"{now_str}_site_config.json")
+            config_file.rename(backup_file)
+            print(f"Existing {config_file} renamed to {backup_file}")
 
+        # Start with template
+        site_config = self.create_site_config_template()
+
+        # Merge values from controls into site_config
         values = self.get_values()
-        # EMBED NAME OF LABEL TRAINED ON IN SITE NAME
-        values["siteName"] = self.lineEdit_siteName.text()
+        for key, val in values.items():
+            if key in site_config:
+                site_config[key] = val
 
+        # Normalize segmentation images folder
         seg_images_folder = self.lineEdit_segmentation_images_folder.text().strip()
-        if seg_images_folder:
-            seg_images_folder = os.path.abspath(seg_images_folder).replace("\\", "/")
-        else:
-            seg_images_folder = ""
+        seg_images_folder = os.path.abspath(seg_images_folder).replace("\\", "/") if seg_images_folder else ""
 
-        values["load_model"] = {
+        # Add load_model section
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        site_config["load_model"] = {
             "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
             "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
             "INPUT_DIR": seg_images_folder,
-            "OUTPUT_DIR": os.path.join(seg_images_folder, "predictions").replace("\\", "/"),
-            "MODEL": "models/Edgewood_19_0.0001_2004_2040.torch"
+            "OUTPUT_DIR": os.path.normpath(os.path.join(seg_images_folder, f"{timestamp}_predictions")),
+            "MODEL": "",
+            "SEGFORMER_MODEL": "",
+            "TRAINING_CATEGORIES": self.get_selected_training_labels(),
+            "SEGMENTATION_CATEGORIES": self.get_selected_segmentation_labels(),
         }
 
+        # Debug print selected training labels
+        selected_training_labels = self.get_selected_training_labels()
+        for item in selected_training_labels:
+            print(f"Selected label ID: {item['label_id']}, Name: {item['label_name']}")
+
+        # Handle segmentation model path
         seg_model_path = self.lineEdit_segmentation_model_file.text().strip()
         if seg_model_path and seg_model_path.lower().endswith('.torch') and os.path.isfile(seg_model_path):
-            abs_model_path = os.path.abspath(seg_model_path.strip()).replace("\\", "/")
-            values["load_model"]["MODEL"] = abs_model_path
+            abs_model_path = os.path.normpath(seg_model_path.strip())
+            if self.selected_segment_model == "sam2":
+                site_config["load_model"]["MODEL"] = abs_model_path
+            elif self.selected_segment_model == "segformer":
+                site_config["load_model"]["SEGFORMER_MODEL"] = abs_model_path
+            elif self.selected_segment_model == "maskrcnn":
+                site_config["load_model"]["MASKRCNN_MODEL"] = abs_model_path
             print("Updated MODEL path to:", abs_model_path)
         else:
             print("No valid segmentation model file selected; using default MODEL path.")
 
-        root_folder = os.path.abspath(self.lineEdit_model_training_images_path.text().strip()).replace("\\", "/")
+        # Build Path section
+        root_folder = os.path.normpath(os.path.abspath(self.lineEdit_model_training_images_path.text().strip()))
         selected_folders = values.get("selected_folders", [])
         if selected_folders:
             new_folders = []
             new_annotations = []
             for folder in selected_folders:
-                folder_fwd = folder.replace("\\", "/")
-                #JES WE NO LONGER WHAT TO USE THE EXTREMELY LAYERED FOLDER CONVENTION USED BY CVAT
-                #JES new_folders.append(root_folder + "/" + folder_fwd + "/images/default")
-                #JES new_annotations.append(root_folder + "/" + folder_fwd + "/annotations/instances_default.json")
-                new_folders.append(root_folder + "/" + folder_fwd)
-                new_annotations.append(root_folder + "/" + folder_fwd + "/instances_default.json")
-            values["Path"] = [{
+                folder_fwd = os.path.normpath(folder)
+                new_folders = os.path.normpath(os.path.join(root_folder, folder_fwd))
+                new_annotations = os.path.normpath(os.path.join(root_folder, folder_fwd, "instances_default.json"))
+            site_config["Path"] = [{
                 "siteName": "custom",
                 "directoryPaths": {
                     "folders": new_folders,
@@ -1576,15 +1627,124 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             print("Updated Path section from selected folders.")
         else:
             if hasattr(self, "current_path") and self.current_path:
-                values["Path"] = self.current_path
+                site_config["Path"] = self.current_path
                 print("Right listbox is empty; retaining existing Path section from config.")
             else:
-                values["Path"] = []
+                site_config["Path"] = []
                 print("Right listbox is empty and no existing Path data available; setting Path to empty.")
 
+        # Write site_config to file
         with open(config_file, "w") as outfile:
-            json.dump(values, outfile, indent=4)
+            json.dump(site_config, outfile, indent=4)
         print("Custom JSON file 'site_config.json' created successfully.")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_site_config_template(self) -> dict:
+        """
+        Create and return the full empty site_config template.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the site_config template.
+        """
+        site_config = {
+            "siteName": "",
+            "learningRates": [0.0001],
+            "optimizer": "Adam",
+            "loss_function": "IOU",
+            "weight_decay": 0.01,
+            "number_of_epochs": 1,
+            "batch_size": 32,
+            "save_model_frequency": 20,
+            "validation_frequency": 20,
+            "early_stopping": False,
+            "patience": 3,
+            "device": "gpu",
+            "folder_path": "",
+            "available_folders": [],
+            "selected_folders": [],
+            "segmentation_model_file": "",
+            "segmentation_images_folder": "",
+            "save_model_masks": True,
+            "copy_original_model_image": True,
+            "num_clusters": 3,
+            "load_model": {
+                "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
+                "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+                "INPUT_DIR": "",
+                "OUTPUT_DIR": "",
+                "MODEL": "",
+                "SEGFORMER_MODEL": "",
+                "TRAINING_CATEGORIES": [],
+                "SEGMENTATION_CATEGORIES": []
+            },
+            "Path": [
+                {
+                    "siteName": "",
+                    "directoryPaths": {
+                        "folders": [],
+                        "annotations": []
+                    }
+                }
+            ]
+        }
+
+        return site_config
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_selected_training_labels(self):
+        """
+        Fetch the selected training label from comboBox_train_label_selection
+        and return it as a list of dictionaries.
+
+        Each dictionary contains:
+        - "label_id": the parsed ID from the comboBox text
+        - "label_name": the parsed label name
+
+        Returns
+        -------
+        list[dict]
+            A list with one dictionary if selection is valid, else an empty list.
+        """
+        selected_text = self.comboBox_train_label_selection.currentText().strip()
+
+        if "-" not in selected_text:
+            return []  # malformed or empty selection
+
+        label_id, label_name = map(str.strip, selected_text.split("-", 1))
+
+        return [{
+            "label_id": label_id,
+            "label_name": label_name
+        }]
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_selected_segmentation_labels(self):
+        """
+        Return all selected items from listWidget_labels as a list of dictionaries.
+
+        Each dictionary contains:
+        - "label_id": 1-based ordinal position of the item in the listbox
+        - "label_name": text of the item
+
+        Returns
+        -------
+        list[dict]
+            List of dictionaries with selected segmentation labels and their IDs.
+        """
+        selected_items = []
+        for index in range(self.listWidget_labels.count()):
+            item = self.listWidget_labels.item(index)
+            if item.isSelected():
+                selected_items.append({
+                    "label_id": index + 1,
+                    "label_name": item.text()
+                })
+        return selected_items
 
     # ------------------------------------------------------------------------------------------------------------------
     #
