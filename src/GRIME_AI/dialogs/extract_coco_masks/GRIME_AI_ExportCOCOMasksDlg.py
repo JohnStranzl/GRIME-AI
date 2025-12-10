@@ -8,39 +8,39 @@
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
 import os
+
+from GRIME_AI.utils.resource_utils import ui_path
+
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QDialog, QFileDialog
+from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 import promptlib
 
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 
 # ======================================================================================================================
-#
+# ======================================================================================================================
+# ===   ===   ===   ===   ===   ===   ===   class GRIME_AI_ExportCOCOMasksDlg    ===   ===   ===   ===   ===   ===   ===
+# ======================================================================================================================
 # ======================================================================================================================
 class GRIME_AI_ExportCOCOMasksDlg(QDialog):
 
     # SIGNALS
     # ------------------------------------------------------------------------------------------------------------------
-    #fetchImageList_Signal = pyqtSignal(str, int)
     COCO_signal_ok = pyqtSignal()
     COCO_signal_cancel = pyqtSignal()
 
     def __init__(self, parent=None):
-        super(QDialog, self).__init__(parent)
+        super().__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', 'QDialog_ExtractCOCOMasks.ui'), self)
+        loadUi(ui_path("extract_coco_masks/QDialog_ExtractCOCOMasks.ui"), self)
 
         self.annotationImagesFolder = ''
 
-        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        #self.fetchImageList_Signal.connect(parent.fetchImageList)
-
-        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         self.pushButton_BrowseAnnotationImages.clicked.connect(self.pushButton_BrowseAnnotationImagesClicked)
 
         self.lineEdit_AnnotationImagesFolder.textChanged.connect(self.annotation_images_folder_changed)
@@ -50,11 +50,30 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
 
         self.pushButton_BrowseAnnotationImages.setStyleSheet('QPushButton {background-color: steelblue;}')
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def annotation_images_folder_changed(self):
-        self.annotationImagesFolder = self.lineEdit_AnnotationImagesFolder.text()
+        """
+        Called whenever the text in lineEdit_AnnotationImagesFolder changes.
+        Updates self.annotationImagesFolder and populates listWidget_Folders
+        with any subfolders containing an instances_default.json file.
+        """
+        self.annotationImagesFolder = self.lineEdit_AnnotationImagesFolder.text().strip()
 
+        # Clear the listbox first
+        self.listWidget_Folders.clear()
 
+        if not self.annotationImagesFolder or not os.path.isdir(self.annotationImagesFolder):
+            return
+
+        # Walk the directory tree
+        for root, dirs, files in os.walk(self.annotationImagesFolder):
+            if "instances_default.json" in files:
+                # Add the folder path to the list widget
+                self.listWidget_Folders.addItem(root)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def pushButton_BrowseAnnotationImagesClicked(self):
         prompter = promptlib.Files()
 
@@ -69,6 +88,8 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
                 response = msgBox.displayMsgBox()
 
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def accepted(self):
         #msgBox = GRIME_AI_QMessageBox('COCO Error', 'No files or no supported files types in folder.')
         #msgBox.displayMsgBox()
@@ -84,12 +105,15 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
             self.COCO_signal_cancel.emit()
             super().reject()
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def rejected(self):
         #super(GRIME_AI_ExportCOCOMasksDlg, self).closeEvent(event)
         self.COCO_signal_cancel.emit()
         super().reject()
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     @pyqtSlot()
     def image_folder_changed(self):
         pass
@@ -97,13 +121,20 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
         #image_folder = self.lineEditImageFolder.text()
         #JsonEditor().update_json_entry("Local_Image_Folder", image_folder)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def getAnnotationImagesFolder(self):
-        return self.annotationImagesFolder
+        """
+        Return a list of all folder paths currently in listWidget_Folders.
+        """
+        folders = []
+        for i in range(self.listWidget_Folders.count()):
+            folders.append(self.listWidget_Folders.item(i).text())
 
+        return folders
 
-    # --------------------------------------------------
-    #
-    # --------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def pushButtonBrowseSaveImagesOutputFolderClicked(self):
         prompter = promptlib.Files()
         folder = prompter.dir()
@@ -111,9 +142,8 @@ class GRIME_AI_ExportCOCOMasksDlg(QDialog):
         if os.path.exists(folder):
             self.EditSaveImagesOutputFolder(prompter.dir())
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def setImageFolderPath(self, image_folder):
         self.lineEditImageFolder.setText(image_folder)
-
-
 

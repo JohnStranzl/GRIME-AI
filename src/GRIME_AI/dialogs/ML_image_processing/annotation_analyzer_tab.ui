@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AnnotationAnalyzerTab</class>
+ <widget class="QWidget" name="tabAnnotationAnalyzer">
+  <attribute name="title">
+   <string>Annotation Analyzer</string>
+  </attribute>
+  <layout class="QVBoxLayout" name="verticalMainLayout">
+
+   <!-- Root folder selector -->
+   <item>
+    <layout class="QHBoxLayout" name="horizontalFolderSelectorLayout">
+     <item>
+      <widget class="QLineEdit" name="lineEdit_annotation_root_path">
+       <property name="placeholderText">
+        <string>Enter root folder path...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_browse_annotation_root_folder">
+       <property name="text">
+        <string>Browse</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Available / Buttons / Selected -->
+   <item>
+    <layout class="QHBoxLayout" name="horizontalListLayout">
+
+     <!-- Available -->
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout_available">
+       <item>
+        <widget class="QLabel" name="label_availableJsons">
+         <property name="text">
+          <string>Available Annotation JSONs</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="listWidget_availableJsons">
+         <property name="selectionMode">
+          <enum>QAbstractItemView::ExtendedSelection</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
+     <!-- Buttons -->
+     <item>
+      <layout class="QVBoxLayout" name="verticalButtonsLayout">
+       <item>
+        <widget class="QPushButton" name="pushButton_moveRight">
+         <property name="text">
+          <string>Move to Right</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_moveLeft">
+         <property name="text">
+          <string>Move to Left</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_reset">
+         <property name="text">
+          <string>Reset</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
+     <!-- Selected -->
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout_selected">
+       <item>
+        <widget class="QLabel" name="label_selectedJsons">
+         <property name="text">
+          <string>Selected Annotation JSONs</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="listWidget_selectedJsons"/>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Analysis Options Group Box -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_analysisOptions">
+     <property name="title">
+      <string>Analysis Options</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalAnalysisLayout">
+
+      <!-- Analyze button -->
+      <item>
+       <widget class="QPushButton" name="pushButton_analyze">
+        <property name="text">
+         <string>Analyze</string>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>30</height>
+         </size>
+        </property>
+  <property name="styleSheet">
+   <string notr="true">background-color: steelblue; color: white; font: bold 10pt;</string>
+  </property>       </widget>
+      </item>
+
+      <!-- Spacer between Analyze and Dice -->
+      <item>
+       <spacer name="spacer_between_analyze_and_dice">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>30</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+
+      <!-- Checkboxes -->
+      <item>
+       <widget class="QCheckBox" name="checkBox_calculateDice">
+        <property name="text">
+         <string>Calculate Dice</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="checkBox_calculateIoU">
+        <property name="text">
+         <string>Calculate IoU</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="checkBox_generateVisuals">
+        <property name="text">
+         <string>Generate Visuals</string>
+        </property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

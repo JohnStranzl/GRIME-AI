@@ -38,6 +38,15 @@
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
+try:
+    # TRY TO IMPORT THE VERSION CONSTANT FROM VERSION.PY
+    from GRIME_AI.version import SW_VERSION
+except ImportError:
+    # FALLBACK IF VERSION.PY DOES NOT EXIST. 0.0.0.0 IS AN INVALID VERSION NUMBER
+    SW_VERSION = "Ver. 0.0.0.0"
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 import logging
 
 # Optional: set up logging so you can track initialization
@@ -109,14 +118,15 @@ except Exception:
 
 
 import os
-os.environ['R_HOME'] = 'C:/Program Files/R/R-4.4.1'
-#os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
+# Must be set before Hydra starts to get the full stack trace if an error occurs.
+# This works programmtically in case the user does not have privileges to modify their operating system environment
+# because it only modifies the environment of the current Python process and its children.
+os.environ["HYDRA_FULL_ERROR"] = "1"
+
 import sys
 import argparse
 import shutil
 import getpass
-from pathlib import Path
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -124,182 +134,132 @@ import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+def excepthook(exc_type, exc_value, exc_tb):
+    print("Uncaught exception:")
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+
+sys.excepthook = excepthook
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
 import datetime
 from datetime import date
-#from datetime import datetime
 import time
-from time import sleep
 
-import pandas as pd
-
-import math
 import csv
 
-import requests
 import urllib.request
-from configparser import ConfigParser
-from urllib.request import urlopen
-#import chromedriver_autoinstaller
 
 import promptlib
 
-import cv2
-
 import traceback
 
-# ------------------------------------------------------------
-# WHERE THE BITS MEET THE DIGITAL ROAD
-# ------------------------------------------------------------
-'''
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+from dataclasses import dataclass
 
-import torch
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-'''
+from GRIME_AI.utils.resource_utils import icon_path
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QCheckBox, QDateTimeEdit, \
-    QGraphicsScene, QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
+    QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QTreeWidgetItem
 
-from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
+from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
+import pandas as pd
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+import sobelData
 
-from GRIME_AI.sobelData import sobelData
-
+from usgs.client import USGSClient
 
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
-from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
-from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
-from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
-from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
-from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
-from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
-from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
-from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
-from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
-from GRIME_AI.GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices
-from GRIME_AI.GRIME_AI_Vegetation_Indices import GreennessIndex
-from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+from dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
+from dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
+from dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
+from dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
+from dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+from dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
+from GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
+from dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
+from dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
+from GRIME_AI_Color import GRIME_AI_Color
+from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
+from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
+from dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
+from dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+from GRIME_AI_JSON_Editor import JsonEditor
+from GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
+from GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
+from GRIME_AI_ImageData import imageData
+from dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+from phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
+from GRIME_AI_ProductTable import GRIME_AI_ProductTable
+from GRIME_AI_QLabel import DrawingMode
+from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
+from GRIME_AI_QProgressWheel import QProgressWheel
+from GRIME_AI_Utils import GRIME_AI_Utils
+from GRIME_AI_roiData import GRIME_AI_roiData, ROIShape
+from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
+from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
+from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
+from GRIME_AI_GreenImageGenerator import GreenImageGenerator
+from GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
+from phenocam.GRIME_AI_Phenocam_API import GRIME_AI_Phenocam_API
 
-from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+from colorSegmentationParams import colorSegmentationParamsClass
 
-from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
+#from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
-from GRIME_AI.GRIME_AI_ImageData import imageData
-from GRIME_AI.GRIME_AI_ImageStats import GRIME_AI_ImageStats
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam
-from GRIME_AI.GRIME_AI_PhenoCam import dailyList
-from GRIME_AI.GRIME_AI_ProductTable import GRIME_AI_ProductTable
-from GRIME_AI.GRIME_AI_QLabel import DrawingMode
-from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
-from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
-from GRIME_AI.GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_AI.GRIME_AI_roiData import GRIME_AI_roiData
-from GRIME_AI.GRIME_AI_roiData import ROIShape
-
-from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
-from GRIME_AI.GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
-
-from GRIME_AI.GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
-from GRIME_AI.GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
-
-#from GRIME_AI import GRIME_AI_DeepLearning
-
-from GRIME_AI.colorSegmentationParams import colorSegmentationParamsClass
-from GRIME_AI.GRIME_AI_GreenImageGenerator import GreenImageGenerator
-
-from GRIME_AI.GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
-
+from geomaps.google_maps_viewer import GoogleMapWidget
+from geomaps.openstreetmap_viewer import OpenStreetMapWidget
 
 # ----------------------------------------------------------------------------------------------------------------------
 # HYDRA (for SAM2)
 # ----------------------------------------------------------------------------------------------------------------------
 import hydra
-from hydra import initialize, compose, initialize_config_dir
+from hydra import initialize, compose
 from omegaconf import OmegaConf, DictConfig
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+from neon.NEON_API import NEON_API
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.NEON_API import NEON_API
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.USGS_NIMS import USGS_NIMS
-
+from constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.chrome_driver import *
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-import GRIME_AI.constants as constants
-from GRIME_AI.constants import edgeMethodsClass, featureMethodsClass, modelSettingsClass
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.exifData import EXIFData
+from exifData import EXIFData
 
 # import GRIME_AI_KMeans
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.ML_SAM import ML_SAM
-from GRIME_AI.ML_Load_Model import ML_Load_Model
-from GRIME_AI.ML_view_segmentation_object import ML_view_segmentation_object
+from ml_core.ml_model_training import MLModelTraining
+from ml_core.ml_image_segmentation import MLImageSegmentation
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-global full
-full = 1
+from neonAIgui import Ui_MainWindow
 
-if full == 1:
-    from GRIME_AI.neonAIgui import Ui_MainWindow
-elif full == 2:
-    from GUIs.GRIMe_AIDownloadManager import Ui_MainWindow
-elif full == 3:
-    from GUIs.guiTesting import Ui_MainWindow
-elif full == 4:
-    from GRIME_AI.GRIME_AI_NSF import Ui_MainWindow
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+from pathlib import Path
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 global bStartupComplete
 bStartupComplete = False
 
@@ -308,7 +268,6 @@ bShow_GUI = False
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-# import tensorflow as tf
 try:
     import torch
     print(torch.__version__)
@@ -328,65 +287,16 @@ except ImportError as e:
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-#sys.path.append(os.path.join(os.path.dirname(__file__), 'sam2'))
-#import sam2
-#from sam2.build_sam import build_sam2
-#from sam2.sam2_image_predictor import SAM2ImagePredictor
-#from sam2.modeling import sam2_base
-#print(sam2_base.__file__)
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-if 0:
-    from hydra import initialize_config_module
-    from hydra.core.global_hydra import GlobalHydra
-
-    if not GlobalHydra.instance().is_initialized():
-        initialize_config_module("sam2", version_base="1.2")
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
 import os
 import cv2
 import numpy as np
-import pandas as pd
-from pycocotools.coco import COCO
-from pycocotools import mask as maskUtils
-from pycocotools import mask as coco_mask
 
-
-# from tensorflow.python.client import device_lib as dev_lib
-
-
-# ------------------------------------------------------------
-# Get the base directory
-# ------------------------------------------------------------
-if 0:
-    if getattr(sys, 'frozen', None):  # keyword 'frozen' is for setting basedir while in onefile mode in pyinstaller
-        basedir = sys._MEIPASS
-    else:
-        basedir = os.path.dirname(__file__)
-        basedir = os.path.normpath(basedir)
-
-    # Locate the SSL certificate for requests
-    os.environ['REQUESTS_CA_BUNDLE'] = os.path.join(basedir, 'requests', 'cacert.pem')
-
-
+# ======================================================================================================================
+#
+# ======================================================================================================================
 SITECODE = 'ARIK'
 DOMAINCODE = 'D10'
 originalImg = []
@@ -410,8 +320,6 @@ url = 'https://www.neonscience.org/field-sites/explore-field-sites'
 root_url = 'https://www.neonscience.org'
 SERVER = 'http://data.neonscience.org/api/v0/'
 
-SW_VERSION = "Ver. 1.0.0.5"
-
 class displayOptions():
     displayROIs = True
 
@@ -423,55 +331,6 @@ g_modelSettings = modelSettingsClass()
 
 hyperparameterDlg = None
 
-# ==================================================================================================================
-#
-# ==================================================================================================================
-class SAM2FullModel(torch.nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.image_encoder = model.forward_image
-        self._prepare_backbone_features = model._prepare_backbone_features
-        self.directly_add_no_mem_embed = model.directly_add_no_mem_embed
-        self.no_mem_embed = model.no_mem_embed
-        self.prompt_encoder = model.sam_prompt_encoder
-        self.mask_decoder = model.sam_mask_decoder
-        self._bb_feat_sizes = [(256, 256), (128, 128), (64, 64)]
-
-    def forward(self, image, point_coords, point_labels):
-        backbone_out = self.image_encoder(image)
-        _, vision_feats, _, _ = self._prepare_backbone_features(backbone_out)
-        if self.directly_add_no_mem_embed:
-            vision_feats[-1] = vision_feats[-1] + self.no_mem_embed
-        feats = [feat.permute(1, 2, 0).view(1, -1, *feat_size) for feat, feat_size in
-                 zip(vision_feats[::-1], self._bb_feat_sizes[::-1])][::-1]
-        features = {"image_embed": feats[-1], "high_res_feats": feats[:-1]}
-        high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in features["high_res_feats"]]
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(points=(point_coords, point_labels), boxes=None,
-                                                                  masks=None)
-        low_res_masks, iou_predictions, _, _ = self.mask_decoder(
-            image_embeddings=features["image_embed"][-1].unsqueeze(0),
-            image_pe=self.prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=True,
-            repeat_image=point_coords.shape[0] > 1,
-            high_res_features=high_res_features,
-        )
-        out = {"low_res_masks": low_res_masks, "iou_predictions": iou_predictions}
-        return out
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-class MplCanvas(FigureCanvas):
-
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
-        super(MplCanvas, self).__init__(fig)
-
-
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -480,9 +339,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     yStart = 0
     roiList = []
     imageStatsList = []
-
-    #os.environ[str('R_HOME')] = str('C:/Program Files/R/R-4.4.1')
-    print(os.environ.get('R_HOME'))
 
     # INITIALIZE POP-UP DIALOG BOXES
     fileFolderDlg        = None
@@ -501,7 +357,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     global dailyImagesList
     dailyImagesList = dailyList([], [])
 
+    NEON_siteList = []
     NEON_latestImage = []
+
+
     USGS_latestImage = []
 
     # def eventFilter(self, source, event):
@@ -516,7 +375,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     # ------------------------------------------------------------------------------------------------------------------
-    #
     # ------------------------------------------------------------------------------------------------------------------
     def resizeEvent(self, event):
 
@@ -584,17 +442,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         # DISPLAY SPLASH SCREEN
         # ------------------------------------------------------------------------------------------------------------------
-        splash = GRIME_AI_SplashScreen(QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)),'SplashScreen Images','Splash_007.jpg')), strVersion=SW_VERSION)
-        splash.show(self)
-        splash = GRIME_AI_SplashScreen(QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)),'SplashScreen Images','GRIME-AI Logo.jpg')), delay=5)
+        base_path = Path(__file__).resolve().parent
+        splash_dir = base_path / "resources" / "splash_screens"
+
+        splash = GRIME_AI_SplashScreen(
+            QPixmap(os.path.join(splash_dir, "Splash_007.jpg")),
+            strVersion=SW_VERSION
+        )
         splash.show(self)
 
+        splash = GRIME_AI_SplashScreen(
+            QPixmap(os.path.join(splash_dir, "GRIME-AI Logo.jpg")),
+            delay=5
+        )
+        splash.show(self)
 
         # ------------------------------------------------------------------------------------------------------------------
         # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
         # ------------------------------------------------------------------------------------------------------------------
         utils = GRIME_AI_Utils()
-        utils.create_GRIME_folders(full)
+        utils.create_GRIME_folders()
 
         self.populate_controls()
 
@@ -604,7 +471,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.scaler = GradScaler()
 
         # ----------------------------------------------------------------------------------------------------
-        #
         # ----------------------------------------------------------------------------------------------------
         #JES file_utils = GRIME_AI_Save_Utils()
         #JES file_utils.read_config_file()
@@ -620,7 +486,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
         # ----------------------------------------------------------------------------------------------------
-        #
         # ----------------------------------------------------------------------------------------------------
         self.greenness_index_list = []
         self.colorSegmentationParams = colorSegmentationParamsClass()
@@ -688,6 +553,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         # USGS
         # ------------------------------------------------------------------------------------------------------------------
+        self.usgs = USGSClient()
+        self.usgs.initialize()
         self.USGS_listboxSites.itemClicked.connect(self.USGS_SiteClicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
@@ -695,12 +562,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # NIMS
         # ------------------------------------------------------------------------------------------------------------------
         try:
-            self.myNIMS = USGS_NIMS()
+            from usgs.shim import USGS_NIMS_Shim
 
-            cameraDictionary = self.myNIMS.get_camera_dictionary()
-            cameraList = self.myNIMS.get_camera_list()
+            self.myNIMS = USGS_NIMS_Shim()
+            self.cameraDictionary = self.myNIMS.get_camera_dictionary()
+            self.cameraList = self.myNIMS.get_camera_list()
             self.USGS_listboxSites.clear()
-            self.USGS_listboxSites.addItems(cameraList)
+            self.USGS_listboxSites.addItems(self.cameraList)
+
             self.USGS_listboxSites.show()
 
             cameraIndex = 1
@@ -750,16 +619,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # if frame.checkBoxNEONSites.isChecked():
         print("Download NEON Field Site Table from NEON website...")
         myNEON_API = NEON_API()
-        _, siteList = myNEON_API.readFieldSiteTable()
+        _, self.NEON_siteList = myNEON_API.readFieldSiteTable()
 
-        if len(siteList) == 0:
+        if len(self.NEON_siteList) == 0:
             print("NEON Field Site Table from NEON website FAILED...")
         # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
             print("Populate NEON Products tab on GUI...")
             myList = []
 
-            for site in siteList:
+            for site in self.NEON_siteList:
                 strSiteName = site.siteID + ' - ' + site.siteName
                 myList.append(strSiteName)
 
@@ -775,6 +644,182 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.show()
 
+        try:
+            self.phenocam_site_dictionary = myNEON_API.scrape_phenocam_table()
+        except:
+            print('ERROR: Unable to access Phenocam site information on Phenocam server!')
+
+        ###JES - USING OPENSTREENMAP INSTEAD OF GOOLE TO AVOID PAYING A FEE TO GOOGLE.
+        #self.init_google_maps(self.cameraDictionary)
+
+        #geojson_str = self.shapefile_to_geojson_string(shapefile_path)
+        geojson_str = None
+        self.init_openstreetmap(self.cameraDictionary, redList=self.NEON_siteList, geojson_str=geojson_str)
+
+        shapefile_path = self.osm_widget.load_shapefile("Ogallala", "NE_Aggregated_polygons.shp")
+
+        if self.cameraDictionary:
+            for name, coords in self.cameraDictionary.items():
+                self.osm_widget.add_pin(coords["lat"], coords["lng"], color="usgs_green", label=name)
+
+        if self.phenocam_site_dictionary:
+            for site_id, info in self.phenocam_site_dictionary.items():
+                self.osm_widget.add_pin(info["lat"], info["lon"], color="yellow", label=site_id)
+
+        if self.NEON_siteList:
+            for coords in self.NEON_siteList:
+                self.osm_widget.add_pin(coords.latitude, coords.longitude, color="gold", label=coords.siteName)
+
+        # IF THE PHENCOCAM SITE DICTIONARY IS NOT EMPTY, THEN POPULATE THE TREE WIDGET ON THE MAIN GRIME AI CANVAS.
+        # OTHERWISE, THE ASSUMPTION IS THAT THE PHENOCAM SERVER IS INACCESSIBLE/OFFLINE.
+        if self.phenocam_site_dictionary:
+            self.populate_phenocam_tree()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def init_openstreetmap(self, cameraDictionary, redList=None, geojson_str=None):
+        osm_tab = self.findChild(QWidget, "tab_GoogleMaps")
+
+        self.osm_widget = OpenStreetMapWidget(parent=osm_tab)
+
+        layout = QVBoxLayout(osm_tab)
+        layout.addWidget(self.osm_widget)
+
+        # POPULATE THE MAP WITH PINS FOR USGS HIVIS CAMERA SITES
+        for name, coords in self.cameraDictionary.items():
+            self.osm_widget.add_pin(coords["lat"], coords["lng"], color="usgs_green", label=name)
+
+        # POPULATE THE MAP WITH PINS FOR PHENOCAM CAMERA SITES REFERENCED BY NEON
+        for site_id, info in self.phenocam_site_dictionary.items():
+            self.osm_widget.add_pin(info["lat"], info["lon"], color="gold", label=site_id)
+
+        # POPULATE THE MAP WITH PINS FOR PHENOCAM CAMERA SITES REFERENCED BY NEON
+        for coords in self.NEON_siteList:
+            self.osm_widget.add_pin(coords.latitude, coords.longitude, color="yellow")
+
+        # ADD A PIN FOR FLAGSTAFF, AZ WHERE NORTHERN ARIZONA UNIVERSITY IS LOCATED.
+        self.osm_widget.add_pin(35.1878, -111.6528, color="blue", label="Northern Arizona University")
+
+        # CENTER MAP ON LINCOLN, NE WHERE THE UNIVERSITY OF NEBRASKA-LINCOLN IS LOCATED.
+        self.osm_widget.set_center(40.8136, -96.7026, zoom=12, add_marker=True, label="Lincoln, NE", color="red")
+
+    def populate_phenocam_tree(self):
+        """
+        Populate the Phenocam tree widget with sites (roots) and camera-like children
+        based on available columns in the current DataFrame schema.
+        """
+        api = GRIME_AI_Phenocam_API()
+        cameras_df = api.get_cameras(all_records=True)
+
+        # Preserve your schema but also create lowercase aliases for robust access
+        cols_lower = {c.lower(): c for c in cameras_df.columns}
+
+        def has(col):
+            return col in cameras_df.columns
+
+        def get_col(*candidates):
+            for c in candidates:
+                if c in cameras_df.columns:
+                    return c
+            return None
+
+        # Pick site column (prefer your capitalized 'Sitename' if present)
+        site_col = get_col("Sitename", "sitename")
+        if cameras_df.empty or site_col is None:
+            print("Camera data missing expected site column.")
+            return
+
+        # Choose a child label column from what's available
+        # Priority: camera_description, camera_orientation, active, date_first/date_last
+        child_label_col = get_col("sitemetadata.camera_description",
+                                  "sitemetadata.camera_orientation")
+        # Optional extra detail to append
+        extra_detail_cols = [c for c in [
+            get_col("active", "infrared"),
+            get_col("date_first"),
+            get_col("date_last")
+        ] if c is not None]
+
+        # Clear existing items
+        self.treeWidget_Phenocam.clear()
+
+        # Group by site and create nodes
+        for site_name, group in cameras_df.groupby(site_col):
+            site_item = QTreeWidgetItem([str(site_name)])
+
+            # If we have a descriptive child column, create one child per row; else, add a single child
+            if child_label_col is not None:
+                for _, row in group.iterrows():
+                    label = str(row.get(child_label_col, site_name))
+                    # Append extra details in a readable way
+                    details = []
+                    for col in extra_detail_cols:
+                        val = row.get(col)
+                        if pd.notna(val):
+                            details.append(f"{col}:{val}")
+                    child_text = label if not details else f"{label}  ({', '.join(details)})"
+                    camera_item = QTreeWidgetItem([child_text])
+                    site_item.addChild(camera_item)
+            else:
+                # No explicit child label available—add a single placeholder child per site
+                camera_item = QTreeWidgetItem([str(site_name)])
+                site_item.addChild(camera_item)
+
+            self.treeWidget_Phenocam.addTopLevelItem(site_item)
+
+        self.treeWidget_Phenocam.expandAll()
+
+        ###JES - THIS INTERACTION WITH THE PHENOCAM SERVERS TAKES ON THE ORDER OF 4 MINUTES; SO I
+        if 0:
+            print("START: Phenocam Meta Data Export...")
+            api.export_all_to_excel(output_dir=GRIME_AI_Save_Utils().get_phenocam_folder())
+            print("COMPLETED: Phenocam Meta Data Export.")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _usgs_progress(self, idx: int, total: int, label: str | None) -> None:
+        """Progress callback for USGSClient operations."""
+        if not hasattr(self, "_usgsProgress"):
+            self._usgsProgress = QProgressWheel(self)
+            self._usgsProgress.setRange(0, total)
+            self._usgsProgress.setWindowTitle("USGS Operation")
+            self._usgsProgress.show()
+
+        self._usgsProgress.setMaximum(total)
+        self._usgsProgress.setValue(idx)
+
+        if label:
+            self._usgsProgress.setWindowTitle(str(label))
+
+        # Clean up when finished
+        if idx >= total:
+            self._usgsProgress.close()
+            del self._usgsProgress
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def init_google_maps(self, cameraDictionary):
+        google_tab = self.findChild(QWidget, "tab_GoogleMaps")
+        self.google_maps_widget = GoogleMapWidget(cameraDictionary, parent=google_tab)
+
+        layout = QVBoxLayout(google_tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.google_maps_widget)
+        google_tab.setLayout(layout)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def shapefile_to_geojson_string(self, shapefile_path):
+        import geopandas as gpd
+
+        gdf = gpd.read_file(shapefile_path)
+        gdf = gdf.to_crs(epsg=4326)  # ensure WGS84
+        geojson_str = gdf.to_json()  # returns a JSON string
+        return geojson_str
 
     def siteInfoTooltip(self):
         """
@@ -832,10 +877,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             if len(self.roiList) > 0:
                 # DIAGNOSTICS
-                if self.checkBoxColorDiagnostics.checkState():
-                    GRIME_AI_Diagnostics.RGB3DPlot(rgb)
-                    GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
-                    GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
+                #if self.checkBoxColorDiagnostics.checkState():
+                GRIME_AI_Diagnostics.RGB3DPlot(rgb)
+                GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
+                GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
 
                 # segment colors
                 rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
@@ -878,94 +923,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
     # ------------------------------------------------------------------------------------------------------------------
     def createToolBar(self):
-        #--- CREATE EMPTY TOOLBAR
         toolbar = QToolBar("GRIME-AI Toolbar")
         self.addToolBar(toolbar)
         toolbar.setIconSize(QtCore.QSize(48, 48))
 
-        parent_path = Path(__file__).parent
-        print("Toolbar Initialization: Parent path of executable: ", parent_path)
+        parent_path = os.path.abspath(os.path.dirname(__file__))
+        icons_dir = os.path.join(parent_path, "resources", "toolbar_icons")
+        print("Toolbar Initialization: Icons directory:", icons_dir)
 
-        #--- COLOR SEGMENTATION
-        icon_path = os.path.normpath(str(parent_path / "icons/FileFolder_1.png"))
-        button_action = QAction(QIcon(icon_path), "Data Exploration", self)
-        button_action.setStatusTip("Select input and output folder locations")
-        button_action.triggered.connect(self.onMyToolBarFileFolder)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: File folder icon path: ", icon_path)
+        # Define all toolbar buttons in one place
+        buttons = [
+            ("FileFolder_1.png", "Data Exploration",
+             "Select input and output folder locations", self.onMyToolBarFileFolder),
+            ("Triage_2.png", "Image Triage",
+             "Move images that are of poor quality", self.toolbarButtonImageTriage),
+            ("ImageNav_3.png", "Image Navigation",
+             "Navigate (scroll) through images", self.onMyToolBarImageNavigation),
+            ("Mask.png", "Create Masks",
+             "Draw polygons to create image masks", self.onMyToolBarCreateMask),
+            ("ColorWheel_4.png", "Color Segmentation",
+             "Create ROIs to segment regions by color", self.onMyToolBarColorSegmentation),
+            ("EdgeFilters_2.png", "Edge and Feature Detection",
+             "Edge Detection Filters", self.toolbarButtonEdgeDetection),
+            ("Settings_1.png", "Settings",
+             "Change options and settings", self.onMyToolBarSettings),
+            ("Green Brain Icon.png", "Deep Learning",
+             "Deep Learning - EXPERIMENTAL", self.menubar_CreateJSON),
+            ("grime2_StopSign.png", "GRIME2",
+             "GRIME2 - Water Level Measurement", self.toolbarButtonGRIME2),
+            ("Help_2.png", "Help",
+             "Help and Release Notes", self.toolbarButtonReleaseNotes),
+        ]
 
-        #--- IMAGE TRIAGE
-        icon_path = os.path.normpath(str(parent_path / "icons/Triage_2.png"))
-        button_action = QAction(QIcon(icon_path), "Image Triage", self)
-        button_action.setStatusTip("Move images that are of poor quality")
-        button_action.triggered.connect(self.toolbarButtonImageTriage)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Triage icon path: ", icon_path)
-
-        #--- MASK EDITOR
-        icon_path = os.path.normpath(str(parent_path / "icons/ImageNav_3.png"))
-        button_action = QAction(QIcon(icon_path), "Image Navigation", self)
-        button_action.setStatusTip("Navigate (scroll) through images")
-        button_action.triggered.connect(self.onMyToolBarImageNavigation)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Image Navigation icon path: ", icon_path)
-
-        #--- IMAGE NAVIGATION
-        icon_path = os.path.normpath(str(parent_path / "icons/Mask.png"))
-        button_action = QAction(QIcon(icon_path), "Create Masks", self)
-        button_action.setStatusTip("Draw polygons to create image masks")
-        button_action.triggered.connect(self.onMyToolBarCreateMask)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Create Masks icon path: ", icon_path)
-
-        #--- COLOR SEGMENTATION
-        icon_path = os.path.normpath(str(parent_path / "icons/ColorWheel_4.png"))
-        button_action = QAction(QIcon(icon_path), "Color Segmentation", self)
-        button_action.setStatusTip("Create ROIs to segment regions by color")
-        button_action.triggered.connect(self.onMyToolBarColorSegmentation)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Color Segmentation icon path: ", icon_path)
-
-        #--- EDGE FILTERS
-        icon_path = os.path.normpath(os.path.normpath(str(parent_path / "icons/EdgeFilters_2.png")))
-        button_action = QAction(QIcon(icon_path), "Edge and Feature Detection", self)
-        button_action.setStatusTip("Edge Detection Filters")
-        button_action.triggered.connect(self.toolbarButtonEdgeDetection)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Edge and Feature Detection icon path: ", icon_path)
-
-        #--- SETTINGS
-        icon_path = os.path.normpath(str(parent_path / "icons/Settings_1.png"))
-        icon_path = os.path.normpath(icon_path)
-        button_action = QAction(QIcon(icon_path), "Settings", self)
-        button_action.setStatusTip("Change options and settings")
-        button_action.triggered.connect(self.onMyToolBarSettings)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Settings icon path: ", icon_path)
-
-        #--- DEEP LEARNING
-        icon_path = os.path.normpath(str(parent_path / "icons/Green Brain Icon.png"))
-        button_action = QAction(QIcon(icon_path), "Deep Learning", self)
-        button_action.setStatusTip("Deep Learning - EXPERIMENTAL")
-        button_action.triggered.connect(self.menubar_CreateJSON)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Deep Learning (brain) icon path: ", icon_path)
-
-        #--- GRIME2
-        icon_path = os.path.normpath(str(parent_path / "icons/grime2_StopSign.png"))
-        button_action = QAction(QIcon(icon_path), "GRIME2", self)
-        button_action.setStatusTip("GRIME2 - Water Level Measurement")
-        button_action.triggered.connect(self.toolbarButtonGRIME2)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: GRIME2 icon path: ", icon_path)
-
-        #--- HELP
-        icon_path = os.path.normpath(str(parent_path / "icons/Help_2.png"))
-        button_action = QAction(QIcon(icon_path), "Help", self)
-        button_action.setStatusTip("Help and Release Notes")
-        button_action.triggered.connect(self.toolbarButtonReleaseNotes)
-        toolbar.addAction(button_action)
-        print("Toolbar Initialization: Help icon path: ", icon_path)
+        # Generic creation loop
+        for filename, text, tip, slot in buttons:
+            icon_file = icon_path("toolbar_icons", filename)
+            action = QAction(QIcon(icon_file), text, self)
+            action.setStatusTip(tip)
+            action.triggered.connect(slot)
+            toolbar.addAction(action)
+            print(f"Toolbar Initialization: {text} icon path: {icon_file}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -1032,6 +1029,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception:
             gProcessClick = 0
 
+        print("NEON site selection complete.")
+
     # ------------------------------------------------------------------------------------------------------------------
     # UPDATE NEON SITE PRODUCT INFORMATION
     # ------------------------------------------------------------------------------------------------------------------
@@ -1049,9 +1048,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # PROCESS USGS DOWNLOAD MANAGER ACTIONS
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    # ======================================================================================================================
+    # ==================================================================================================================
     #
-    # ======================================================================================================================
+    # ==================================================================================================================
     def USGS_InitProductTable(self):
         # HEADER TITLES
         headerList = ['Site', 'Image Count', ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
@@ -1185,31 +1184,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ======================================================================================================================
     def USGS_updateSiteInfo(self, item):
+        currentRow = self.USGS_listboxSites.currentRow()
+        if currentRow < 0:
+            return
 
-        cameraIndex = self.USGS_listboxSites.currentRow()
-        if (cameraIndex >= 0):
-            strCamID    = self.USGS_listboxSites.currentItem().text()
+        strCamID = self.USGS_listboxSites.currentItem().text()
 
-            currentRow = self.USGS_listboxSites.currentRow()
+        try:
+            # Update site info listbox
+            self.listboxUSGSSiteInfo.clear()
+            self.listboxUSGSSiteInfo.addItems(
+                self.usgs.get_camera_info_lines(strCamID)
+            )
+            self.USGS_listboxSites.setCurrentRow(currentRow)
 
-            try:
-                self.listboxUSGSSiteInfo.clear()
-                self.listboxUSGSSiteInfo.addItems(self.myNIMS.get_camera_info(strCamID))
-                self.USGS_listboxSites.setCurrentRow(currentRow)
+            # Latest image
+            code, pix = self.usgs.get_latest_pixmap(strCamID)
+            if code == 404 or pix is None:
+                self.USGS_labelLatestImage.setText("No Images Available")
+            else:
+                self.USGS_labelLatestImage.setPixmap(
+                    pix.scaled(self.USGS_labelLatestImage.size(),
+                               QtCore.Qt.KeepAspectRatio,
+                               QtCore.Qt.SmoothTransformation))
 
-                siteName = self.myNIMS.get_camId()
+            # Update table
+            self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
 
-                nErrorCode, self.USGS_latestImage = self.myNIMS.get_latest_image(siteName)
-
-                if nErrorCode == 404:
-                    self.USGS_labelLatestImage.setText("No Images Available")
-                else:
-                    self.USGS_labelLatestImage.setPixmap(self.USGS_latestImage.scaled(self.USGS_labelLatestImage.size(),
-                                                                                     QtCore.Qt.KeepAspectRatio,
-                                                                                     QtCore.Qt.SmoothTransformation))
-                self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
-            except Exception:
-                pass
+        except Exception as e:
+            print("Error in USGS_updateSiteInfo:", e)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1614,9 +1617,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             saveFolder = os.path.join(downloadsFilePath, "Images")
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
-            self.myNIMS.download_images(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
 
-            saveFolder = os.path.join(downloadsFilePath, "Data")
+            ###JES self.myNIMS.download_images(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            downloaded, missing = self.usgs.download_images(
+                site,
+                startDate,
+                endDate,
+                startTime,
+                endTime,
+                saveFolder,
+                progress=self._usgs_progress  # <-- new: hook for your QProgressWheel
+            )
+
+            saveFolder = os.path.join(downloadsFilePath, "../../data")
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
             self.myNIMS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
@@ -1656,6 +1669,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return None
         '''
 
+        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+        CONFIG_FILENAME = "site_config.json"
+        site_configuration_file = os.path.normpath(os.path.join(settings_folder, CONFIG_FILENAME))
+
         hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
 
         hyperparameterDlg.ml_train_signal.connect(train_main)
@@ -1666,11 +1683,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         hyperparameterDlg.finished.connect(closehyperparameterDlg)
 
-        settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
-        CONFIG_FILENAME = "site_config.json"
-        site_configuration_file = os.path.normpath(os.path.join(settings_folder, CONFIG_FILENAME))
-        config = hyperparameterDlg.load_config_from_json(site_configuration_file)
-        hyperparameterDlg.initialize_dialog_from_config(config)
+        #config = hyperparameterDlg.load_config_from_json(site_configuration_file)
+        #hyperparameterDlg.initialize_dialog_from_config(config)
 
         # Show the dialog and capture user response.
         if hyperparameterDlg.exec_() == QDialog.Accepted:
@@ -1748,19 +1762,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.compositeSliceDlg.show()
 
-
     def generateCompositeSlices(self):
         print("Generating composite slices image(s)...")
 
         global imageFileFolder
         composite_slices_folder = GRIME_AI_Save_Utils().create_composite_slices_folder(imageFileFolder)
 
-        widthMultiplier, heightMultiplier, sliceCenter, sliceWidth = self.compositeSliceDlg.getMultipliers()
+        # Get original image dimensions
+        orig_h, orig_w, _ = self.compositeSliceDlg._originalImage.shape
 
-        actualSliceCenter = self.compositeSliceDlg.getSliceCenter() * widthMultiplier
+        # Use the label’s aspect-ratio–aware mapping
+        rect = self.compositeSliceDlg.label_Image.getSliceRectInOriginal(orig_w, orig_h)
 
-        compositeSlices = GRIME_AI_CompositeSlices(actualSliceCenter, sliceWidth)
+        # Compute center and width directly in original image coordinates
+        actualSliceCenter = rect.left() + rect.width() // 2
+        actualSliceWidth = rect.width()
+
+        compositeSlices = GRIME_AI_CompositeSlices(actualSliceCenter, actualSliceWidth)
         compositeSlices.create_composite_image(dailyImagesList.visibleList, composite_slices_folder)
+
+    def _drawn_pixmap_geometry(self):
+        pm = self.pixmap()
+        if not pm or pm.isNull():
+            return 0, 0, 0, 0  # draw_w, draw_h, x_off, y_off
+
+        label_w, label_h = self.width(), self.height()
+        pm_w, pm_h = pm.width(), pm.height()
+
+        # The pixmap is already scaled to fit the label preserving AR,
+        # so pm_w/pm_h are the drawn dimensions. Compute insets.
+        x_off = (label_w - pm_w) // 2
+        y_off = (label_h - pm_h) // 2
+        return pm_w, pm_h, x_off, y_off
 
     def closeCompositeSlices(self):
         if self.compositeSliceDlg != None:
@@ -1953,7 +1986,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # JES - You may obtain a copy of the License at:
         # JES -     http://www.apache.org/licenses/LICENSE-2.0
         # --------------------------------------------------------------------------------------------------------------
-        if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10":
+        if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10" or getpass.getuser() == "rissa3":
             pass
         else:
             strMessage = 'The Image Organizer functionality is not ready for general distribution.'
@@ -2017,24 +2050,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.edgeDetectionDlg.show()
 
-
-    # ======================================================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
-
-    # ======================================================================================================================
+    # ==================================================================================================================
     #
-    # ======================================================================================================================
-    def imshow(self, img):
-        img = img / 2 + 0.5  # unnormalize
-        npimg = img.numpy()
-        plt.imshow(np.transpose(npimg, (1, 2, 0)))
-        plt.show()
-
-
-    # ======================================================================================================================
-    # ======================================================================================================================
-    # ======================================================================================================================
+    # ==================================================================================================================
     # Function to get prompts for each image
     def get_prompts(self, image_name):
         # Customize this function to return prompts based on the image name or content
@@ -2461,10 +2479,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # print("B")
             pass
 
-        if event.type() == QtCore.QEvent.MouseButtonDblClick and source is self.labelOriginalImage:
+        ###JES if event.type() == QtCore.QEvent.MouseButtonDblClick and source is self.labelOriginalImage:
             # labelEdgeImageDoubleClickEvent(self)
             # labelMouseDoubleClickEvent(self)
-            NEON_labelOriginalImageDoubleClickEvent(self)
+            ###JES NEON_labelOriginalImageDoubleClickEvent(self)
 
         return super(MainWindow, self).eventFilter(source, event)
 
@@ -2617,241 +2635,211 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     # ==================================================================================================================
     #  WHOLE IMAGE - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-    # ==================================================================================================================
+    # ==================================================================================================================0
     def whole_image_feature_extraction(self, img):
-        strIntensity, strEntropy = self.WholeImage_ExtractFeatures(img, self.colorSegmentationParams.wholeImage)
+        features = self.compute_whole_image_features(img)
+        self.display_whole_image_features(features)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def compute_whole_image_features(self, img):
+        """Return computed features for the whole image without touching the UI."""
+        strIntensity, strEntropy = self.WholeImage_ExtractFeatures(
+            img, self.colorSegmentationParams.wholeImage
+        )
+
+        # Extract dominant HSV colors
+        hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(
+            img, self.colorSegmentationParams.numColorClusters
+        )
+        colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
+
+        # Compute greenness values
+        greenness_values = []
+        for index, greenness in enumerate(self.greenness_index_list):
+            greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
+            self.greenness_index_list[index] = greenness_updated
+            greenness_values.append(greenness_updated.get_value())
+
+        return {
+            "intensity": strIntensity,
+            "entropy": strEntropy,
+            "colorBar": colorBar,
+            "greenness": greenness_values,
+        }
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def display_whole_image_features(self, features):
+        """Update the Qt table with the computed features."""
         nRow = self.tableWidget_ROIList.rowCount()
         if nRow == 0:
             self.tableWidget_ROIList.insertRow(nRow)
 
-        wholeImageLabel = QtWidgets.QLabel()
-        wholeImageLabel.setText("Whole Image")
+        # Column 0: Label
+        wholeImageLabel = QtWidgets.QLabel("Whole Image")
         self.tableWidget_ROIList.setCellWidget(0, 0, wholeImageLabel)
 
-        # EXTRACT DOMINANT HSV COLORS
-        # self.spinBoxColorClusters.value()
-        #JES - Replace with the value selected in the dialog box
-
-        hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(img, self.colorSegmentationParams.numColorClusters)
-        colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
-
-        # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-        # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
-        qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
-
-        # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
-        # First, adjust the table so that columns and rows are sized appropriately.
-        self.tableWidget_ROIList.resizeColumnsToContents()
-        # self.tableWidget_ROIList.resizeRowsToContents()
-
-        # Retrieve the current cell dimensions for column 2 and row 'nRow'
-        nRow = 0
-        cell_width = self.tableWidget_ROIList.columnWidth(0)
-        cell_height = self.tableWidget_ROIList.rowHeight(nRow)
-
-        # Optionally, log or print these dimensions for debugging
-        print(f"Cell dimensions: {cell_width}x{cell_height}")
-
-        # Convert the QImage to a QPixmap.
+        # Column 1: Color bar
+        qImg = QImage(
+            features["colorBar"].data,
+            features["colorBar"].shape[1],
+            features["colorBar"].shape[0],
+            QImage.Format_BGR888,
+        )
         pixmap = QPixmap.fromImage(qImg)
 
-        # Step 1: Scale the pixmap so that its height matches the cell height.
-        # This operation preserves the vertical scaling (and thus the quality of the vertical details).
+        # Scale to fit cell
+        cell_width = self.tableWidget_ROIList.columnWidth(0)
+        cell_height = self.tableWidget_ROIList.rowHeight(0)
         pixmap_scaled = pixmap.scaledToHeight(cell_height, QtCore.Qt.SmoothTransformation)
-
-        # Step 2: Adjust the horizontal dimension.
-        # Calculate the horizontal scale factor needed to force the pixmap width to match the cell width.
         if pixmap_scaled.width() != cell_width:
             h_scale = cell_width / pixmap_scaled.width()
             transform = QtGui.QTransform()
-            transform.scale(h_scale, 1)  # Only the horizontal scaling factor is modified.
-            final_pixmap = pixmap_scaled.transformed(transform, QtCore.Qt.SmoothTransformation)
-        else:
-            final_pixmap = pixmap_scaled
+            transform.scale(h_scale, 1)
+            pixmap_scaled = pixmap_scaled.transformed(transform, QtCore.Qt.SmoothTransformation)
 
-        # Create a new label, set the scaled pixmap, and insert it into the table cell
-        self.label = QtWidgets.QLabel()
-        self.label.setPixmap(QPixmap(final_pixmap))
-        self.tableWidget_ROIList.setCellWidget(nRow, 1, self.label)
+        label = QtWidgets.QLabel()
+        label.setPixmap(pixmap_scaled)
+        self.tableWidget_ROIList.setCellWidget(0, 1, label)
 
-        # COMPUTE THE GREENNESS VALUES FOR THE ENTIRE IMAGE FOR THE ACTIVE GREENNESS INDICES
+        # Column 2: n/a
+        na_Label = QtWidgets.QLabel("n/a")
+        self.tableWidget_ROIList.setCellWidget(0, 2, na_Label)
+
+        # Columns 3+: Greenness values
         col = 3
-        for index, greenness in enumerate(self.greenness_index_list):
-            # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-            greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, img)
-            self.greenness_index_list[index] = greenness_updated
-
-            # UPDATE TABLE
-            greennessLabel = QtWidgets.QLabel()
-            format_green = "{:.3f}".format(greenness_updated.get_value())
-            greennessLabel.setText(format_green)
+        for g in features["greenness"]:
+            greennessLabel = QtWidgets.QLabel("{:.3f}".format(g))
             self.tableWidget_ROIList.setCellWidget(0, col, greennessLabel)
             col += 1
 
-        intensityLabel = QtWidgets.QLabel()
-        intensityLabel.setText(strIntensity)
+        # Intensity
+        intensityLabel = QtWidgets.QLabel(features["intensity"])
         self.tableWidget_ROIList.setCellWidget(0, col, intensityLabel)
         col += 1
 
-        entropyLabel = QtWidgets.QLabel()
-        entropyLabel.setText(strEntropy)
+        # Entropy
+        entropyLabel = QtWidgets.QLabel(features["entropy"])
         self.tableWidget_ROIList.setCellWidget(0, col, entropyLabel)
-        col += 1
-
-        na_Label = QtWidgets.QLabel()
-        na_Label.setText("n/a")
-        self.tableWidget_ROIList.setCellWidget(0, 2, na_Label)
 
     # ==================================================================================================================
     #  ROI (region-of-interest) - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
     # ==================================================================================================================
     def roi_feature_extraction(self, painter, img, roiList):
-
-        # DISPLAY THE PROGRESS WHEEL
         progressBar = QProgressWheel()
-        progressBar.setRange(0, len(self.roiList) + 1)
-        #JES progressBar.show()
+        progressBar.setRange(0, len(roiList))
 
-        # ==============================================================================================================
-        #  ROIs - EXTRACT FEATURES (GREENNESS INDEX, INTENSITY, ENTROPY, ETC.)
-        # ==============================================================================================================
-        nRow = 1
-        for roiObj in roiList:
-            progressBar.setValue(nRow + 1)
-            # progressBar.repaint()
+        for row, roiObj in enumerate(roiList, start=1):
+            progressBar.setValue(row)
 
             try:
-                # EXTRACT ROI FOR WHICH COLOR CLUSTERING IS TO BE PERFORMED
-                rgb = extractROI(roiObj.getImageROI(), img)
-                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                features = self.compute_roi_features(roiObj, img)
+                self.display_roi_features(row, features)
+                self.draw_roi_overlay(painter, roiObj)
+            except Exception as e:
+                print(f"Error processing ROI {roiObj.getROIName()}: {e}")
 
-                gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-                # ------------------------------------------------------------------------------------------
-                # COLOR SEGMENTATION
-                # ------------------------------------------------------------------------------------------
-                # EXTRACT DOMINANT RGB COLORS
-                #JES - PROVISIONAL. NOT NEEDED AT THIS TIME. ALL COLOR DATA USES THE HSV COLOR SYSTEM
-                # _, _, hist = GRIME_AI_Color.KMeans(rgb, roiObj.getNumColorClusters())
-
-                # EXTRACT DOMINANT HSV COLORS
-                hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
-
-                # CREATE COLOR BAR TO DISPLAY CLUSTER COLORS
-                colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
-
-                # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
-                qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
-
-                # INSERT THE DOMINANT COLORS INTO A QLabel IN ORDER TO ADD IT TO THE FEATURE TABLE
-                # Make sure the columns (and optionally rows) are resized to fit contents
-                self.tableWidget_ROIList.resizeColumnsToContents()
-                #self.tableWidget_ROIList.resizeRowsToContents()
-
-                # Retrieve the current cell dimensions for column 2 and row 'nRow'
-                cell_width = self.tableWidget_ROIList.columnWidth(2)
-                cell_height = self.tableWidget_ROIList.rowHeight(nRow)
-
-                # Optionally, log or print these dimensions for debugging
-                print(f"Cell dimensions: {cell_width}x{cell_height}")
-
-                # Convert the QImage to a QPixmap.
-                pixmap = QPixmap.fromImage(qImg)
-
-                # Step 1: Scale the pixmap so that its height matches the cell height.
-                # This operation preserves the vertical scaling (and thus the quality of the vertical details).
-                pixmap_scaled = pixmap.scaledToHeight(cell_height, QtCore.Qt.SmoothTransformation)
-
-                # Step 2: Adjust the horizontal dimension.
-                # Calculate the horizontal scale factor needed to force the pixmap width to match the cell width.
-                if pixmap_scaled.width() != cell_width:
-                    h_scale = cell_width / pixmap_scaled.width()
-                    transform = QtGui.QTransform()
-                    transform.scale(h_scale, 1)  # Only the horizontal scaling factor is modified.
-                    final_pixmap = pixmap_scaled.transformed(transform, QtCore.Qt.SmoothTransformation)
-                else:
-                    final_pixmap = pixmap_scaled
-
-                # Create a new label, set the scaled pixmap, and insert it into the table cell
-                self.label = QtWidgets.QLabel()
-                self.label.setPixmap(QPixmap(final_pixmap))
-                self.tableWidget_ROIList.setCellWidget(nRow, 2, self.label)
-
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE GREENNESS INDEX FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    nCol = 3
-                    for index, greenness in enumerate(self.greenness_index_list):
-                        # COMPUTE GREENESS FOR THE SELECTED GREENNESS INDEX
-                        greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
-                        self.greenness_index_list[index] = greenness_updated
-
-                        # DISPLAY ROI'S GREENNESS INDEX IN THE GUI TABLE
-                        greennessLabel = QtWidgets.QLabel()
-                        format_green = "{:.3f}".format(greenness_updated.get_value())
-                        greennessLabel.setText(format_green)
-                        self.tableWidget_ROIList.setCellWidget(nRow, nCol, greennessLabel)
-                        nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Greenness Index calculation.')
-
-                # ------------------------------------------------------------------------------------------
-                # CALCULATE THE INTENSITY FOR THE ROI
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S INTENSITY
-                    strIntensity = "{:.4f}".format(
-                        cv2.mean(gray)[0])  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-                    # DISPALY THE ROI'S INTENSITY ON THE GUI
-                    self.intensityLabel = QtWidgets.QLabel()
-                    self.intensityLabel.setText(strIntensity)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.intensityLabel)
-                    nCol += 1
-                except Exception:
-                    print('Something went wrong with the ROI Intensity calculation.')
-
-                # ------------------------------------------------------------------------------------------
-                # COMPUTE ENTROPY FOR ENTIRE IMAGE
-                # ------------------------------------------------------------------------------------------
-                try:
-                    # CALCULATE THE ROI'S ENTROPY
-                    strEntropyValue = "{:.4f}".format(self.calcEntropy(gray))
-
-                    # DISPLAY THE ROI'S ENTROPY ON THE GUI
-                    self.entropyLabel = QtWidgets.QLabel()
-                    self.entropyLabel.setText(strEntropyValue)
-                    self.tableWidget_ROIList.setCellWidget(nRow, nCol, self.entropyLabel)
-                except Exception:
-                    pass
-
-                nRow = nRow + 1
-            except Exception:
-                nErrorCode = -1
-
-            # OVERLAY ROI BOUNDARY ON IMAGE
-            #JESif self.checkBoxDisplayROIs.isChecked():
-            if (1):
-                pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
-                painter.setPen(pen)
-
-                if roiObj.getROIShape() == ROIShape.RECTANGLE:
-                    painter.drawRect(roiObj.getDisplayROI())
-                elif roiObj.getROIShape() == ROIShape.ELLIPSE:
-                    painter.drawEllipse(roiObj.getDisplayROI())
-
-                font = painter.font()
-                font.setPointSize(8)
-                painter.setPen(QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine))
-                painter.setFont(font)
-                painter.drawText(roiObj.getDisplayROI().x(), roiObj.getDisplayROI().y() - 16, 50, 16, QtCore.Qt.AlignLeft,
-                                 roiObj.getROIName())
-
-        # close and delete the progress bar
         progressBar.close()
         del progressBar
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    @dataclass
+    class ROIFeatures:
+        roi_name: str
+        color_bar: np.ndarray
+        greenness: list[float]
+        intensity: float
+        entropy: float
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def compute_roi_features(self, roiObj, img) -> ROIFeatures:
+        rgb = extractROI(roiObj.getImageROI(), img)
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+        # Dominant HSV colors
+        hist, colorClusters = GRIME_AI_Color.extractDominant_HSV(rgb, roiObj.getNumColorClusters())
+        colorBar = GRIME_AI_Color.create_color_bar(hist, colorClusters)
+
+        # Greenness indices
+        greenness_values = []
+        for index, greenness in enumerate(self.greenness_index_list):
+            greenness_updated = GRIME_AI_Vegetation_Indices().get_greenness(greenness, rgb)
+            self.greenness_index_list[index] = greenness_updated
+            greenness_values.append(greenness_updated.get_value())
+
+        # Intensity
+        intensity = cv2.mean(gray)[0]
+
+        # Entropy
+        entropy = self.calcEntropy(gray)
+
+        return ROIFeatures(
+            roi_name=roiObj.getROIName(),
+            color_bar=colorBar,
+            greenness=greenness_values,
+            intensity=intensity,
+            entropy=entropy,
+        )
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def display_roi_features(self, row: int, features: ROIFeatures):
+        # Column 0: ROI name
+        self.tableWidget_ROIList.setCellWidget(row, 0, QtWidgets.QLabel(features.roi_name))
+
+        # Column 2: Color bar
+        qImg = QImage(features.color_bar.data,
+                      features.color_bar.shape[1],
+                      features.color_bar.shape[0],
+                      QImage.Format_BGR888)
+        pixmap = QPixmap.fromImage(qImg)
+
+        cell_width = self.tableWidget_ROIList.columnWidth(2)
+        cell_height = self.tableWidget_ROIList.rowHeight(row)
+        pixmap_scaled = pixmap.scaled(cell_width, cell_height, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+
+        label = QtWidgets.QLabel()
+        label.setPixmap(pixmap_scaled)
+        self.tableWidget_ROIList.setCellWidget(row, 2, label)
+
+        # Columns 3+: Greenness
+        col = 3
+        for g in features.greenness:
+            self.tableWidget_ROIList.setCellWidget(row, col, QtWidgets.QLabel(f"{g:.3f}"))
+            col += 1
+
+        # Intensity
+        self.tableWidget_ROIList.setCellWidget(row, col, QtWidgets.QLabel(f"{features.intensity:.4f}"))
+        col += 1
+
+        # Entropy
+        self.tableWidget_ROIList.setCellWidget(row, col, QtWidgets.QLabel(f"{features.entropy:.4f}"))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def draw_roi_overlay(self, painter, roiObj):
+        pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
+        painter.setPen(pen)
+
+        if roiObj.getROIShape() == ROIShape.RECTANGLE:
+            painter.drawRect(roiObj.getDisplayROI())
+        elif roiObj.getROIShape() == ROIShape.ELLIPSE:
+            painter.drawEllipse(roiObj.getDisplayROI())
+
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        painter.drawText(
+            roiObj.getDisplayROI().x(),
+            roiObj.getDisplayROI().y() - 16,
+            50, 16,
+            QtCore.Qt.AlignLeft,
+            roiObj.getROIName()
+        )
 
 
 # ======================================================================================================================
@@ -2920,10 +2908,8 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
     print("File Count: ", file_count)
 
     image_index = 0
-#    for file in files:
     while image_index < file_count:
         file = files[image_index]
-        print("Image Index: ", image_index)
         if bShow_GUI:
             progressBar.setWindowTitle(file)
             progressBar.setValue(image_index)
@@ -3203,6 +3189,7 @@ def NEON_updateSiteInfo(self):
 
     global SITECODE
     SITECODE = siteID.split(' - ')[0]
+    print (f'Fetching site info from NEON server for {SITECODE}...')
     siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     global DOMAINCODE
@@ -3353,88 +3340,86 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 #
 # ======================================================================================================================
 def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
-    global SITECODE
-    global DOMAINCODE
-    global gWebImageCount
-    global dailyImagesList
 
-    if nRow > -1:
-        delta = end_date - start_date
+    imageList = DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time)
 
-        # CREATE PROGRESS BAR
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, delta.days + 1)
-        progressBar.show()
+    DP1_20002_downloadImages(self, imageList, downloadsFilePath)
 
-        # CLEAR THE PREVIOUSLY DOWNLOADED IMAGE LIST, IF ANY
-        dailyImagesList.clear()
+# ======================================================================================================================
+#
+# ======================================================================================================================
+def DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time):
+    global SITECODE, DOMAINCODE, dailyImagesList, gWebImageCount
 
-        i = 1
-        while start_date <= end_date:
-            print(start_date)
-            ymd = start_date.strftime("%Y-%d-%b")
-            progressBar.setWindowTitle(ymd)
-            progressBar.setValue(float(i) / float(delta.days + 1) * delta.days)
-            progressBar.repaint()
-            i += 1
+    if nRow <= -1:
+        return []
 
-            QCoreApplication.processEvents()
+    delta = end_date - start_date
 
-            # ----------
-            #'https://phenocam.nau.edu/webcam/browse/NEON.D03.BARC.DP1.20002/2022/10/08'
-            #dailyURLvisible = 'https://phenocam.nau.edu/data/latest/NEON.D10.ARIK.DP1.20002' + '/' + str(start_date.year) + '/' + str(start_date.month).zfill(2) + '/' + str(start_date.day).zfill(2)
-            dailyURLvisible = 'https://phenocam.nau.edu/webcam/browse/NEON.D10.ARIK.DP1.20002' + '/' + str(start_date.year) + '/' + str(start_date.month).zfill(2) + '/' + str(start_date.day).zfill(2)
+    # CREATE PROGRESS BAR
+    progressBarDates = QProgressWheel()
+    progressBarDates.setRange(0, delta.days + 1)
+    progressBarDates.setWindowTitle('Build image list...')
+    progressBarDates.show()
 
-            # ----------
-            dailyURLvisible = dailyURLvisible.replace('ARIK', SITECODE)
-            dailyURLvisible = dailyURLvisible.replace('D10', DOMAINCODE)
+    # CLEAR PREVIOUS LIST
+    dailyImagesList.clear()
 
-            phenoCam = GRIME_AI_PhenoCam()
-            tmpList = phenoCam.getVisibleImages(dailyURLvisible, start_time, end_time)
+    i = 1
+    while start_date <= end_date:
+        ymd = start_date.strftime("%Y-%d-%b")
+        progressBarDates.setWindowTitle(ymd)
+        progressBarDates.setValue(float(i) / float(delta.days + 1) * delta.days)
+        progressBarDates.repaint()
+        i += 1
 
-            dailyImagesList.setVisibleList(tmpList.getVisibleList())
+        QCoreApplication.processEvents()
 
-            start_date += datetime.timedelta(days=1)
+        # Build URL
+        dailyURLvisible = (
+            f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.20002/"
+            f"{start_date.year}/{str(start_date.month).zfill(2)}/{str(start_date.day).zfill(2)}"
+        )
 
-        gWebImageCount = len(dailyImagesList.getVisibleList())
+        phenoCam = GRIME_AI_PhenoCam()
+        tmpList = phenoCam.getVisibleImages(dailyURLvisible, start_time, end_time)
 
-    else:
-        dailyURLvisible = []
+        dailyImagesList.setVisibleList(tmpList.getVisibleList())
+
+        start_date += datetime.timedelta(days=1)
+
+    progressBarDates.close()
 
     gWebImageCount = len(dailyImagesList.getVisibleList())
+    return dailyImagesList.getVisibleList()
 
-    if gWebImageCount > 0:
-        # CREATE PROGRESS BAR
-        progressBar = QProgressWheel()
-        progressBar.setRange(0, gWebImageCount + 1)
-        progressBar.show()
+def DP1_20002_downloadImages(self, imageList, downloadsFilePath):
+    if not imageList:
+        return
 
-        i = 0
-        for image in dailyImagesList.getVisibleList():
-            progressBar.setWindowTitle('Download & Save Images...')
-            progressBar.setValue(float(i) / float(gWebImageCount + 1) * gWebImageCount)
-            i += 1
+    progressBarDownloads = QProgressWheel()
+    progressBarDownloads.setRange(0, len(imageList) + 1)
+    progressBarDownloads.setWindowTitle('Download & Save Images...')
+    progressBarDownloads.show()
 
-            filename = image.fullPathAndFilename.split('/')[-1]
+    for i, image in enumerate(imageList):
+        progressBarDownloads.setValue(float(i) / float(len(imageList) + 1) * len(imageList))
 
-            if not os.path.exists(downloadsFilePath):
-                os.makedirs(downloadsFilePath)
-            completeFilename = os.path.join(downloadsFilePath, filename)
+        filename = os.path.basename(image.fullPathAndFilename)
+        if not os.path.exists(downloadsFilePath):
+            os.makedirs(downloadsFilePath)
+        completeFilename = os.path.join(downloadsFilePath, filename)
 
-            if os.path.isfile(completeFilename) == False:
-                urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
+        if not os.path.isfile(completeFilename):
+            urllib.request.urlretrieve(image.fullPathAndFilename, completeFilename)
 
-        # clean-up before exiting function
-        # 1. close and delete the progress bar
-        # 2. no other clean-up tasks
-        progressBar.close()
-        del progressBar
+    progressBarDownloads.close()
 
-        #jes LET THE CALLING FUNCTION BE RESPONSIBLE FOR REPORTING DOWNLOAD COMPLETION.
-        #jes MODIFY THIS IN A FUTURE RELEASE TO RETURN A PASS/FAIL MESSAGE TO THE FUNCTION THAT INVOKED THIS FUNCTION.
-        #jes strMessage = 'Data download is complete!'
-        #jes msgBox = GRIME_AI_QMessageBox('Data Download', strMessage)
-        #jes response = msgBox.displayMsgBox()
+#jes LET THE CALLING FUNCTION BE RESPONSIBLE FOR REPORTING DOWNLOAD COMPLETION.
+#jes MODIFY THIS IN A FUTURE RELEASE TO RETURN A PASS/FAIL MESSAGE TO THE FUNCTION THAT INVOKED THIS FUNCTION.
+#jes strMessage = 'Data download is complete!'
+#jes msgBox = GRIME_AI_QMessageBox('Data Download', strMessage)
+#jes response = msgBox.displayMsgBox()
 
 
 # ======================================================================================================================
@@ -3538,7 +3523,7 @@ def downloadProductDataFiles(self, item):
                     missing_data_message = missing_data_message + 'Partial Download!\n   ' + strProductIDCell + strMsg + '\n'
 
                 if monthCount > 0:
-                    downloadsFilePath = os.path.join(NEON_download_file_path, 'Data')
+                    downloadsFilePath = os.path.join(NEON_download_file_path, '../../data')
                     if not os.path.exists(downloadsFilePath):
                         os.makedirs(downloadsFilePath)
 
@@ -3718,7 +3703,7 @@ def run_gui():
     global frame
 
     # If Hydra is already initialized, clear it
-    from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+    from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
     settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
     print(settings_folder)
@@ -3730,11 +3715,6 @@ def run_gui():
             hydra.core.global_hydra.GlobalHydra.instance().clear()
         else:
             hydra.initialize(config_path=None)
-
-
-    #os.environ[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
-    #JES - THIS DOESN'T WORK! - os.system[str('R_HOME')] = str("C:\\Program Files\\R\\R-4.4.1")
-    print(os.environ.get('R_HOME'))
 
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
@@ -3939,54 +3919,59 @@ def cli_fetchLocalImageList(filePath, bFetchRecursive=False):
 #
 # ======================================================================================================================
 from hydra.core.global_hydra import GlobalHydra
+
 GlobalHydra.instance().clear()
 
+'''
 dirname = os.path.dirname(__file__)
 myconfig_path=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1"))
 print(myconfig_path)
 myconfig_name=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.1\\sam2.1_hiera_l.yaml"))
 print(myconfig_name)
+'''
+
+# Resolve config path relative to this script
+dirname = os.path.dirname(os.path.abspath(__file__))
+myconfig_path = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1")
+print("Config path:", myconfig_path)
+myconfig_name = "sam2.1_hiera_l"
+###JES myconfig_name = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l")
+print("Config name:", myconfig_name)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
+@hydra.main(config_path=myconfig_path, config_name=myconfig_name, version_base="1.3")
 def train_main(cfg: DictConfig) -> None:
-
-    print(myconfig_path)
-    print(myconfig_name)
-
-    if GlobalHydra.instance().is_initialized():
-        GlobalHydra.instance().clear()
-    print("Hydra SAM2 training config:")
-    print(OmegaConf.to_yaml(cfg))
-
-    # Instantiate your SAM2 training object (assumed to accept cfg)
-    print("Instantiate ML_SAM training class/object...")
-    myML_SAM = ML_SAM(cfg)
-    print("Execute ML_SAM training...")
-    myML_SAM.ML_SAM_Main()
-
-
-# ======================================================================================================================
-#
-# ======================================================================================================================
-@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
-def view_segmentation_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
     if GlobalHydra.instance().is_initialized():
         GlobalHydra.instance().clear()
     print("Hydra SAM2 training config:")
     print(OmegaConf.to_yaml(cfg))
 
-    myViewSegObj = ML_view_segmentation_object(cfg)
-    myViewSegObj.ML_view_segmentation_object_main()
+    global hyperparameterDlg
+    if hyperparameterDlg != None:
+        copy_original_image = hyperparameterDlg.get_copy_original_image()
+        save_masks = hyperparameterDlg.get_saved_masks()
+        selected_label_categories = hyperparameterDlg.get_selected_label_categories()
+        selected_training_model = hyperparameterDlg.get_selected_training_model()
+        selected_segment_model = hyperparameterDlg.get_selected_segment_model()
 
+        hyperparameterDlg.close()
+        del hyperparameterDlg
+        hyperparameterDlg = None
+
+        # Instantiate your SAM2 training object (assumed to accept cfg)
+        print("Instantiate MLModelTraining class...")
+        myML_Dispatcher = MLModelTraining(cfg)
+        print("Execute ML training...")
+
+        myML_Dispatcher.Model_Training_Dispatcher(cfg=cfg, mode=selected_training_model)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-@hydra.main(config_path=myconfig_path, config_name=myconfig_name)
+@hydra.main(config_path=myconfig_path, config_name=myconfig_name, version_base="1.3")
 def load_model_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
     if GlobalHydra.instance().is_initialized():
@@ -3996,19 +3981,18 @@ def load_model_main(cfg: DictConfig) -> None:
 
     global hyperparameterDlg
     if hyperparameterDlg != None:
-        copy_original_image = hyperparameterDlg.getCopyOriginalImage()
-        save_masks = hyperparameterDlg.getSaveMasks()
-        selected_label_categories = hyperparameterDlg.getSelectedLabelCategories()
+        copy_original_image = hyperparameterDlg.get_copy_original_image()
+        save_masks = hyperparameterDlg.get_saved_masks()
+        selected_label_categories = hyperparameterDlg.get_selected_label_categories()
+        selected_training_model = hyperparameterDlg.get_selected_training_model()
+        selected_segment_model = hyperparameterDlg.get_selected_segment_model()
 
         hyperparameterDlg.close()
-
         del hyperparameterDlg
-
         hyperparameterDlg = None
 
-    myLocalModel = ML_Load_Model(cfg)
-    myLocalModel.ML_Load_Model_Main(copy_original_image, save_masks, selected_label_categories)
-
+        mySegmentation = MLImageSegmentation(cfg)
+        mySegmentation.ML_Segmentation_Dispatcher(copy_original_image, save_masks, selected_label_categories, mode=selected_segment_model)
 
 # ======================================================================================================================
 #

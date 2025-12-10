@@ -7,15 +7,12 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
-import os
+from GRIME_AI.utils.resource_utils import ui_path
 
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
-
-from GRIME_AI.utils.resource_utils import ui_path
-
 
 # ======================================================================================================================
 #
@@ -31,7 +28,7 @@ class GRIME_AI_MaskEditorDlg(QDialog):
     polygonFill_Signal = pyqtSignal(bool)
 
     def __init__(self, parent=None):
-        super(QDialog, self).__init__(parent)
+        super().__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)

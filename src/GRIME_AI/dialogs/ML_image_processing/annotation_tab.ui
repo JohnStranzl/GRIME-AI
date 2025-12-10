@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AnnotationTab</class>
+ <widget class="QWidget" name="AnnotationTab">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>965</width>
+    <height>853</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Data Annotation (PROTOTYPE)</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayoutDataAnnotation">
+   <!-- Folder selector row -->
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutAnnotationFolder">
+     <item>
+      <widget class="QLineEdit" name="lineEdit_annotationFolder">
+       <property name="placeholderText">
+        <string>Enter annotation folder path...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_annotationBrowse">
+       <property name="text">
+        <string>Browse</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Main content row: image preview on left, category + mode on right -->
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutContent">
+     <item>
+      <widget class="QLabel" name="label_imageAnnotation">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>4</horstretch>
+         <verstretch>1</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>No image selected</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout_categoryAndMode">
+       <item>
+        <widget class="QGroupBox" name="groupBox_annotationCategory">
+         <property name="title">
+          <string>Annotation Category</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_annotationCategory">
+          <item>
+           <widget class="QLineEdit" name="lineEdit_annotationCategory">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="placeholderText">
+             <string>Type and press Enter…</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QListWidget" name="listWidget_annotationCategories">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="selectionMode">
+             <enum>QAbstractItemView::ContiguousSelection</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_annotationMode">
+         <property name="styleSheet">
+          <string notr="true">
+            QGroupBox {
+              background-color: #f0f0f0;
+              border: 1px solid #cccccc;
+              padding: 5px;
+              margin-top: 2px;
+            }
+            QGroupBox::title {
+              subcontrol-origin: margin;
+              subcontrol-position: top center;
+              font-weight: bold;
+              padding: 3px 0;
+            }
+          </string>
+         </property>
+         <property name="title">
+          <string>Annotation Mode</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_annotationMode">
+          <item>
+           <widget class="QRadioButton" name="radioButton_boundingBox">
+            <property name="text">
+             <string>Bounding Box</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="radioButton_polylineClick">
+            <property name="text">
+             <string>Polyline - Click</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="radioButton_polylineDrag">
+            <property name="text">
+             <string>Polyline - Drag</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_controls">
+            <property name="title">
+             <string>ROI Controls</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_controls">
+             <item>
+              <widget class="QPushButton" name="pushButton_ROI_Reset">
+               <property name="text">
+                <string>Reset</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Filmstrip -->
+   <item>
+    <widget class="QListWidget" name="listWidget_annotationFilmstrip">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOff</enum>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOn</enum>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>100</width>
+       <height>100</height>
+      </size>
+     </property>
+     <property name="movement">
+      <enum>QListView::Static</enum>
+     </property>
+     <property name="flow">
+      <enum>QListView::LeftToRight</enum>
+     </property>
+     <property name="resizeMode">
+      <enum>QListView::Adjust</enum>
+     </property>
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <property name="viewMode">
+      <enum>QListView::IconMode</enum>
+     </property>
+     <property name="wrapping" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

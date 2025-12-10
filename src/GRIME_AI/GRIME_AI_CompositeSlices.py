@@ -34,33 +34,21 @@ class GRIME_AI_CompositeSlices:
     # ==================================================================================================================
     def crop_side(self, image, height):
         """
-        Crops a specified side of an image based on the slice center and slice width attributes of the class.
-
-        Args:
-            image (PIL.Image): The image to be cropped.
-            height (int): The height of the cropped image.
-
-        Returns:
-            PIL.Image: The cropped image.
-
-        Raises:
-            ValueError: If the slice center or slice width attributes are not properly set.
+        Crops a slice centered at self.sliceCenter with full width self.sliceWidth.
         """
+        half = self.sliceWidth // 2
 
-        left = self.sliceCenter - self.sliceWidth
-        if left < 0:
-            left = 0
+        left = self.sliceCenter - half
+        right = self.sliceCenter + half
 
-        right = self.sliceCenter + self.sliceWidth
-        if right >= image.width:
-            right = image.width - 1
+        # Clamp to image bounds; right in PIL crop is exclusive
+        left = max(0, left)
+        right = min(image.width, right)
 
         top = 0
-
         bottom = height
 
         return image.crop((left, top, right, bottom))
-
 
     # ==================================================================================================================
     #
@@ -107,7 +95,7 @@ class GRIME_AI_CompositeSlices:
         output_width = first_image.width
 
         # CALCULATE THE MAX IMAGE WIDTH REQUIRED FOR ALL THE SLICES IF WE WERE TO GENERATE A SINGLE IMAGE
-        strip_width = self.sliceWidth * 2
+        strip_width = self.sliceWidth
         print(f"Slice Width: {strip_width}")
 
         maxWidthRequired = imageCount * strip_width
@@ -138,7 +126,6 @@ class GRIME_AI_CompositeSlices:
             slice_count += 1
 
             if slice_count == filesPerImage[current_image_index]:
-
                 # Save the composite image
                 compFilename = f"{outputFilename}{'-'}{current_image_index}{'.jpg'}"
                 composite_image.save(compFilename)

@@ -16,7 +16,10 @@ QPushButton {
   border-radius: 6px;
 }
 QPushButton:hover { background-color: #5a93c2; }
-"""
+QPushButton:disabled {
+  background-color: gray;
+  color: black;
+}"""
 
 BUTTON_CSS_DARK_RED = """
 QPushButton {
@@ -27,4 +30,22 @@ QPushButton {
   border-radius: 6px;
 }
 QPushButton:hover { background-color: #5a93c2; }
+QPushButton:disabled {
+  background-color: gray;
+  color: black;
+}"""
+
+BUTTON_CSS_GRAY = """
+QPushButton {
+  background-color: gray;
+  color: black;
+  border: 1px solid #666666;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #808080; }
+QPushButton:disabled {
+  background-color: gray;
+  color: black;
+}
 """

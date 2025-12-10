@@ -11,14 +11,15 @@ import os
 import promptlib
 import datetime
 
+from GRIME_AI.utils.resource_utils import ui_path
+
 from PyQt5 import QtCore
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 
-from GRIME_AI.utils.resource_utils import ui_path
 from GRIME_AI.GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
+from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.GRIME_AI_Video import GRIME_AI_Video
 
 
@@ -52,12 +53,12 @@ class GRIME_AI_FileUtilitiesDlg(QDialog):
     # INIT
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
-        super(QDialog, self).__init__(parent)
+        super().__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        loadUi(ui_path('file_utilities/QDialog_FileUtilities.ui'), self)
+        loadUi(ui_path("file_utilities/QDialog_FileUtilities.ui"), self)
 
         self.accepted.connect(self.closeFileFolderDlg)
         self.rejected.connect(self.closeFileFolderDlg)

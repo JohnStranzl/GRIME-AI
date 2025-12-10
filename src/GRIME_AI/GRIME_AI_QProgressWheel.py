@@ -27,7 +27,9 @@ class QProgressWheel(QWidget):
     PositionBottom = -90
 
     # CONSTRUCTOR ---------------------------------------------------
-    def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True, parent=None):
+    def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True,
+                 title: str = None, total: int = None, on_close=None, parent=None):
+        #def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True, parent=None):
         super(QProgressWheel, self).__init__(parent)
         self.m_min = 0
         self.m_max = maxVal
@@ -86,6 +88,16 @@ class QProgressWheel(QWidget):
         if alwaysOnTop:
             self.setAlwaysOnTop(True)
 
+        # Progress bar setup
+        if title:
+            self.setWindowTitle(title)
+
+        if on_close is not None:
+            self.destroyed.connect(lambda _: on_close())
+
+        if total is not None:
+            self.setRange(0, total)
+            self.setValue(1)
 
     def setAlwaysOnTop(self, enable: bool):
         # Retrieve the current window flags
@@ -198,6 +210,11 @@ class QProgressWheel(QWidget):
             self.update()
 
         QApplication.processEvents()
+
+    @pyqtSlot()
+    def getValue(self):
+        return  self.m_value
+
 
     # PAINTING ------------------------------------------------------
     def paintEvent(self, event: QPaintEvent):

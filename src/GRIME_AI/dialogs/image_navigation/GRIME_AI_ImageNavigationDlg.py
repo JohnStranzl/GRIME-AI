@@ -9,8 +9,10 @@
 
 import os
 
-from PyQt5.QtCore import Qt, QTimer, QSize, pyqtSignal, pyqtSlot, QRect
-from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPen
+from GRIME_AI.utils.resource_utils import ui_path
+
+from PyQt5.QtCore import Qt, QTimer, QSize, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QPixmap, QIcon, QPen
 from PyQt5.QtWidgets import (
     QDialog,
     QListWidgetItem,
@@ -21,7 +23,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.uic import loadUi
 
-from GRIME_AI.utils.resource_utils import ui_path
 
 class BorderDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
@@ -54,7 +55,8 @@ class GRIME_AI_ImageNavigationDlg(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        loadUi(ui_path('image_navigation/QDialog_ImageNavigation.ui'), self)
+
+        loadUi(ui_path("image_navigation/QDialog_ImageNavigation.ui"), self)
 
         # ── Micro‐batch loader state ───────────────────────────────
         # these control how many thumbs we load per cycle,

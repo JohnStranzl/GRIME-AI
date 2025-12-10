@@ -1,29 +1,79 @@
-# image_organizer_core.py
+# image_organizer.py
+from __future__ import annotations
+
 import csv
 import re
-import piexif
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 
+# 3rd-party
 try:
     from PIL import Image, ExifTags
 except Exception:
     Image = None
     ExifTags = None
 
-from GRIME_AI.GRIME_AI_logger import info as _info, debug as _debug, err as _err, warn as _warn
+try:
+    import piexif
+except Exception:
+    piexif = None  # we'll guard writes that need piexif
 
-# ---------- constants ----------
-IMG_EXTS = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'}
+from GRIME_AI_logger import info as _info, debug as _debug, err as _err, warn as _warn
+
+# =========================
+# Constants / EXIF tags
+# =========================
+IMG_EXTS: Set[str] = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'}
+
 EXIF_TAGS = {v: k for k, v in getattr(ExifTags, 'TAGS', {}).items()} if ExifTags else {}
 
-# Windows XP EXIF tags (UTF-16LE)
-XPTitle    = 0x9C9B
-XPComment  = 0x9C9C
+# Define Microsoft XP EXIF tags (UTF-16LE encoded)
+XPTitle = 0x9C9B
+XPComment = 0x9C9C
+XPAuthor = 0x9C9D
 XPKeywords = 0x9C9E
+XPSubject = 0x9C9F
 
-# ---------- XP helpers ----------
+# Filename tag extraction – exact matching only
+# Populate CANONICAL_TAGS with your project’s controlled vocabulary (lowercase).
+CANONICAL_TAGS: Set[str] = {
+    # examples; extend as needed
+    "raccoon",
+    "beaver",
+    "coyote",
+    "white-tailed deer",
+    "great blue heron",
+    "wtd",
+    "gbh",  # if you also want to accept the abbrev literally
+}
+
+# Abbreviation map (lowercase token -> canonical lowercase tag)
+ANIMAL_ABBREV: Dict[str, str] = {
+    "gbh": "great blue heron",
+    "wtd": "white-tailed deer",
+}
+
+STOP_TOKENS: Set[str] = {
+    "img", "image", "photo", "dsc", "dcim", "reconyx", "trailcam",
+    "cam", "camera", "copy", "edited", "final"
+}
+
+DATE_PATTERNS = [
+    re.compile(r"^\d{8}$"),             # YYYYMMDD
+    re.compile(r"^\d{4}-\d{2}-\d{2}$"), # YYYY-MM-DD
+]
+TIME_PATTERNS = [
+    re.compile(r"^\d{4}$"),             # HHMM
+    re.compile(r"^\d{6}$"),             # HHMMSS
+    re.compile(r"^\d{2}-\d{2}-\d{2}$"), # HH-MM-SS
+]
+
+
+# =========================
+# Utility encoders/decoders
+# =========================
 def _encode_xp(s: str) -> bytes:
     return (s or "").encode("utf-16le") + b"\x00\x00"
 
@@ -39,7 +89,10 @@ def _decode_xp(value) -> str:
         return ""
     return ""
 
-# ---------- XMP parsing ----------
+
+# =========================
+# XMP read (lightweight)
+# =========================
 def read_xmp_chunks(path: Path) -> Optional[str]:
     try:
         with open(path, 'rb') as f:
@@ -83,7 +136,10 @@ def parse_xmp_for_fields(xmp_xml: str) -> Dict[str, object]:
         _debug(f"parse_xmp_for_fields error: {e}")
     return out
 
-# ---------- metadata read ----------
+
+# =========================
+# Metadata read
+# =========================
 def read_image_metadata(path: Path) -> Dict[str, object]:
     """
     Returns dict with (among others):
@@ -172,7 +228,10 @@ def read_image_metadata(path: Path) -> Dict[str, object]:
         meta["DateTimeFromMetadata"] = exif_dt.strftime("%Y-%m-%d %H:%M:%S")
     return meta
 
-# ---------- discovery & file ops ----------
+
+# =========================
+# Discovery & file ops
+# =========================
 def iter_images(src: Path, recursive: bool) -> List[Path]:
     files: List[Path] = []
     if recursive:
@@ -201,11 +260,11 @@ def scan_for_datetime_presence(src_folder: Path, recursive: bool) -> Tuple[List[
     return has_dt, missing_dt
 
 def move_files_to_subfolder(paths: List[Path], base_dir: Path) -> Path:
-    if not paths:
-        sub = base_dir / "_NoDateTaken"
-        sub.mkdir(parents=True, exist_ok=True)
-        return sub
-    sub = base_dir / f"_NoDateTaken_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    """
+    Moves paths into a subfolder under base_dir. Always creates the folder.
+    """
+    tag = datetime.now().strftime('%Y%m%d_%H%M%S')
+    sub = base_dir / f"_NoDateTaken_{tag}"
     sub.mkdir(parents=True, exist_ok=True)
     for p in paths:
         try:
@@ -220,8 +279,32 @@ def move_files_to_subfolder(paths: List[Path], base_dir: Path) -> Path:
             _warn(f"Move failed for {p}: {e}")
     return sub
 
-# ---------- filename & writes ----------
+def estimate_minute_collision_count(files: List[Path], site: str) -> int:
+    """
+    Estimate how many files would need suffixes if seconds are NOT included.
+    We bucket by (YYYYMMDD_HHMM, site) and count collisions (sum of (count-1) per bucket).
+    Uses the same timestamp source as organize_images: EXIF DateTime* if present, else file mtime.
+    """
+    buckets: Dict[Tuple[str, str], int] = {}
+    for p in files:
+        try:
+            meta = read_image_metadata(p)
+            dt, _ = choose_dt_for_filename(p, meta)
+            key = (dt.strftime("%Y%m%d_%H%M"), (site or "").strip())
+            buckets[key] = buckets.get(key, 0) + 1
+        except Exception:
+            # treat unreadable as unique to avoid over-warning
+            pass
+    # collisions are (count - 1) per bucket
+    return sum(c - 1 for c in buckets.values() if c > 1)
+
+# =========================
+# Filename + writes
+# =========================
 def choose_dt_for_filename(path: Path, meta: Dict[str, object]) -> Tuple[datetime, bool]:
+    """
+    Returns (dt_for_name, from_metadata_flag)
+    """
     if meta.get("DateTimeFromMetadata"):
         try:
             dt = datetime.strptime(meta["DateTimeFromMetadata"], "%Y-%m-%d %H:%M:%S")
@@ -230,13 +313,28 @@ def choose_dt_for_filename(path: Path, meta: Dict[str, object]) -> Tuple[datetim
             pass
     return datetime.fromtimestamp(path.stat().st_mtime), False
 
-def make_filename(dt: datetime, site: str, include_seconds: bool, ext: str,
-                  force_seconds: bool = False, counter: Optional[int] = None) -> str:
-    fmt = "%Y%m%d_%H%M%S" if (include_seconds or force_seconds) else "%Y%m%d_%H%M"
+def make_filename(dt: datetime, site: str, include_seconds: bool, ext: str) -> str:
+    fmt = "%Y%m%d_%H%M%S" if include_seconds else "%Y%m%d_%H%M"
     ts = dt.strftime(fmt)
     site_part = f"_{site.strip()}" if site and site.strip() else ""
-    suffix = f"_{counter:02d}" if (counter is not None and counter > 1) else ""
-    return f"{ts}{site_part}{suffix}{ext}"
+    return f"{ts}{site_part}{ext}"
+
+def get_image_size_safe(path: Path) -> Tuple[int, int]:
+    try:
+        if Image is None:
+            return (0, 0)
+        with Image.open(str(path)) as im:
+            return (int(im.width), int(im.height))
+    except Exception:
+        return (0, 0)
+
+def append_resolution_suffix(filename: str, w: int, h: int) -> str:
+    p = Path(filename)
+    return f"{p.stem}_{w}x{h}{p.suffix}"
+
+def append_counter_suffix(filename: str, ctr: int) -> str:
+    p = Path(filename)
+    return f"{p.stem}_{ctr:02d}{p.suffix}"
 
 def safe_rename(path: Path, new_name: str) -> Path:
     target = path.with_name(new_name)
@@ -251,7 +349,7 @@ def safe_rename(path: Path, new_name: str) -> Path:
         i += 1
 
 def write_copyright_exif(path: Path, holder: str, skip_if_exists: bool = True) -> None:
-    if not holder or path.suffix.lower() not in {'.jpg', '.jpeg', '.tif', '.tiff'}:
+    if not holder or path.suffix.lower() not in {'.jpg', '.jpeg', '.tif', '.tiff'} or piexif is None:
         return
     try:
         exif = piexif.load(str(path))
@@ -267,6 +365,9 @@ def write_copyright_exif(path: Path, holder: str, skip_if_exists: bool = True) -
         _warn(f"Failed to write Copyright EXIF for {path}: {e}")
 
 def compose_final_comments(original_comments: str, title: str, site_info: str) -> str:
+    """
+    Compose final Comments = [existing Comments][ | Title][\nSite Info].
+    """
     parts = []
     if original_comments.strip():
         parts.append(original_comments.strip())
@@ -290,7 +391,7 @@ def write_comments_and_clear_title(path: Path, meta: Dict[str, object], site_inf
         title=str(meta.get("Title","")),
         site_info=site_info or ""
     )
-    if path.suffix.lower() in {'.jpg', '.jpeg', '.tif', '.tiff'}:
+    if path.suffix.lower() in {'.jpg', '.jpeg', '.tif', '.tiff'} and piexif is not None:
         try:
             ex = piexif.load(str(path))
             ex['0th'][XPTitle]   = _encode_xp("")                # clear title
@@ -301,29 +402,25 @@ def write_comments_and_clear_title(path: Path, meta: Dict[str, object], site_inf
             _warn(f"Failed to write comments/title for {path}: {e}")
     return final_comments
 
-# ---------- filename tag extraction (position-agnostic) ----------
-ANIMAL_ABBREV = {
-    "GBH": "Great Blue Heron",
-    "RTH": "Red-tailed Hawk",
-    "WTDEER": "White-tailed Deer",
-}
-CANONICAL_TAGS: set = set()  # optional: fill with lowercase tags to whitelist
-STOP_TOKENS = {
-    "img", "image", "photo", "dsc", "dcim", "reconyx", "trailcam", "cam", "camera",
-    "copy", "edited", "final"
-}
-DATE_PATTERNS = [
-    re.compile(r"^\d{8}$"),
-    re.compile(r"^\d{4}-\d{2}-\d{2}$"),
-]
-TIME_PATTERNS = [
-    re.compile(r"^\d{4}$"),
-    re.compile(r"^\d{6}$"),
-    re.compile(r"^\d{2}-\d{2}-\d{2}$"),
-]
+def _excel_escape(s: str) -> str:
+    """
+    Excel formulas escape double quotes by doubling them
+    """
+    return (s or "").replace('"', '""')
 
+def _excel_hyperlink(full_path: str, display_text: str) -> str:
+    """
+    Build =HYPERLINK("C:\full\path.jpg","display.jpg")
+    """
+    return f'=HYPERLINK("{_excel_escape(full_path)}","{_excel_escape(display_text)}")'
+
+# =========================
+# Exact tag extraction from filename (position-agnostic)
+# =========================
 def _split_tokens(name: str) -> List[str]:
-    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)  # CamelCase -> spaced
+    # break CamelCase boundaries
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+    # split on anything not a letter
     parts = re.split(r"[^A-Za-z]+", name)
     return [p for p in parts if p]
 
@@ -334,95 +431,53 @@ def _looks_like_date_or_time(tok: str) -> bool:
         if rx.match(tok): return True
     return False
 
-def _normalize_phrase(words: List[str]) -> str:
-    return " ".join(w.strip() for w in words if w.strip())
-
-def _contains_site_tokens(candidate_words: List[str], site_words: List[str]) -> bool:
-    if not site_words or not candidate_words:
-        return False
-    cand = " ".join(candidate_words)
-    site = " ".join(site_words)
-    return cand == site or cand in site or site in cand
-
-def infer_tags_from_filename(path: Path, site: str) -> List[str]:
+def infer_exact_tags_from_filename(path: Path, site: str) -> List[str]:
     """
-    Extract tags from ANYWHERE in the filename (position-agnostic).
+    Only accept tags that exactly match CANONICAL_TAGS (single, bi-, tri-grams),
+    after abbreviation mapping. Site words, numbers and date/time tokens are ignored.
     """
     stem = path.stem
     tokens = _split_tokens(stem)
-    tokens_lower = [t.lower() for t in tokens]
+    low = [t.lower() for t in tokens]
 
-    site_words = _split_tokens(site or "")
-    site_words = [w.lower() for w in site_words]
+    # remove date/time, digits
+    cleaned = [t for t in low if not (t.isdigit() or _looks_like_date_or_time(t))]
+    # remove site words anywhere
+    site_words = [w.lower() for w in _split_tokens(site or "")]
+    cleaned = [t for t in cleaned if t not in site_words]
+    # remove stop tokens
+    cleaned = [t for t in cleaned if t not in STOP_TOKENS]
+    # abbreviations
+    cleaned = [ANIMAL_ABBREV.get(t, t) for t in cleaned]
 
-    cleaned: List[str] = []
-    for t, tl in zip(tokens, tokens_lower):
-        if _looks_like_date_or_time(t) or tl.isdigit():
-            continue
-        if tl in STOP_TOKENS:
-            continue
-        if len(tl) < 3:
-            continue
-        cleaned.append(t)
+    hits: List[str] = []
+    seen: Set[str] = set()
 
-    # Map abbreviations (single token)
-    mapped_single: List[str] = []
-    for t in cleaned:
-        up = t.upper()
-        if up in ANIMAL_ABBREV:
-            mapped_single.append(ANIMAL_ABBREV[up])
-        else:
-            mapped_single.append(t)
-
-    cleaned_lower = [t.lower() for t in mapped_single]
-
-    candidates: List[str] = []
+    def add_if_canonical(phrase: str):
+        key = phrase.lower()
+        if key in CANONICAL_TAGS and key not in seen:
+            seen.add(key)
+            # pretty-case words
+            hits.append(" ".join(w.capitalize() for w in phrase.split()))
 
     # tri-grams
-    for i in range(len(cleaned_lower) - 2):
-        tri = cleaned_lower[i:i+3]
-        if _contains_site_tokens(tri, site_words):
-            continue
-        phrase3 = _normalize_phrase([mapped_single[i], mapped_single[i+1], mapped_single[i+2]])
-        if not CANONICAL_TAGS or phrase3.lower() in CANONICAL_TAGS:
-            candidates.append(phrase3)
+    for i in range(len(cleaned) - 2):
+        phrase = " ".join(cleaned[i:i+3])
+        add_if_canonical(phrase)
 
     # bi-grams
-    for i in range(len(cleaned_lower) - 1):
-        bi = cleaned_lower[i:i+2]
-        if _contains_site_tokens(bi, site_words):
-            continue
-        phrase2 = _normalize_phrase([mapped_single[i], mapped_single[i+1]])
-        if not CANONICAL_TAGS or phrase2.lower() in CANONICAL_TAGS:
-            candidates.append(phrase2)
+    for i in range(len(cleaned) - 1):
+        phrase = " ".join(cleaned[i:i+2])
+        add_if_canonical(phrase)
 
-    # singles, avoid duplicating words used in phrases
-    longer_words = set()
-    for c in candidates:
-        for w in c.lower().split():
-            longer_words.add(w)
+    # singles
+    for t in cleaned:
+        add_if_canonical(t)
 
-    for t in mapped_single:
-        tl = t.lower()
-        if tl in longer_words:
-            continue
-        if site_words and tl in site_words:
-            continue
-        if not CANONICAL_TAGS or tl in CANONICAL_TAGS:
-            candidates.append(t)
-
-    # dedupe preserving order
-    seen = set()
-    out: List[str] = []
-    for c in candidates:
-        key = c.lower()
-        if key in seen: continue
-        seen.add(key)
-        out.append(c)
-    return out
+    return hits
 
 def write_keywords_exif(path: Path, tags: List[str]) -> None:
-    if not tags or path.suffix.lower() not in {'.jpg', '.jpeg', '.tif', '.tiff'}:
+    if not tags or path.suffix.lower() not in {'.jpg', '.jpeg', '.tif', '.tiff'} or piexif is None:
         return
     try:
         ex = piexif.load(str(path))
@@ -433,7 +488,10 @@ def write_keywords_exif(path: Path, tags: List[str]) -> None:
     except Exception as e:
         _warn(f"Failed writing XPKeywords for {path}: {e}")
 
-# ---------- main ----------
+
+# =========================
+# Main
+# =========================
 def collect_unique_tags(items: List[Dict[str, object]]) -> List[str]:
     uniq: Dict[str, str] = {}
     for it in items:
@@ -443,8 +501,17 @@ def collect_unique_tags(items: List[Dict[str, object]]) -> List[str]:
                 uniq[k] = t
     return [uniq[k] for k in sorted(uniq.keys())]
 
-def organize_images(src_folder: Path, recursive: bool, site: str, include_seconds: bool,
-                    copyright_holder: str, site_info: str = ""):
+def organize_images(
+    src_folder: Path,
+    recursive: bool,
+    site: str,
+    include_seconds: bool,
+    copyright_holder: str,
+    site_info: str = ""
+):
+    """
+    Headless core. Returns (log_csv_path, rows_written, unique_tags_in_run, errors).
+    """
     _info(f"Starting Image Organizer in folder: {src_folder} (recursive={recursive})")
     if not src_folder.exists():
         raise FileNotFoundError(f"Folder does not exist: {src_folder}")
@@ -460,8 +527,8 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
         dt, from_meta = choose_dt_for_filename(p, meta)
         if not from_meta:
             _warn(f"No timestamp in metadata for {p.name}; used file mtime.")
-        # merge tags from filename (position-agnostic)
-        fn_tags = infer_tags_from_filename(p, site)
+        # enrich tags from filename (exact canonical matches only)
+        fn_tags = infer_exact_tags_from_filename(p, site)
         if fn_tags:
             existing_lower = {t.lower() for t in meta.get("Tags", [])}
             for t in fn_tags:
@@ -474,17 +541,27 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_csv = src_folder / f"rename_log_{ts}.csv"
+
     base_fields = [
-        "original_file_name", "new_file_name", "datetime_from_metadata",
-        "converted_at", "Comments", "Title", "Subject", "Tags",
+        # identity
+        "original_file_name", "new_file_name",
+        # absolute paths to enable robust revert
+        "original_full_path", "new_full_path",
+        # clickable Excel links
+        "original_link", "new_link",
+        # time context
+        "datetime_from_metadata", "converted_at",
+        # metadata snapshot
+        "Comments", "Title", "Subject", "Tags",
         "Copyright",
-        "CopyrightExisting"
+        "CopyrightExisting",
     ]
     header = base_fields + unique_tags
 
-    used_names: Dict[str, int] = {}  # for collision management within this run
+    used_names: Dict[str, int] = {}  # for collision management within this run (per dir)
     rows_out: List[Dict[str, str]] = []
     errors: List[str] = []
+
     with open(log_csv, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=header)
         writer.writeheader()
@@ -493,19 +570,28 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
             p = info["path"]; meta = info["meta"]; dt = info["dt_for_name"]
             ext = p.suffix
 
-            # If EXIF had seconds, force seconds in filename even if UI unchecked
-            effective_seconds = include_seconds or bool(meta.get("HasSeconds", False))
-            new_name = make_filename(dt, site, effective_seconds, ext)
+            # STRICT user choice: do not auto-include seconds
+            new_name = make_filename(dt, site, include_seconds, ext)
 
-            # If user unchecked seconds and collision arises, auto-upgrade to seconds
-            if new_name in used_names and not effective_seconds:
-                new_name = make_filename(dt, site, include_seconds, ext, force_seconds=True)
-
-            # If still colliding (same second), add counter suffix
-            ctr = used_names.get(new_name, 0) + 1
-            if ctr > 1:
-                new_name = make_filename(dt, site, include_seconds, ext, force_seconds=True, counter=ctr)
-            used_names[new_name] = ctr
+            # Duplicate handling:
+            # 1) resolution suffix, 2) numeric counter
+            if new_name in used_names:
+                w, h = get_image_size_safe(p)
+                if w > 0 and h > 0:
+                    cand = append_resolution_suffix(new_name, w, h)
+                    if cand not in used_names:
+                        new_name = cand
+                        used_names[new_name] = 1
+                    else:
+                        ctr = used_names.get(cand, 1) + 1
+                        new_name = append_counter_suffix(cand, ctr)
+                        used_names[new_name] = ctr
+                else:
+                    ctr = used_names.get(new_name, 1) + 1
+                    new_name = append_counter_suffix(new_name, ctr)
+                    used_names[new_name] = ctr
+            else:
+                used_names[new_name] = 1
 
             try:
                 new_path = safe_rename(p, new_name)
@@ -526,9 +612,16 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
                     _warn(f"Keyword write issue for {new_path}: {e}")
 
                 converted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                original_full_path = str(p.resolve())
+                new_full_path = str(new_path.resolve())
+
                 row = {
                     "original_file_name": p.name,
                     "new_file_name": new_path.name,
+                    "original_full_path": original_full_path,
+                    "new_full_path": new_full_path,
+                    "original_link": _excel_hyperlink(original_full_path, p.name),
+                    "new_link": _excel_hyperlink(new_full_path, new_path.name),
                     "datetime_from_metadata": meta.get("DateTimeFromMetadata", ""),
                     "converted_at": converted_at,
                     "Comments": final_comments,
@@ -536,7 +629,7 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
                     "Subject": str(meta.get("Subject","")),
                     "Tags": "; ".join(meta.get("Tags", [])),
                     "Copyright": copyright_holder or "",
-                    "CopyrightExisting": str(meta.get("CopyrightExisting",""))
+                    "CopyrightExisting": str(meta.get("CopyrightExisting","")),
                 }
                 tags_lower = {t.lower() for t in meta.get("Tags", [])}
                 for t in unique_tags:
@@ -552,7 +645,77 @@ def organize_images(src_folder: Path, recursive: bool, site: str, include_second
     _info(f"Wrote CSV log: {log_csv}")
     return log_csv, rows_out, unique_tags, errors
 
+
 def example_filename(site: str, include_seconds: bool, example_dt: Optional[datetime] = None, ext: str = ".jpg") -> str:
+    """
+    Example preview (UI): respects only the checkbox; does not auto-include seconds.
+    """
     if example_dt is None: example_dt = datetime.now()
-    # For example preview we just respect the checkbox (no seconds-forcing heuristic)
     return make_filename(example_dt, site, include_seconds, ext)
+
+
+# =========================
+# Revert
+# =========================
+def revert_operation(src_folder: Path, log_csv: Path) -> Tuple[int, List[str]]:
+    """
+    Revert renames using the CSV log: new_full_path -> original_full_path.
+    Falls back to src_folder/new_file_name -> src_folder/original_file_name if abs paths absent.
+    Avoids overwriting: if original exists, the 'new' file is moved to _revert_conflicts/.
+    Returns: (reverted_count, error_messages)
+    """
+    reverted = 0
+    errors: List[str] = []
+    try:
+        with log_csv.open(newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            has_abs_cols = {"original_full_path", "new_full_path"}.issubset(reader.fieldnames or [])
+            for row in reader:
+                orig_name = row.get("original_file_name") or ""
+                new_name  = row.get("new_file_name") or ""
+                if not orig_name or not new_name:
+                    continue
+
+                # Prefer absolute paths if present
+                if has_abs_cols:
+                    orig_path = Path(row.get("original_full_path", "")).resolve()
+                    new_path  = Path(row.get("new_full_path", "")).resolve()
+                else:
+                    orig_path = (src_folder / orig_name).resolve()
+                    new_path  = (src_folder / new_name).resolve()
+
+                try:
+                    if not new_path.exists():
+                        # try fallback when absolute path points nowhere
+                        fallback_new = (src_folder / new_name).resolve()
+                        if fallback_new.exists():
+                            new_path = fallback_new
+                        else:
+                            errors.append(f"Missing file to revert: {new_path}")
+                            continue
+
+                    # If original already exists, don't overwrite—move 'new' into conflicts
+                    if orig_path.exists():
+                        conflict_dir = src_folder / "_revert_conflicts"
+                        conflict_dir.mkdir(exist_ok=True)
+                        target = conflict_dir / new_path.name
+                        i = 1
+                        while target.exists():
+                            target = conflict_dir / f"{new_path.stem}_{i:02d}{new_path.suffix}"
+                            i += 1
+                        new_path.rename(target)
+                        errors.append(f"Conflict: {orig_path.name} exists. Moved {new_path.name} -> {target.name}")
+                        continue
+
+                    # Ensure destination dir exists (handles nested originals)
+                    orig_path.parent.mkdir(parents=True, exist_ok=True)
+                    new_path.rename(orig_path)
+                    reverted += 1
+
+                except Exception as e:
+                    errors.append(f"Failed revert {new_name} -> {orig_name}: {e}")
+
+    except Exception as e:
+        errors.append(f"Failed to read log CSV: {e}")
+
+    return reverted, errors

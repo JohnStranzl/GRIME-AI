@@ -7,15 +7,16 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
-import os
 import cv2
+import numpy as np
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from GRIME_AI.utils.resource_utils import ui_path
+
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.uic import loadUi
-
-from GRIME_AI.utils.resource_utils import ui_path
 
 
 class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
@@ -23,12 +24,14 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
     compositeSliceGenerateSignal = pyqtSignal()
 
     def __init__(self, parent=None):
-        super(GRIME_AI_CompositeSliceDlg, self).__init__(parent)
+        super().__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(Qt.NonModal)
 
         loadUi(ui_path("composite_slice/QDialog_CompositeSlice.ui"), self)
+
+        self.label_Image.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
         self.widthMultiplier = 0
         self.heightMultiplier = 0
@@ -51,6 +54,8 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
 
         self.pushButton_Cancel.clicked.connect(self.pushButton_Cancel_Clicked)
 
+        self.label_Image.resized.connect(self.updateMultipliers)
+
         # Remove monkey-patching of label mouse events.
         # The label class already implements slice dragging/resizing.
         # If you need dialog-side coordination, use signals from the label instead.
@@ -59,21 +64,71 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         self.draggingCenter = False
         self.draggingLeftEdge = False
         self.draggingRightEdge = False
+        self._originalPixmap = None
 
-    def loadImage(self, filename):
-        numpyImage_bgr = cv2.imread(filename)
-        if numpyImage_bgr is None:
+    def showExtractedSlice(self, left_orig: int, right_orig: int):
+        if not hasattr(self, "_originalImage"):
             return
-        numpyImage_rgb = cv2.cvtColor(numpyImage_bgr, cv2.COLOR_BGR2RGB)
-        myImage = QImage(numpyImage_rgb, numpyImage_rgb.shape[1], numpyImage_rgb.shape[0], QImage.Format_RGB888)
-        myImage = QPixmap(myImage)
+
+        slice_array = self._originalImage[:, left_orig:right_orig, :]
+        if slice_array.size == 0:
+            return
+
+        # Ensure contiguous memory and uint8 dtype
+        slice_array = np.ascontiguousarray(slice_array, dtype=np.uint8)
+
+        h, w, ch = slice_array.shape
+        bytes_per_line = ch * w
+
+        # Convert to bytes for QImage
+        qimg = QImage(slice_array.tobytes(), w, h, bytes_per_line, QImage.Format_RGB888)
+        slice_pixmap = QPixmap.fromImage(qimg)
+
+        popup = QDialog(self)
+        popup.setWindowTitle("Extracted Slice")
+        layout = QVBoxLayout(popup)
+
+        slice_label = QLabel(popup)
+        slice_label.setPixmap(slice_pixmap.scaled(
+            slice_label.sizeHint(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        layout.addWidget(slice_label)
+        popup.resize(w, h)
+        popup.show()
+
+    def loadImage(self, filename: str):
+        # Load with OpenCV
+        numpy_bgr = cv2.imread(filename)
+        if numpy_bgr is None:
+            return
+
+        # Convert to RGB and keep NumPy array for slicing later
+        numpy_rgb = cv2.cvtColor(numpy_bgr, cv2.COLOR_BGR2RGB)
+        self._originalImage = numpy_rgb
+
+        # Build a QImage from the NumPy array
+        h, w, ch = numpy_rgb.shape
+        bytes_per_line = ch * w
+        qimg = QImage(numpy_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+        # Wrap in QPixmap for display
+        pixmap = QPixmap.fromImage(qimg)
+
+        # Store original pixmap for rescaling/multipliers
+        self._originalPixmap = pixmap
 
         # Compute multipliers relative to current label size
-        self.widthMultiplier = myImage.width() / max(1, self.label_Image.width())
-        self.heightMultiplier = myImage.height() / max(1, self.label_Image.height())
+        self.widthMultiplier = pixmap.width() / max(1, self.label_Image.width())
+        self.heightMultiplier = pixmap.height() / max(1, self.label_Image.height())
 
-        # Show scaled image
-        self.label_Image.setPixmap(myImage.scaled(self.label_Image.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        # Show scaled image in the label
+        self.label_Image.setPixmap(
+            pixmap.scaled(
+                self.label_Image.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
 
         # Update control ranges now that the label size is known
         max_center = max(0, self.label_Image.width())
@@ -88,14 +143,119 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
 
         # Clamp current values to new ranges and push to label
         self.sliceCenter = max(0, min(max_center, self.sliceCenter))
-        self.sliceWidth = max(self.label_Image._minSliceWidth, min(self.label_Image.width(), self.sliceWidth))
+        self.sliceWidth = max(self.label_Image._minSliceWidth,
+                              min(self.label_Image.width(), self.sliceWidth))
         self.horizontalSlider.setValue(self.sliceCenter)
         self.spinBox_Width.setValue(self.sliceWidth)
         self.label_Image.setSliceCenter(self.sliceCenter)
         self.label_Image.setSliceWidth(self.sliceWidth)
 
+        # Ensure label pixmap is rescaled consistently
+        self._rescaleLabelPixmap()
+
+    def updateMultipliers(self):
+        if not self._originalPixmap or not self.label_Image.pixmap():
+            return
+
+        # Original image dimensions
+        orig_w = self._originalPixmap.width()
+        orig_h = self._originalPixmap.height()
+
+        # Drawn pixmap dimensions (after scaling)
+        drawn_pm = self.label_Image.pixmap()
+        draw_w = drawn_pm.width()
+        draw_h = drawn_pm.height()
+
+        # Multipliers: how many original pixels per drawn pixel
+        self.widthMultiplier = orig_w / max(1, draw_w)
+        self.heightMultiplier = orig_h / max(1, draw_h)
+
+        # Offsets: how far the drawn pixmap is inset inside the label
+        self._xOffset = (self.label_Image.width() - draw_w) // 2
+        self._yOffset = (self.label_Image.height() - draw_h) // 2
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        # --- Margins ---
+        left_margin = 20
+        top_margin = 100
+        right_margin = 20
+        bottom_margin = 60  # spacing between image and buttons
+
+        # Available box for the image
+        target_w = max(1, self.width() - (left_margin + right_margin))
+        target_h = max(1, self.height() - (top_margin + bottom_margin + 80))  # leave room for controls/buttons
+
+        # --- 1) Resize label_Image preserving aspect ratio ---
+        if self._originalPixmap:
+            img_w = self._originalPixmap.width()
+            img_h = self._originalPixmap.height()
+            img_ar = img_w / img_h
+            box_ar = target_w / target_h
+
+            if img_ar > box_ar:
+                fit_w = target_w
+                fit_h = int(fit_w / img_ar)
+            else:
+                fit_h = target_h
+                fit_w = int(fit_h * img_ar)
+
+            x = left_margin + (target_w - fit_w) // 2
+            y = top_margin
+
+            self.label_Image.setGeometry(x, y, fit_w, fit_h)
+
+            scaled = self._originalPixmap.scaled(
+                fit_w, fit_h,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.label_Image.setPixmap(scaled)
+
+        # --- 2) Stretch horizontalSlider width with dialog ---
+        slider_geom = self.horizontalSlider.geometry()
+        new_slider_width = max(1, self.width() - 40)
+        self.horizontalSlider.setGeometry(
+            slider_geom.x(),
+            slider_geom.y(),
+            new_slider_width,
+            slider_geom.height()
+        )
+
+        # --- 3) Center spinbox + labels as a group ---
+        group_width = (
+                self.label_2.width() +
+                10 + self.spinBox_Width.width() +
+                10 + self.label_3.width()
+        )
+        group_x = (self.width() - group_width) // 2
+        group_y = self.spinBox_Width.y()  # keep same vertical position
+
+        self.label_2.move(group_x, group_y)
+        self.spinBox_Width.move(group_x + self.label_2.width() + 10, group_y)
+        self.label_3.move(self.spinBox_Width.x() + self.spinBox_Width.width() + 10, group_y)
+
+        # --- 4) Move and center buttons horizontally below the image ---
+        button_y = self.label_Image.geometry().bottom() + bottom_margin
+        spacing = 20
+        total_width = self.pushButton_Generate.width() + spacing + self.pushButton_Cancel.width()
+        start_x = (self.width() - total_width) // 2
+
+        self.pushButton_Generate.move(start_x, button_y)
+        self.pushButton_Cancel.move(start_x + self.pushButton_Generate.width() + spacing, button_y)
+
+    def _rescaleLabelPixmap(self):
+        if self._originalPixmap:
+            scaled = self._originalPixmap.scaled(
+                self.label_Image.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.label_Image.setPixmap(scaled)
+
     def getMultipliers(self):
-        return self.widthMultiplier, self.heightMultiplier, self.sliceCenter, self.sliceWidth
+        return (self.widthMultiplier, self.heightMultiplier, self.label_Image.getSliceCenter(), self.label_Image.getSliceWidth())
 
     def spinBox_WidthChanged(self, value: int):
         # Update width via label setter; repaint is automatic
@@ -115,6 +275,22 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         return self.sliceCenter
 
     def pushButton_Generate_Clicked(self):
+        orig_h, orig_w, _ = self._originalImage.shape
+        rect = self.label_Image.getSliceRectInOriginal(orig_w, orig_h)
+
+        # Compute center and width in original image coordinates
+        actualSliceCenter = rect.left() + rect.width() // 2
+        actualSliceWidth = rect.width()
+
+        # Store or emit these values for main.py
+        self._actualSliceCenter = actualSliceCenter
+        self._actualSliceWidth = actualSliceWidth
+
+        rect = self.label_Image.getSliceRectInOriginal(orig_w, orig_h)
+
+        if 0:
+            self.showExtractedSlice(rect.left(), rect.right())
+
         self.compositeSliceGenerateSignal.emit()
 
     def pushButton_Cancel_Clicked(self):

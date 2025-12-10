@@ -1,89 +1,98 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# GRIME_AI_ImageOrganizerDlg.py
 
-# Author(s):  Razin Bin Issa | Troy E. Gilmore | John Edward Stranzl, Jr.
-# Affiliation(s): University of Nebraska-Lincoln, Blade Vision Systems, LLC
-# Contact: rissa3@huskers.unl.edu, gilmore@unl.edut, jstranzl2@huskers.unl.edu, johnstranzl@gmail.com
-# Created: Sep. 15, 2025
-# License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
-
-# ----------------------------------------------------------------------------------------------------------------------
-# IMPORTS
-# ----------------------------------------------------------------------------------------------------------------------
-from datetime import datetime
-from pathlib import Path
 import traceback
-import os
 
-from PyQt5.QtCore import pyqtSlot, QTimer
-from PyQt5.QtGui import QTextOption
-from PyQt5.QtWidgets import QDialog, QFileDialog, QMessageBox
-from PyQt5.uic import loadUi
-
-from GRIME_AI.image_organizer import (
-    organize_images, example_filename,
-    scan_for_datetime_presence, move_files_to_subfolder
-)
-from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE
+from datetime import datetime
 from GRIME_AI.utils.resource_utils import ui_path
 
-# ----------------------------------------------------------------------------------------------------------------------
-# CONSTANTS
-# ----------------------------------------------------------------------------------------------------------------------
-UI_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),'ui', "QDialog_ImageOrganizer.ui")
+from PyQt5.uic import loadUi
+from PyQt5.QtCore import pyqtSlot, QTimer, Qt
+from PyQt5.QtGui import QTextOption
+from PyQt5.QtWidgets import QDialog, QFileDialog, QMessageBox
 
-# ======================================================================================================================
-# ======================================================================================================================
-#  =====     =====     =====     =====  class GRIME_AI_ImageOrganizerDlg   =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ---- core (your current module) ----
+from GRIME_AI.image_organizer import (
+    organize_images, example_filename,
+    iter_images, read_image_metadata,
+    move_files_to_subfolder, revert_operation,
+    estimate_minute_collision_count,  # <-- warning estimator
+)
+
+# Always Steel Blue buttons (including popups)
+BUTTON_CSS = """
+QPushButton {
+  background-color: #4682B4;
+  color: white;
+  border: 1px solid #3b6a93;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #5a93c2; }
+"""
+
 class GRIME_AI_ImageOrganizerDlg(QDialog):
     """
-    Dynamic-UI Image Organizer dialog.
+    Single-screen Image Organizer dialog.
 
-    - Folder/Site Name/Copyright heights match the 'Browse...' button.
-    - Site Information wraps long words and the dialog auto-expands (never shrinks).
-    - Pre-scan: Abort / Move Missing / Proceed.
-    - Uses finalized core (seconds handling, tags merge, EXIF writes, CSV).
+    - Counts line: Total File Count / Files w/Timestamp.
+    - Options: Move Files Missing Date, Operate Recursively, Include Seconds (+ red warning).
+    - Site Information wraps at word boundaries; dialog auto-expands (never shrinks).
+    - Run shows completion dialog with 'Revert' button.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         try:
-            loadUi(ui_path('image_organizer/QDialog_ImageOrganizer.ui'), self)
+            loadUi(ui_path("image_organizer/QDialog_ImageOrganizer.ui"), self)
         except Exception as e:
             print("[ERROR] uic.loadUi failed:", e)
             traceback.print_exc()
             raise
 
         # Global button style
-        self.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+        self.setStyleSheet(BUTTON_CSS)
 
-        # Line-wrap behavior for Site Information
+        # Keep Browse a normal width (matches UI spacer for site row; tweak if you like)
+        self.src_btn.setFixedWidth(100)
+
+        # Site Information: wrap at WORD boundaries using the widget width
+        # (UI should also set these, but set here in case)
         self.site_info_edit.setLineWrapMode(self.site_info_edit.WidgetWidth)
-        self.site_info_edit.setWordWrapMode(QTextOption.WrapAnywhere)
+        self.site_info_edit.setWordWrapMode(QTextOption.WordWrap)
+        self.site_info_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.site_info_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        # Initial state
-        self.run_btn.setEnabled(False)
+        # Counts baseline
         self.example_lbl.setText("Example filename: (select a folder)")
+        self.total_count_lbl.setText("TOTAL File Count: 0")
+        self.ts_count_lbl.setText("Files w/Timestamp: 0")
+        self.ts_count_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        # Seconds warning label (red) – ensure hidden initially
+        if hasattr(self, "sec_warn_lbl"):
+            self.sec_warn_lbl.setStyleSheet("color:#B22222;")  # firebrick
+            self.sec_warn_lbl.setVisible(False)
 
         # Signals
         self.src_btn.clicked.connect(self.pick_src)
-        self.src_edit.textChanged.connect(self.update_example)
-        self.site_edit.textChanged.connect(self.update_example)
-        self.sec_chk.toggled.connect(self.update_example)
+        self.cancel_btn.clicked.connect(self.close)
         self.run_btn.clicked.connect(self.run_organizer)
 
-        # Sync heights and capture initial dialog size after layout settles
+        self.src_edit.textChanged.connect(self.update_example)
+        self.site_edit.textChanged.connect(self._on_inputs_changed)
+        self.sec_chk.toggled.connect(self._on_inputs_changed)
+        self.recurse_chk.toggled.connect(self._on_inputs_changed)
+
+        # Sync line-edit heights & capture initial size
         self._initial_size = None
         QTimer.singleShot(0, self._sync_text_field_heights)
         QTimer.singleShot(0, self._capture_initial_size)
 
-        # Grow dialog when Site Information grows (but never shrink)
+        # Grow dialog when Site Information grows (never shrink)
         self.site_info_edit.textChanged.connect(self._grow_for_site_info)
 
-        # Track pre-scan decision
-        self._prescan_decision = None  # "abort" | "move" | "proceed"
+        # cache of images for the last-picked folder (to avoid re-walking twice)
+        self._imgs_cache = []
 
     # ---------- sizing helpers ----------
     def _capture_initial_size(self):
@@ -123,7 +132,7 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
         box.setWindowTitle(title)
         box.setIcon(icon)
         box.setText(text)
-        box.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+        box.setStyleSheet(BUTTON_CSS)
         return box
 
     def _compute_example(self) -> str:
@@ -141,7 +150,59 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
         else:
             self.example_lbl.setText(f"Example filename: {self._compute_example()}")
 
-    # ---------- pre-scan on folder selection ----------
+    def _on_inputs_changed(self):
+        # Update example and seconds warning whenever inputs that affect them change
+        self.update_example()
+        self._update_seconds_warning()
+
+    # ---------- compute and show red warning ----------
+    def _update_seconds_warning(self):
+        """Show/hide the red warning next to 'Include Seconds'."""
+        try:
+            if not hasattr(self, "sec_warn_lbl"):
+                return
+
+            # Only warn when seconds are NOT checked
+            if self.sec_chk.isChecked():
+                self.sec_warn_lbl.setVisible(False)
+                self.sec_warn_lbl.setText("")
+                return
+
+            folder = self.src_edit.text().strip()
+            if not folder:
+                self.sec_warn_lbl.setVisible(False)
+                self.sec_warn_lbl.setText("")
+                return
+
+            # Use cached file list if available; else build it
+            imgs = self._imgs_cache or iter_images(Path(folder), self.recurse_chk.isChecked())
+            if not imgs:
+                self.sec_warn_lbl.setVisible(False)
+                self.sec_warn_lbl.setText("")
+                return
+
+            # Estimate how many files will need suffixes without seconds
+            site = self.site_edit.text().strip()
+            risky = estimate_minute_collision_count(imgs, site)
+
+            if risky > 0:
+                # succinct message (wraps nicely beside the checkbox)
+                self.sec_warn_lbl.setText(
+                    f"⚠ {risky} image(s) share the same minute. "
+                    f"Without seconds, those will be suffixed (e.g., _02)."
+                )
+                self.sec_warn_lbl.setVisible(True)
+            else:
+                self.sec_warn_lbl.setVisible(False)
+                self.sec_warn_lbl.setText("")
+        except Exception as e:
+            # Never break the UI on warning compute
+            print("[WARN] seconds warning compute failed:", e)
+            if hasattr(self, "sec_warn_lbl"):
+                self.sec_warn_lbl.setVisible(False)
+                self.sec_warn_lbl.setText("")
+
+    # ---------- folder pick ----------
     @pyqtSlot()
     def pick_src(self):
         d = QFileDialog.getExistingDirectory(self, "Select folder", str(Path.home()))
@@ -151,60 +212,49 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
         self.src_edit.setText(d)
         print("[DEBUG] Selected folder:", d)
 
+        # Build cache and counts
         try:
-            has_dt, missing_dt = scan_for_datetime_presence(Path(d), self.recurse_chk.isChecked())
-            n_has, n_missing = len(has_dt), len(missing_dt)
-            print(f"[INFO] Pre-scan: with date={n_has}, missing date={n_missing}")
+            recursive = self.recurse_chk.isChecked()
+            self._imgs_cache = iter_images(Path(d), recursive)
+            total = len(self._imgs_cache)
+            with_ts = 0
+            has_seconds_any = False
 
-            if n_has == 0 and n_missing > 0:
-                title = "No 'Date Taken' Found"
-                text = ("The program did not find any 'Date Taken' (creation date) "
-                        "in the images' metadata.\n\nWhat would you like to do?")
-                icon = QMessageBox.Warning
-            else:
-                title = "Date Taken Scan Results"
-                text = (f"{n_has} image(s) HAVE 'Date Taken'.\n"
-                        f"{n_missing} image(s) DO NOT.\n\n"
-                        "How would you like to proceed?")
-                icon = QMessageBox.Information
+            for p in self._imgs_cache:
+                m = read_image_metadata(p)
+                if m.get("DateTimeFromMetadata"):
+                    with_ts += 1
+                if m.get("HasSeconds", False):
+                    has_seconds_any = True
 
-            box = self._steel_blue_msgbox(title, text, icon)
-            abort_btn = box.addButton("Abort", QMessageBox.RejectRole)
-            move_btn = box.addButton("Move Missing to Subfolder", QMessageBox.ActionRole)
-            proceed_btn = box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
-            box.exec_()
-
-            clicked = box.clickedButton()
-            if clicked == abort_btn:
-                self._prescan_decision = "abort"
-                print("[INFO] User chose Abort. Closing dialog.")
-                self.close()
-                return
-            elif clicked == move_btn:
-                self._prescan_decision = "move"
-                subfolder = move_files_to_subfolder(missing_dt, base_dir=Path(d))
-                print(f"[INFO] Moved {n_missing} no-date file(s) to: {subfolder}")
-                if self.recurse_chk.isChecked():
-                    self.recurse_chk.setChecked(False)
-                    print("[DEBUG] Recursion disabled after move.")
-                info_box = self._steel_blue_msgbox(
-                    "Moved Files",
-                    f"Moved {n_missing} image(s) without 'Date Taken' to:\n{subfolder}\n\n"
-                    "Now choose options and click Run."
-                )
-                info_box.exec_()
-            else:
-                self._prescan_decision = "proceed"
-                print("[INFO] User chose Proceed.")
-
-            self.run_btn.setEnabled(True)
+            self.total_count_lbl.setText(f"TOTAL File Count: {total}")
+            self.ts_count_lbl.setText(f"Files w/Timestamp: {with_ts}")
             self.update_example()
 
+            # Seconds warning next to checkbox (user in control)
+            self._update_seconds_warning()
+
+            # (Optional) early heads-up dialog about seconds presence
+            if has_seconds_any and not self.sec_chk.isChecked():
+                warn = self._steel_blue_msgbox(
+                    "Seconds Present in Metadata",
+                    ("Some images contain seconds in 'Date Taken'.\n\n"
+                     "You currently have 'Include Seconds in Timestamp' unchecked, "
+                     "which may create duplicate names for photos shot in the same minute. "
+                     "If duplicates occur, the organizer will disambiguate using "
+                     "resolution and/or numeric suffixes."),
+                    QMessageBox.Warning
+                )
+                warn.exec_()
+
         except Exception as e:
-            print("[ERROR] Pre-scan failed:", e)
-            err_box = self._steel_blue_msgbox("Pre-scan Error", str(e), QMessageBox.Critical)
+            print("[ERROR] Folder scan failed:", e)
+            err_box = self._steel_blue_msgbox("Folder Scan Error", str(e), QMessageBox.Critical)
             err_box.exec_()
-            self.run_btn.setEnabled(False)
+            self._imgs_cache = []
+            self.total_count_lbl.setText("TOTAL File Count: 0")
+            self.ts_count_lbl.setText("Files w/Timestamp: 0")
+            self._update_seconds_warning()
 
     # ---------- main action ----------
     @pyqtSlot()
@@ -215,14 +265,38 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
             warn.exec_()
             return
 
-        if self._prescan_decision == "abort":
-            print("[WARN] Run pressed after Abort; ignoring.")
-            return
+        folder_path = Path(folder)
+        recursive = self.recurse_chk.isChecked()
 
+        # Optional: Move files missing Date Taken first (per checkbox)
+        try:
+            if self.move_missing_chk.isChecked():
+                if not self._imgs_cache:
+                    self._imgs_cache = iter_images(folder_path, recursive)
+
+                has_dt, missing_dt = [], []
+                for p in self._imgs_cache:
+                    m = read_image_metadata(p)
+                    (has_dt if m.get("DateTimeFromMetadata") else missing_dt).append(p)
+
+                if missing_dt:
+                    sub = move_files_to_subfolder(missing_dt, base_dir=folder_path)
+                    info = self._steel_blue_msgbox(
+                        "Moved Files Without Date",
+                        f"Moved {len(missing_dt)} image(s) without 'Date Taken' to:\n{sub}\n\n"
+                        "Proceeding to rename the remaining images."
+                    )
+                    info.exec_()
+                    # refresh cache to exclude moved files
+                    self._imgs_cache = has_dt
+        except Exception as e:
+            print("[WARN] Could not move files missing date:", e)
+
+        # Run the organizer
         try:
             log_csv, rows, tags, errors = organize_images(
-                src_folder=Path(folder),
-                recursive=self.recurse_chk.isChecked(),
+                src_folder=folder_path,
+                recursive=recursive,
                 site=self.site_edit.text().strip(),
                 include_seconds=self.sec_chk.isChecked(),
                 copyright_holder=self.copyright_edit.text().strip(),
@@ -235,8 +309,30 @@ class GRIME_AI_ImageOrganizerDlg(QDialog):
             else:
                 msg += "\n\nAll images processed successfully."
 
-            done = self._steel_blue_msgbox("Done", msg, QMessageBox.Information)
+            # Completion dialog with Revert
+            done = QMessageBox(self)
+            done.setWindowTitle("Done")
+            done.setIcon(QMessageBox.Information)
+            done.setText(msg)
+            revert_btn = done.addButton("Revert", QMessageBox.ActionRole)
+            close_btn  = done.addButton("Close", QMessageBox.AcceptRole)
+            done.setStyleSheet(BUTTON_CSS)
             done.exec_()
+
+            if done.clickedButton() is revert_btn:
+                reverted, rev_errors = revert_operation(folder_path, Path(log_csv))
+                if rev_errors:
+                    er = self._steel_blue_msgbox(
+                        "Revert Finished with Issues",
+                        f"Reverted {reverted} file(s).\n\n" +
+                        "\n".join(rev_errors[:10]) + ("\n…" if len(rev_errors) > 10 else ""),
+                        QMessageBox.Warning
+                    )
+                    er.exec_()
+                else:
+                    ok = self._steel_blue_msgbox("Reverted", f"Reverted {reverted} file(s).")
+                    ok.exec_()
+
             print("[INFO] Completed. Log:", log_csv)
 
         except Exception as e:

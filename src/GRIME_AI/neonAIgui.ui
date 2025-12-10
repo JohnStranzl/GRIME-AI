@@ -48,7 +48,7 @@
      <enum>QTabWidget::Triangular</enum>
     </property>
     <property name="currentIndex">
-     <number>2</number>
+     <number>0</number>
     </property>
     <property name="tabsClosable">
      <bool>false</bool>
@@ -71,6 +71,7 @@
           <property name="font">
            <font>
             <pointsize>12</pointsize>
+            <weight>50</weight>
             <bold>false</bold>
             <kerning>true</kerning>
            </font>
@@ -111,6 +112,7 @@
           <property name="font">
            <font>
             <pointsize>12</pointsize>
+            <weight>50</weight>
             <bold>false</bold>
             <kerning>true</kerning>
            </font>
@@ -194,6 +196,7 @@
           <property name="font">
            <font>
             <pointsize>12</pointsize>
+            <weight>50</weight>
             <bold>false</bold>
             <kerning>true</kerning>
            </font>
@@ -321,6 +324,7 @@
       </property>
       <property name="font">
        <font>
+        <weight>50</weight>
         <bold>false</bold>
         <underline>false</underline>
        </font>
@@ -340,6 +344,7 @@
        <property name="font">
         <font>
          <pointsize>10</pointsize>
+         <weight>50</weight>
          <bold>false</bold>
          <underline>false</underline>
         </font>
@@ -386,6 +391,7 @@
       </property>
       <property name="font">
        <font>
+        <weight>75</weight>
         <bold>true</bold>
         <underline>false</underline>
        </font>
@@ -607,6 +613,7 @@
       </property>
       <property name="font">
        <font>
+        <weight>75</weight>
         <bold>true</bold>
         <underline>false</underline>
        </font>
@@ -635,6 +642,7 @@
       </property>
       <property name="font">
        <font>
+        <weight>50</weight>
         <bold>false</bold>
         <underline>false</underline>
        </font>
@@ -654,6 +662,7 @@
        <property name="font">
         <font>
          <pointsize>10</pointsize>
+         <weight>50</weight>
          <bold>false</bold>
          <underline>false</underline>
         </font>
@@ -676,6 +685,119 @@
        </property>
       </widget>
      </widget>
+    </widget>
+    <widget class="QWidget" name="tab_phenocam_sites">
+     <attribute name="title">
+      <string>Phenocam Sites</string>
+     </attribute>
+     <layout class="QHBoxLayout" name="horizontalLayout_Phenocam">
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_PhenocamLeft">
+        <item>
+         <widget class="QLabel" name="labelPhenocamSites">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Phenocam Sites</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTreeWidget" name="treeWidget_Phenocam">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="headerHidden">
+           <bool>false</bool>
+          </property>
+          <column>
+           <property name="text">
+            <string>Site / Camera</string>
+           </property>
+          </column>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_PhenocamRight" stretch="1,1,0,0">
+        <item>
+         <widget class="QLabel" name="labelPhenocamImageTitle">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Latest Image</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelPhenocamImageTitle">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Latest Image</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelPhenocamImage">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="frameShape">
+           <enum>QFrame::Box</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Sunken</enum>
+          </property>
+          <property name="text">
+           <string>Camera Image</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_PhenocamRight">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="tab_FeatureAnalysis">
      <attribute name="title">
@@ -953,7 +1075,7 @@
      <x>0</x>
      <y>0</y>
      <width>1440</width>
-     <height>25</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">

@@ -10,23 +10,21 @@
 import os
 import json
 import re
-from io import StringIO
 
-import csv
 import cv2
 import numpy as np
 
 import pandas as pd
 from datetime import datetime
 
-import urllib.request
-from urllib.request import urlopen
-import ssl
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from pathlib import Path
 
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
-from GRIME_AI.GRIME_AI_Save_Utils import JsonEditor
+from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 
 
 # ======================================================================================================================
@@ -38,9 +36,9 @@ class GRIME_AI_Utils:
         self.className = "GRIME_AI_Utils"
         self.instance = 1
 
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
     # Converts a QImage into an opencv MAT format
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
     def convertQImageToMat(self, incomingImage):
         incomingImage = incomingImage.convertToFormat(4)
 
@@ -58,10 +56,8 @@ class GRIME_AI_Utils:
 
         return arr
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def ResizeWithAspectRatio(self, image, width=None, height=None, inter=cv2.INTER_AREA):
         dim = None
         (h, w) = image.shape[:2]
@@ -78,10 +74,8 @@ class GRIME_AI_Utils:
 
         return cv2.resize(image, dim, interpolation=inter)
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def get_image_count(self, folder, extensions):
         imageCount = 0
 
@@ -92,7 +86,8 @@ class GRIME_AI_Utils:
 
         return imageCount
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def get_image_count_walk(self, folder, extensions):
         imageCount = 0
 
@@ -104,9 +99,8 @@ class GRIME_AI_Utils:
 
         return imageCount
 
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def getFileList(self, folder='', extensions='jpg', bFetchRecursive=False):
 
         filenames = []
@@ -128,10 +122,8 @@ class GRIME_AI_Utils:
 
         return image_count, filenames
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def drawGridOnImage(self, img):
         GRID_SIZE = 100
 
@@ -145,11 +137,9 @@ class GRIME_AI_Utils:
         # cv2.imshow('Hehe', numpyImage)
         # key = cv2.waitKey(0)
 
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def create_GRIME_folders(self, full):
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def create_GRIME_folders(self, full=1):
         # --------------------------------------------------------------------------------------------------------------
         # CREATE A GRIME-AI FOLDER IN THE USER'S DOCUMENTS FOLDER
         # <user>/Documents/GRIME-AI
@@ -221,10 +211,8 @@ class GRIME_AI_Utils:
                     parent_dir = os.path.dirname(make_these_folders)
                     JsonEditor().update_json_entry(entry_key, os.path.normpath(parent_dir))
 
-
-    # ****************************************************************************************
-    #
-    # ****************************************************************************************
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def saveSettings(self, settings_folder):
         # Collect texts from all QLineEdit widgets
         settings = {
@@ -237,7 +225,8 @@ class GRIME_AI_Utils:
         with open(settings_folder, 'w') as file:
             json.dump(settings, file)
 
-
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def loadSettings(self, settings_folder):
         try:
             with open(settings_folder, 'r') as file:
@@ -250,10 +239,8 @@ class GRIME_AI_Utils:
         except FileNotFoundError:
             pass  # It's okay if the file doesn't exist yet
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def check_url_validity(self, my_url):
         nErrorCode = -1
         nRetryCount = 3
@@ -325,32 +312,44 @@ class GRIME_AI_Utils:
             505: ('HTTP Version Not Supported', 'Cannot fulfill request.'),
         }
 
-        while nErrorCode == -1 and nRetryCount > 0:
-            req = urllib.request.Request(my_url)
+        print("Check URL validity...")
 
+        # configure a session with retry/backoff
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=nRetryCount,  # how many times to retry
+            backoff_factor=1,  # 1s, 2s, 4s, ...
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "GET"],
+            raise_on_status=False  # don’t raise immediately on 5xx
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+
+        while nErrorCode == -1 and nRetryCount > 0:
             try:
-                ssl._create_default_https_context = ssl._create_unverified_context
-                response = urlopen(req)
+                response = session.get(my_url, timeout=(10, 60))
+                response.raise_for_status()
                 nErrorCode = 0
-            except urllib.error.HTTPError as e:
-                strError = 'The server couldn\'t fulfill the request.\n' + 'Error code: ' + e.code
+            except requests.exceptions.HTTPError as e:
+                strError = f"The server couldn't fulfill the request.\nError code: {e.response.status_code}"
                 nErrorCode = -1
-                nRetryCount = nRetryCount - 1
-            except urllib.error.URLError as e:
+                nRetryCount -= 1
+            except (requests.exceptions.SSLError,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.RequestException) as e:
                 if nRetryCount == 1:
-                    strError = 'We failed to reach a server.\n' + 'Reason: [' + str(e.reason.args[0]) + '] ' + \
-                               e.reason.args[1]
+                    strError = f"We failed to reach a server.\nReason: {e}"
                     msgBox = GRIME_AI_QMessageBox('NEON SITE Info URL Error', strError)
                     response = msgBox.displayMsgBox()
                 nErrorCode = -1
-                nRetryCount = nRetryCount - 1
+                nRetryCount -= 1
 
         return nErrorCode
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def fetchDownloadsFolderPath(self):
         downloadsFilePath = os.path.expanduser('~')
         downloadsFilePath = os.path.join(downloadsFilePath, 'Documents')
@@ -363,10 +362,8 @@ class GRIME_AI_Utils:
 
         return downloadsFilePath
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def getRangeOfDates(self, strStartYearMonth, strEndYearMonth):
         # GET A LIST OF THE MONTHS FOR THE YEARS BETWEEN THE START DATA AND END DATE
         start_date = datetime.strptime(strStartYearMonth, "%Y-%m")
@@ -380,10 +377,8 @@ class GRIME_AI_Utils:
 
         return date_list.tolist()
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def separateChannels(self, image):
         # greennessIndex = green / (red + green + blue)
         red = image[:, :, 0]
@@ -400,10 +395,8 @@ class GRIME_AI_Utils:
 
         return red, green, blue
 
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def sumChannels(self, red, green, blue):
 
         red_sum = np.sum(red)
@@ -412,9 +405,7 @@ class GRIME_AI_Utils:
 
         return red_sum, green_sum, blue_sum
 
-
     # ------------------------------------------------------------------------------------------------------------------
-    #
     # ------------------------------------------------------------------------------------------------------------------
     def getMaxNumColorClusters(self, roiList):
         maxColorClusters = 0
@@ -424,4 +415,3 @@ class GRIME_AI_Utils:
                 maxColorClusters = roiObj.getNumColorClusters()
 
         return maxColorClusters
-

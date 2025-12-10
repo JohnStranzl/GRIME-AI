@@ -7,13 +7,14 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
+from GRIME_AI.utils.resource_utils import ui_path
+
 from PyQt5 import QtCore
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from PyQt5.QtWidgets import QDialog, QWidget
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
 
 from GRIME_AI.constants import edgeMethodsClass, featureMethodsClass
-from GRIME_AI.utils.resource_utils import ui_path
 
 # ======================================================================================================================
 #
@@ -31,13 +32,12 @@ class GRIME_AI_EdgeDetectionDlg(QDialog):
     #
     # -----------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
-        super(QDialog, self).__init__(parent)
+        super().__init__(parent)
 
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
 
-        # Load the UI file (which now contains dynamic layouts)
-        loadUi(ui_path('edge_detection/QDialog_EdgeDetection.ui'), self)
+        loadUi(ui_path("edge_detection/QDialog_EdgeDetection.ui"), self)
 
         # CONNECT THE SIGNALS TO THE FUNCTIONS IN THE PARENT ("CALLING") THREAD THAT WILL RECEIVE THE SIGNAL
         self.featureDetectionSignal.connect(parent.featureDetectionMethod)

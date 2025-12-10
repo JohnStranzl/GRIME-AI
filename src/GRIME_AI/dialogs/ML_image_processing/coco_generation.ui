@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>COCOGenerationDlg</class>
+ <widget class="QDialog" name="COCOGenerationDlg">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>COCO Generation</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayoutCOCO">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutCOCO_Folder">
+     <item>
+      <widget class="QLineEdit" name="lineEdit_cocoFolder">
+       <property name="placeholderText">
+        <string>Enter folder path for images (and masks)...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_cocoBrowse">
+       <property name="text">
+        <string>Browse</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutMaskFile">
+     <item>
+      <widget class="QLineEdit" name="lineEdit_maskFile">
+       <property name="placeholderText">
+        <string>Enter mask file path...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_maskBrowse">
+       <property name="text">
+        <string>Browse</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QCheckBox" name="checkBox_singleMask">
+     <property name="text">
+      <string>Use Single Mask File</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QPushButton" name="pushButton_generateCOCO">
+     <property name="text">
+      <string>Generate COCO Annotations</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox_close">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Close</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

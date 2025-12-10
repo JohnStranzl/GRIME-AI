@@ -7,13 +7,12 @@
 # Created: Mar 6, 2022
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
-import os
+from GRIME_AI.utils.resource_utils import ui_path
+
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QDialog
 from PyQt5.uic import loadUi
-
-from GRIME_AI.utils.resource_utils import ui_path
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -34,9 +33,9 @@ class roiParameters:
 # ======================================================================================================================
 class GRIME_AI_ColorSegmentationDlg(QDialog):
 
-    # -----------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # SIGNALS
-    # -----------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     colorSegmentation_Signal = pyqtSignal(int)
     addROI_Signal = pyqtSignal(roiParameters)
     deleteAllROI_Signal = pyqtSignal()
@@ -48,9 +47,9 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
 
     returnROIParameters = roiParameters()
 
-    # -----------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     #
-    # -----------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, parent=None):
         super(GRIME_AI_ColorSegmentationDlg, self).__init__(parent)
         # Removed: layout = QVBoxLayout(self)
@@ -60,7 +59,7 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         # Load the UI file (which now contains dynamic layouts)
-        loadUi(ui_path('color_segmentation/QDialog_ColorSegmentation.ui'), self)
+        loadUi(ui_path("color_segmentation/QDialog_ColorSegmentation.ui"), self)
 
         # Ensure the dialog starts with the intended size
         self.resize(400, 676)
@@ -103,6 +102,7 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
             'QPushButton {background-color: steelblue; color: yellow;}'
         )
 
+    # ------------------------------------------------------------------------------------------------------------------
     def colorClusterValueChanged(self):
         self.returnROIParameters.numColorClusters = self.spinBoxColorClusters.value()
         self.refresh_rois_signal.emit(self.returnROIParameters)
@@ -138,28 +138,34 @@ class GRIME_AI_ColorSegmentationDlg(QDialog):
 
         self.addROI_Signal.emit(self.returnROIParameters)
 
-    # ----------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def deleteAllROI(self):
         self.deleteAllROI_Signal.emit()
 
-    # ----------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def GCC_Clicked(self):
         self.greenness_index_signal.emit()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def GLI_Clicked(self):
         self.greenness_index_signal.emit()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def ExG_Clicked(self):
         self.greenness_index_signal.emit()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def RGI_Clicked(self):
         self.greenness_index_signal.emit()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def NDVI_Clicked(self):
         self.greenness_index_signal.emit()
 
+    # ------------------------------------------------------------------------------------------------------------------
     def disable_spinbox_color_clusters(self, disable_spinbox=True):
         self.spinBoxColorClusters.setDisabled(disable_spinbox)
 
+    # ------------------------------------------------------------------------------------------------------------------
     def get_num_color_clusters(self):
         return self.spinBoxColorClusters.value()

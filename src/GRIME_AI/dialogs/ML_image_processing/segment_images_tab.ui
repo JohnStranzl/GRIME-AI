@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SegmentImagesTab</class>
+ <widget class="QWidget" name="tabSegmentImages">
+  <property name="windowTitle">
+   <string>Segment Images</string>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutSegmentImages">
+   <item>
+    <layout class="QVBoxLayout" name="verticalLayoutSegmentImages">
+     <item>
+      <widget class="QGroupBox" name="groupBox_Options">
+       <property name="minimumSize">
+        <size>
+         <width>300</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="title">
+        <string>Options</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayoutOptions">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutOptions">
+          <item>
+           <widget class="QGroupBox" name="groupBox_modelSelection_segment">
+            <property name="title">
+             <string>Model Selection</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_modelSelection_segment">
+             <item>
+              <widget class="QRadioButton" name="radioButton_segment_model_sam2">
+               <property name="text">
+                <string>SAM2</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QRadioButton" name="radioButton_segment_model_segformer">
+               <property name="text">
+                <string>Segformer</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QRadioButton" name="radioButton_segment_model_mask_rcnn">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="toolTip">
+                <string extracomment="This model is not yet fully implemented."/>
+               </property>
+               <property name="text">
+                <string>Mask R-CNN</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_outputOptions_segment">
+            <property name="title">
+             <string>Output Options</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_outputOptions_segment">
+             <item>
+              <widget class="QCheckBox" name="checkBox_save_predicted_masks">
+               <property name="text">
+                <string>Save Predicted Masks</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkBox_save_probability_maps">
+               <property name="text">
+                <string>Save Probability Maps</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkBox_copyOriginalModelImage">
+               <property name="text">
+                <string>Copy Original Images</string>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QGroupBox" name="groupBox_SelectModel">
+       <property name="title">
+        <string>Select Model</string>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayoutSelectModel">
+        <item>
+         <widget class="QLineEdit" name="lineEdit_segmentation_model_file">
+          <property name="toolTip">
+           <string>You must select the model that you want to use for segmenting the images.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_Select_Model">
+          <property name="text">
+           <string>Browse</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QGroupBox" name="groupBox_Select_Images_Folder">
+       <property name="title">
+        <string>Select Folder with Images</string>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayoutSelectImagesFolder">
+        <item>
+         <widget class="QLineEdit" name="lineEdit_segmentation_images_folder">
+          <property name="toolTip">
+           <string>You must select a folder containing the images that you want to segment.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_Select_Images_Folder">
+          <property name="text">
+           <string>Browse</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayoutSegmentButton">
+       <item>
+        <spacer name="horizontalSpacerSegmentLeft">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_Segment">
+         <property name="text">
+          <string>Segment Images</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacerSegmentRight">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="groupBox_labels">
+     <property name="title">
+      <string>Labels</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_labels">
+      <item>
+       <widget class="QListWidget" name="listWidget_labels">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::ExtendedSelection</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
