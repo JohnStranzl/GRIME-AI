@@ -247,8 +247,8 @@ from exifData import EXIFData
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from ml_core.ml_model_training import MLModelTraining
-from ml_core.ml_image_segmentation import MLImageSegmentation
+from GRIME_AI.ml_core.ml_model_training import MLModelTraining
+from GRIME_AI.ml_core.ml_image_segmentation import MLImageSegmentation
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
