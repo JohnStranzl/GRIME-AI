@@ -170,7 +170,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBa
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtWidgets import QTreeWidgetItem
 
-from GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
+from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 import pandas as pd
 
@@ -265,28 +265,6 @@ bStartupComplete = False
 
 global bShow_GUI
 bShow_GUI = False
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-try:
-    import torch
-    print(torch.__version__)
-
-    import torchvision.transforms as T
-    from torch.cuda.amp import GradScaler, autocast
-    from torch import nn
-    from torch.utils.data import DataLoader
-    from torch.nn.functional import binary_cross_entropy_with_logits
-
-    print("GRIME AI Deep Learning: PyTorch imported successfully.")
-except ImportError as e:
-    print("GRIME AI Deep Learning: Error importing PyTorch:", e)
-    # Remove the faulty package from sys.modules to prevent further issues
-    if 'torch' in sys.modules:
-        del sys.modules['torch']
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -464,11 +442,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         utils.create_GRIME_folders()
 
         self.populate_controls()
-
-        self.loss_values = []
-        self.val_loss_values = []
-        self.epoch_list = []
-        self.scaler = GradScaler()
 
         # ----------------------------------------------------------------------------------------------------
         # ----------------------------------------------------------------------------------------------------
