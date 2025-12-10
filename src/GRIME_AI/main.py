@@ -219,8 +219,6 @@ from GRIME_AI.phenocam.GRIME_AI_Phenocam_API import GRIME_AI_Phenocam_API
 
 from GRIME_AI.colorSegmentationParams import colorSegmentationParamsClass
 
-#from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
-
 from GRIME_AI.geomaps.google_maps_viewer import GoogleMapWidget
 from GRIME_AI.geomaps.openstreetmap_viewer import OpenStreetMapWidget
 
