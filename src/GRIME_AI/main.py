@@ -176,53 +176,53 @@ import pandas as pd
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-import sobelData
+import GRIME_AI.sobelData
 
-from usgs.client import USGSClient
+from GRIME_AI.usgs.client import USGSClient
 
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------------------------------------------------
-from dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
-from dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
-from dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
-from dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
-from dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
+from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
+from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
+from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
+from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
+from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
 from GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
-from dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
-from dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
-from GRIME_AI_Color import GRIME_AI_Color
-from GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
-from GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
-from dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-from dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
-from GRIME_AI_JSON_Editor import JsonEditor
-from GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
-from GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
-from GRIME_AI_ImageData import imageData
-from dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
-from phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
-from GRIME_AI_ProductTable import GRIME_AI_ProductTable
-from GRIME_AI_QLabel import DrawingMode
-from GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
-from GRIME_AI_QProgressWheel import QProgressWheel
-from GRIME_AI_Utils import GRIME_AI_Utils
-from GRIME_AI_roiData import GRIME_AI_roiData, ROIShape
-from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
-from GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
-from GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
-from GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
-from GRIME_AI_GreenImageGenerator import GreenImageGenerator
-from GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
-from phenocam.GRIME_AI_Phenocam_API import GRIME_AI_Phenocam_API
+from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
+from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
+from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
+from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
+from GRIME_AI.GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
+from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
+from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
+from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
+from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
+from GRIME_AI.GRIME_AI_ImageData import imageData
+from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
+from GRIME_AI.GRIME_AI_ProductTable import GRIME_AI_ProductTable
+from GRIME_AI.GRIME_AI_QLabel import DrawingMode
+from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
+from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
+from GRIME_AI.GRIME_AI_Utils import GRIME_AI_Utils
+from GRIME_AI.GRIME_AI_roiData import GRIME_AI_roiData, ROIShape
+from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+from GRIME_AI.GRIME_AI_Resize_Controls import GRIME_AI_Resize_Controls
+from GRIME_AI.GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
+from GRIME_AI.GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
+from GRIME_AI.GRIME_AI_GreenImageGenerator import GreenImageGenerator
+from GRIME_AI.GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
+from GRIME_AI.phenocam.GRIME_AI_Phenocam_API import GRIME_AI_Phenocam_API
 
-from colorSegmentationParams import colorSegmentationParamsClass
+from GRIME_AI.colorSegmentationParams import colorSegmentationParamsClass
 
 #from GRIME_AI_DeepLearning import GRIME_AI_DeepLearning
 
-from geomaps.google_maps_viewer import GoogleMapWidget
-from geomaps.openstreetmap_viewer import OpenStreetMapWidget
+from GRIME_AI.geomaps.google_maps_viewer import GoogleMapWidget
+from GRIME_AI.geomaps.openstreetmap_viewer import OpenStreetMapWidget
 
 # ----------------------------------------------------------------------------------------------------------------------
 # HYDRA (for SAM2)
