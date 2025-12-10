@@ -4,13 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+print("[DEBUG] Loaded patched transforms.py")
+
 import warnings
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Normalize, Resize, ToTensor
-
 
 class SAM2Transforms(nn.Module):
     def __init__(
@@ -27,12 +28,55 @@ class SAM2Transforms(nn.Module):
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
         self.to_tensor = ToTensor()
+
+        # JES — 2025_06_16
+        # NOTE: We avoid calling torch.jit.script() at runtime when running in a "frozen" (PyInstaller) build.
+        #       In frozen mode, TorchScript compilation can fail for several reasons:
+        #         * The compiler may try to locate Python source for custom transforms (Resize, Normalize),
+        #           which are embedded in the executable and not available as .py files.
+        #         * It may attempt to write temporary .pt artifacts to a read‑only filesystem inside the bundle.
+        #         * PyInstaller’s import hooks can break TorchScript’s introspection of nn.Module definitions.
+        #       To prevent these runtime errors, we pre‑compile the transform in development mode and bundle
+        #       the resulting sam2_transforms.pt with the frozen app. At runtime:
+        #         * Frozen mode --> load the precompiled .pt file from sys._MEIPASS.
+        #         * Development mode --> script the transform on‑the‑fly for flexibility and rapid iteration.
+        #       This split ensures reproducibility, avoids packaging‑time breakage, and keeps dev builds fast.
+        #
+        # COMMENT OUT THE CALL TO torch.jit.script AND PLACE IT IN THE NEW LOGIC BELOW.
+        '''
         self.transforms = torch.jit.script(
             nn.Sequential(
                 Resize((self.resolution, self.resolution)),
                 Normalize(self.mean, self.std),
             )
-        )
+        '''
+
+        # JES — 2025_06_16
+        # THE FOLLOWING CODE IS NEW. IT WAS ADDED TO GET AROUND A PyInstaller ISSUE.
+        # WE WILL CALL THE FUNCTION ABOVE ONLY WHEN IN DEVELOPMENT MODE. OTHERWISE, IT WILL USE THE
+        # PRECOMPILED sam2_transforms.pt WHEN WE ARE COMPILING THE CODE WITH PyInstaller.
+        import sys, os
+
+        is_frozen = getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS')
+        if is_frozen:
+            print("[INFO] Frozen mode — loading precompiled sam2_transforms.pt.")
+            pt_path = os.path.join(sys._MEIPASS, "sam2_transforms.pt")
+            self.transforms = torch.jit.load(pt_path)
+            return
+
+        print("[INFO] Development mode — scripting transform on-the-fly.")
+        try:
+            self.transforms = torch.jit.script(
+                nn.Sequential(
+                    Resize((self.resolution, self.resolution)),
+                    Normalize(self.mean, self.std),
+                )
+            )
+        except Exception as e:
+            print(f"[WARN] TorchScript failed: {e}")
+            print("[INFO] Falling back to precompiled sam2_transforms.pt.")
+            pt_path = os.path.join(os.path.dirname(__file__), "sam2_transforms.pt")
+            self.transforms = torch.jit.load(pt_path)
 
     def __call__(self, x):
         x = self.to_tensor(x)
