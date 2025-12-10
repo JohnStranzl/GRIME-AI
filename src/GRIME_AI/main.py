@@ -3674,7 +3674,7 @@ def run_gui():
     global frame
 
     # If Hydra is already initialized, clear it
-    from GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+    from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
     settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
     print(settings_folder)

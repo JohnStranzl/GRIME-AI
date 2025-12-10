@@ -33,7 +33,7 @@ import numpy as np
 from pycocotools.coco import COCO
 from pycocotools import mask as maskUtils
 
-from GRIME_AI_QProgressWheel import QProgressWheel
+from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 
 
 # ======================================================================================================================
