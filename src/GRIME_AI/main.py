@@ -189,7 +189,7 @@ from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_
 from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
 from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
 from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
-from GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
+from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
 from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
 from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
