@@ -539,7 +539,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # NIMS
         # ------------------------------------------------------------------------------------------------------------------
         try:
-            from usgs.shim import USGS_NIMS_Shim
+            from GRIME_AI.usgs.shim import USGS_NIMS_Shim
 
             self.myNIMS = USGS_NIMS_Shim()
             self.cameraDictionary = self.myNIMS.get_camera_dictionary()
