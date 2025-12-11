@@ -12,7 +12,7 @@ import numpy as np
 
 from GRIME_AI.utils.resource_utils import ui_path
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QMessageBox
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QImage, QPixmap
@@ -105,6 +105,7 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         # Convert to RGB and keep NumPy array for slicing later
         numpy_rgb = cv2.cvtColor(numpy_bgr, cv2.COLOR_BGR2RGB)
         self._originalImage = numpy_rgb
+        self.label_Image.setOriginalImageShape(self._originalImage.shape)
 
         # Build a QImage from the NumPy array
         h, w, ch = numpy_rgb.shape
@@ -275,22 +276,6 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         return self.sliceCenter
 
     def pushButton_Generate_Clicked(self):
-        orig_h, orig_w, _ = self._originalImage.shape
-        rect = self.label_Image.getSliceRectInOriginal(orig_w, orig_h)
-
-        # Compute center and width in original image coordinates
-        actualSliceCenter = rect.left() + rect.width() // 2
-        actualSliceWidth = rect.width()
-
-        # Store or emit these values for main.py
-        self._actualSliceCenter = actualSliceCenter
-        self._actualSliceWidth = actualSliceWidth
-
-        rect = self.label_Image.getSliceRectInOriginal(orig_w, orig_h)
-
-        if 0:
-            self.showExtractedSlice(rect.left(), rect.right())
-
         self.compositeSliceGenerateSignal.emit()
 
     def pushButton_Cancel_Clicked(self):

@@ -1,76 +1,83 @@
-from PyQt5 import Qt
+from PyQt5 import Qt, QtCore
 from PyQt5.QtCore import QRect, QPoint, Qt
 from PyQt5.QtGui import QPen, QBrush, QPainter, QPainterPath, QPolygon, QPolygonF
-from PyQt5.QtWidgets import QLabel, QVBoxLayout, QToolTip
+from PyQt5.QtWidgets import QLabel, QToolTip
 from GRIME_AI.GRIME_AI_roiData import ROIShape
-
-from enum import Enum
-
-
-#======================================================================================================================
-#======================================================================================================================
-#=========================classDrawingMode=========================
-#======================================================================================================================
-#======================================================================================================================
-class DrawingMode(Enum):
-    OFF                 = 0
-    COLOR_SEGMENTATION  = 1
-    MASK                = 2
-    SLICE               = 3
+from GRIME_AI.QLabel_drawing_modes import DrawingMode
 
 
-#======================================================================================================================
-#======================================================================================================================
-#=========================classGRIME_AI_QLabel=========================
-#======================================================================================================================
-#======================================================================================================================
+# ======================================================================================================================
+# ======================================================================================================================
+# =====     =====     =====     =====     =====    class GRIME_AI_QLabel    =====     =====     =====     =====    =====
+# ======================================================================================================================
+# ======================================================================================================================
 class GRIME_AI_QLabel(QLabel):
+    resized = QtCore.pyqtSignal()
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __init__(self, parent=None):
         QLabel.__init__(self, parent=parent)
-
-        layout = QVBoxLayout(self)
-        self.setLayout(layout)
-
-        self.savedROIs = []  # persistent storage for drawn ROIs
-
-        self.x0 = -1
-        self.y0 = -1
-        self.x1 = -1
-        self.y1 = -1
-
+        self.savedROIs = []
+        self.x0 = self.y0 = self.x1 = self.y1 = -1
         self.rect = QRect(self.x0, self.y0, self.x1, self.y1)
-
         self.flag = False
-
         self.shape = ROIShape.RECTANGLE
-
         self.drawingMode = DrawingMode.OFF
         self.enableFill = False
-
         self.path = QPainterPath()
         self.points = QPolygon()
-
         self.brushColor = Qt.green
-
         self.polygonList = []
-
+        self.polygonListCount = 0  # initialized
         self.setWindowTitle("Slice Position")
-
-        self.sliceCenter = int(self.size().width() / 2)
-        self.sliceWidth = int(10)
 
         self.setMouseTracking(True)
         self.setAttribute(Qt.WA_Hover, True)
-        self.tooltipGenerator = None  # Set this to a callable that returns the tooltip string.
+        self.tooltipGenerator = None
 
         # Slice interaction state
-        self._sliceHitMargin = 6          # px tolerance to hit a magenta edge
-        self._minSliceWidth = 4           # px minimum
+        self._sliceHitMargin = 6
+        self._minSliceWidth = 4
         self._draggingSlice = False
-        self._resize = False              # False: move, True: resize
+        self._resize = False
         self._lastMouseX = None
 
+        self._centerRatio = 0.5
+        self._widthRatio = 0.05
+
+        self._orig_w = None
+        self._orig_h = None
+
+        # Initialize slice from ratios; avoid hard-coded override
+        w = max(1, self.size().width())
+        self.sliceCenter = int(w * self._centerRatio)
+        self.sliceWidth = max(self._minSliceWidth, int(w * self._widthRatio))
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def setOriginalImageShape(self, shape):
+        """
+        Store the original image dimensions (h, w, channels).
+        Call this once from the dialog after loading the image.
+        """
+        self._orig_h, self._orig_w, _ = shape
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        draw_w, _, x_off, _ = self._drawn_pixmap_geometry()
+        if draw_w > 0:
+            self.sliceCenter = int(x_off + draw_w * self._centerRatio)
+            self.sliceWidth = max(self._minSliceWidth, int(draw_w * self._widthRatio))
+            half = self.sliceWidth // 2
+            self.sliceCenter = max(x_off + half, min(x_off + draw_w - half, self.sliceCenter))
+        self.update()
+        self.resized.emit()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def mousePressEvent(self, event):
         if self.drawingMode == DrawingMode.SLICE:
             x = event.x()
@@ -79,14 +86,16 @@ class GRIME_AI_QLabel(QLabel):
 
             hit_left = abs(x - left_edge) <= self._sliceHitMargin
             hit_right = abs(x - right_edge) <= self._sliceHitMargin
+            inside_band = left_edge < x < right_edge
 
-            if hit_left or hit_right:
+            if hit_left or hit_right or inside_band:
                 self._draggingSlice = True
-                self._resize = (event.button() == Qt.RightButton)
+                # Right-button near edges = resize; otherwise move
+                self._resize = (event.button() == Qt.RightButton) and (hit_left or hit_right)
                 self._lastMouseX = x
                 event.accept()
                 return
-
+        # Fall through to ROI/mask handling only when not in SLICE mode or not hitting slice
         self.flag = True
         self.x0 = event.x()
         self.y0 = event.y()
@@ -97,9 +106,13 @@ class GRIME_AI_QLabel(QLabel):
         self.update()
         super().mousePressEvent(event)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def mouseDoubleClickEvent(self, event):
         self.flag = False
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def mouseReleaseEvent(self, event):
         if self._draggingSlice:
             self._draggingSlice = False
@@ -118,37 +131,70 @@ class GRIME_AI_QLabel(QLabel):
         self.x0 = self.y0 = self.x1 = self.y1 = -1
         self.update()
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _drawn_pixmap_geometry(self):
+        """
+        Returns (draw_w, draw_h, x_off, y_off) for the currently drawn pixmap.
+        If no pixmap, returns zeros.
+        """
+        pm = self.pixmap()
+        if not pm or pm.isNull():
+            return 0, 0, 0, 0
+
+        label_w, label_h = self.width(), self.height()
+        pm_w, pm_h = pm.width(), pm.height()
+        x_off = (label_w - pm_w) // 2
+        y_off = (label_h - pm_h) // 2
+        return pm_w, pm_h, x_off, y_off
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def mouseMoveEvent(self, event):
+        # Only update slice when actively dragging
         if self.drawingMode == DrawingMode.SLICE and self._draggingSlice:
             x = event.x()
-            w = self.size().width()
             dx = x - (self._lastMouseX if self._lastMouseX is not None else x)
             self._lastMouseX = x
 
+            draw_w, _, x_off, _ = self._drawn_pixmap_geometry()
+
             if self._resize:
+                # half-width from center to mouse
                 new_half = abs(x - self.sliceCenter)
-                new_width = int(2 * new_half)
-                # Clamp to bounds and min width
+                new_width = int(new_half * 2)  # full width
                 new_width = max(self._minSliceWidth, new_width)
+
                 left_edge = self.sliceCenter - new_width // 2
                 right_edge = self.sliceCenter + new_width // 2
-                if left_edge < 0:
-                    new_width -= int(2 * (-left_edge))
-                if right_edge > w:
-                    new_width -= int(2 * (right_edge - w))
+
+                if left_edge < x_off:
+                    new_width -= int(2 * (x_off - left_edge))
+                if right_edge > x_off + draw_w:
+                    new_width -= int(2 * (right_edge - (x_off + draw_w)))
+
                 self.sliceWidth = max(self._minSliceWidth, new_width)
+                # Persist width ratio only if you want resize persistence
+                # self._widthRatio = self.sliceWidth / draw_w if draw_w > 0 else self._widthRatio
             else:
-                self.sliceCenter = max(0, min(w, self.sliceCenter + dx))
+                new_center = self.sliceCenter + dx
+                half = self.sliceWidth // 2
+                self.sliceCenter = max(x_off + half, min(x_off + draw_w - half, new_center))
+                # Persist center ratio only if you want move persistence
+                # self._centerRatio = (self.sliceCenter - x_off) / draw_w if draw_w > 0 else self._centerRatio
 
             self.update()
             event.accept()
             return
 
+        # ROI dragging logic
         if self.flag:
             self.x1 = event.x()
             self.y1 = event.y()
             self.update()
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def paintEvent(self, event):
         super().paintEvent(event)
 
@@ -157,8 +203,8 @@ class GRIME_AI_QLabel(QLabel):
 
         painter = QPainter(self)
 
-        # Always redraw any saved ROIs (persistent storage)
-        if hasattr(self, "savedROIs"):
+        # Only draw saved ROIs if not in SLICE mode
+        if self.drawingMode != DrawingMode.SLICE and self.savedROIs:
             painter.setPen(QPen(Qt.red, 2, Qt.SolidLine))
             for roi in self.savedROIs:
                 if self.getROIShape() == ROIShape.RECTANGLE:
@@ -166,14 +212,15 @@ class GRIME_AI_QLabel(QLabel):
                 elif self.getROIShape() == ROIShape.ELLIPSE:
                     painter.drawEllipse(roi)
 
-        # Draw the ROI currently being dragged
         if self.drawingMode == DrawingMode.COLOR_SEGMENTATION:
             self.drawColorSegmentationROI(painter)
         elif self.drawingMode == DrawingMode.MASK:
             self.drawPolygon(painter)
         elif self.drawingMode == DrawingMode.SLICE:
-            self.drawCompositeSlice(painter, self.sliceCenter)
+            self.drawCompositeSlice(painter)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def enterEvent(self, event):
         if self.tooltipGenerator and callable(self.tooltipGenerator):
             try:
@@ -184,24 +231,79 @@ class GRIME_AI_QLabel(QLabel):
             self.showToolTip(event.globalPos())  # Force tooltip display
         super(GRIME_AI_QLabel, self).enterEvent(event)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def showToolTip(self, global_pos):
         QToolTip.showText(global_pos, self.toolTip(), self)
 
-    def drawCompositeSlice(self, painter, sliceCenter):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def getSliceCenterInOriginal(self) -> int:
+        """
+        Return the slice center X in original image coordinates.
+        """
+        rect = self.getSliceRectInOriginal()
+        return rect.left() + rect.width() // 2
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def getSliceWidthInOriginal(self) -> int:
+        """
+        Return the slice width in original image coordinates.
+        """
+        rect = self.getSliceRectInOriginal()
+        return rect.width()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def getSliceRectInOriginal(self) -> QRect:
+        pm = self.pixmap()
+        if not pm or pm.isNull():
+            return QRect()
+
+        draw_w, draw_h, x_off, y_off = self._drawn_pixmap_geometry()
+        if draw_w <= 0 or draw_h <= 0:
+            return QRect()
+
+        # Current slice edges in label coordinates
+        left_label = self.sliceCenter - self.sliceWidth // 2
+        right_label = self.sliceCenter + self.sliceWidth // 2
+
+        # Convert to pixmap-relative coords (subtract inset once)
+        left_rel = left_label - x_off
+        right_rel = right_label - x_off
+
+        # Clamp to drawn pixmap bounds
+        left_rel = max(0, min(draw_w, left_rel))
+        right_rel = max(0, min(draw_w, right_rel))
+
+        # Scale to original image coordinates
+        scale_x = self._orig_w / draw_w
+        left_orig = int(round(left_rel * scale_x))
+        right_orig = int(round(right_rel * scale_x))
+
+        # Clamp and ensure non-zero width
+        left_orig = max(0, min(self._orig_w, left_orig))
+        right_orig = max(left_orig + 1, min(self._orig_w, right_orig))
+
+        return QRect(left_orig, 0, right_orig - left_orig, self._orig_h)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def drawCompositeSlice(self, painter):
         labelSize = self.size()
-
-        # Keep internal state in sync
-        self.sliceCenter = sliceCenter
-
-        painter.setPen(QPen(Qt.red, 1, Qt.SolidLine))
-        painter.drawLine(int(self.sliceCenter), 0, int(self.sliceCenter), labelSize.height())
-
-        painter.setPen(QPen(Qt.magenta, 1, Qt.SolidLine))
         left_x = int(self.sliceCenter - self.sliceWidth // 2)
         right_x = int(self.sliceCenter + self.sliceWidth // 2)
+
+        painter.setPen(QPen(Qt.red, 1, Qt.SolidLine))
+        painter.drawLine(self.sliceCenter, 0, self.sliceCenter, labelSize.height())
+
+        painter.setPen(QPen(Qt.magenta, 1, Qt.SolidLine))
         painter.drawLine(left_x, 0, left_x, labelSize.height())
         painter.drawLine(right_x, 0, right_x, labelSize.height())
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def drawContinuous(self):
         if self.flag:
             painter = QPainter(self)
@@ -210,6 +312,8 @@ class GRIME_AI_QLabel(QLabel):
             self.x0 = self.x1
             self.y0 = self.y1
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def drawColorSegmentationROI(self, painter):
         if self.flag:
             # Always normalize coordinates
@@ -225,6 +329,8 @@ class GRIME_AI_QLabel(QLabel):
             elif self.getROIShape() == ROIShape.ELLIPSE:
                 painter.drawEllipse(rect)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def drawPolygon(self, qp):
         qp.setRenderHint(QPainter.Antialiasing)
 
@@ -269,14 +375,20 @@ class GRIME_AI_QLabel(QLabel):
                     qp.drawPolygon(QPolygonF(myPoints))
                     qp.fillPath(polyPath, brush)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def getPolygon(self):
         return self.polygonList
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def incrementPolygon(self):
         self.polygonList.append(self.points)
         self.points.clear()
         self.polygonListCount = len(self.polygonList)
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def getROI(self):
         # Prefer live ROI if dragging
         if self.x0 != -1 and self.x1 != -1:
@@ -292,45 +404,93 @@ class GRIME_AI_QLabel(QLabel):
 
         return None
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setROIShape(self, shape):
         self.shape = shape
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def getROIShape(self):
         return self.shape
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setBrushColor(self, brushColor):
         self.brushColor = brushColor
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def resetMask(self):
         if self.points.count() > 0:
             self.points = QPolygon()
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setDrawingMode(self, mode):
         self.drawingMode = mode
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def enablePolygonFill(self, bFill):
         self.enableFill = bFill
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setSliceCenter(self, sliceCenter):
-        # Clamp and repaint automatically
-        self.sliceCenter = max(0, min(self.width(), int(sliceCenter)))
-        self.update()  # ensure immediate redraw
+        draw_w, _, x_off, _ = self._drawn_pixmap_geometry()
+        sliceCenter = int(sliceCenter)
 
+        if draw_w > 0:
+            half = self.sliceWidth // 2
+            # Clamp to drawn pixmap bounds
+            clamped = max(x_off + half, min(x_off + draw_w - half, sliceCenter))
+            self.sliceCenter = clamped
+            # Persist relative center ratio
+            self._centerRatio = (self.sliceCenter - x_off) / draw_w
+        else:
+            self.sliceCenter = sliceCenter
+
+        self.update()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def getSliceCenter(self):
         return self.sliceCenter
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setSliceWidth(self, sliceWidth):
-        # Clamp and repaint automatically (fix indentation bug)
-        self.sliceWidth = max(self._minSliceWidth, min(self.width(), int(sliceWidth)))
-        self.update()  # ensure immediate redraw
+        draw_w, _, x_off, _ = self._drawn_pixmap_geometry()
+        sliceWidth = int(sliceWidth)
 
+        if draw_w > 0:
+            # Clamp width to available drawn pixmap width
+            sliceWidth = max(self._minSliceWidth, min(draw_w, sliceWidth))
+            self.sliceWidth = sliceWidth
+            self._widthRatio = self.sliceWidth / draw_w
+
+            # Ensure center remains valid for new width
+            half = self.sliceWidth // 2
+            self.sliceCenter = max(x_off + half, min(x_off + draw_w - half, self.sliceCenter))
+        else:
+            self.sliceWidth = max(self._minSliceWidth, sliceWidth)
+
+        self.update()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def getSliceWidth(self):
         return self.sliceWidth
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setROIs(self, roi_list):
         self.savedROIs = [roi.getDisplayROI() for roi in roi_list]
         self.update()
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def clearROIs(self):
         self.savedROIs.clear()
         self.x0 = self.y0 = self.x1 = self.y1 = -1

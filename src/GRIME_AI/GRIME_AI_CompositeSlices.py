@@ -11,48 +11,42 @@ import os
 import datetime
 from PIL import Image
 
+from PyQt5.QtCore import QRect
+
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 
+
+# ============================================================================
+# ============================================================================
+#                          class SegmentImagesTab
+# ============================================================================
+# ============================================================================
 class GRIME_AI_CompositeSlices:
-    def __init__(self, sliceCenter, sliceWidth, show_gui=True):
+    def __init__(self, slice_rect: QRect, show_gui=True):
         """
-        Initializes the object with the given slice center and slice width.
-
         Args:
-            sliceCenter (int): The center of the slice to be cropped from an image.
-            sliceWidth (int): The width of the slice to be cropped from an image.
+            slice_rect (QRect): The region of interest in original image coordinates.
         """
 
-        self.sliceCenter = sliceCenter
-        self.sliceWidth = sliceWidth
+        self.slice_rect = slice_rect
 
         self.show_gui = show_gui
 
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
-    def crop_side(self, image, height):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def crop_side(self, image):
         """
-        Crops a slice centered at self.sliceCenter with full width self.sliceWidth.
+        Crops the region defined by slice_rect from the given image.
         """
-        half = self.sliceWidth // 2
+        return image.crop((
+            self.slice_rect.left(),
+            self.slice_rect.top(),
+            self.slice_rect.right(),
+            self.slice_rect.bottom()
+        ))
 
-        left = self.sliceCenter - half
-        right = self.sliceCenter + half
-
-        # Clamp to image bounds; right in PIL crop is exclusive
-        left = max(0, left)
-        right = min(image.width, right)
-
-        top = 0
-        bottom = height
-
-        return image.crop((left, top, right, bottom))
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def create_composite_image(self, imageList, output_path):
         """
         Creates a composite image from a list of images by extracting a region of interest (ROI) from each image and
@@ -84,7 +78,7 @@ class GRIME_AI_CompositeSlices:
         # CREATE A BASE FILENAME TO WHICH AN INDEX NUMBER WILL BE APPENDED AT THE TIME WHEN THE IMAGE IS SAVED
         # ----------------------------------------------------------------------------------------------------
         # Get the current time in ISO format
-        current_time = datetime.datetime.now().isoformat()
+        current_time = datetime.datetime.now().replace(microsecond=0).isoformat()
         # Replace colons with underscores to avoid issues with filename
         outputFilename = os.path.join(output_path, ("CompositeImage - " + current_time.replace(':', '_')))
 
@@ -92,20 +86,13 @@ class GRIME_AI_CompositeSlices:
         # ----------------------------------------------------------------------------------------------------
         first_image = Image.open(imageList[0].fullPathAndFilename)
         output_height = first_image.height
-        output_width = first_image.width
 
-        # CALCULATE THE MAX IMAGE WIDTH REQUIRED FOR ALL THE SLICES IF WE WERE TO GENERATE A SINGLE IMAGE
-        strip_width = self.sliceWidth
-        print(f"Slice Width: {strip_width}")
+        maxWidthRequired = imageCount * self.slice_rect.width()
 
-        maxWidthRequired = imageCount * strip_width
-        print(f"MAX Width Required: {maxWidthRequired}")
-
-        numImages, imageWidths, filesPerImage = self.check_image_width(maxWidthRequired, strip_width, option=1)
+        numImages, imageWidths, filesPerImage = self.check_image_width(maxWidthRequired, self.slice_rect.width(), option=1)
 
         composite_image = Image.new('RGB', (imageWidths[0], output_height))
 
-        total_slices = len(imageList)
         slice_count = 0
         current_image_index = 0
 
@@ -115,32 +102,30 @@ class GRIME_AI_CompositeSlices:
                 progressBar.setValue(i)
                 progressBar.repaint()
 
-            # OPEN AN IMAGE AND EXTRACT OUT A SLICE (i.e., THE ROI SELECTED BY THE END-USER)
-            # ----------------------------------------------------------------------------------------------------
-            # open the image
-            image = Image.open(image_file.fullPathAndFilename)
-            # extract the ROI
-            cropped_image = self.crop_side(image, output_height)
-            # insert the extracted ROI into the composite image after the previously inserted slice
-            composite_image.paste(cropped_image, ((i % filesPerImage[current_image_index]) * strip_width, 0))
+            # Open the current image
+            with Image.open(image_file.fullPathAndFilename) as image:
+                cropped_image = self.crop_side(image)
+
+            # Paste the slice into the composite
+            paste_x = (i % filesPerImage[current_image_index]) * cropped_image.width
+            composite_image.paste(cropped_image, (paste_x, 0))
             slice_count += 1
 
             if slice_count == filesPerImage[current_image_index]:
                 # Save the composite image
-                compFilename = f"{outputFilename}{'-'}{current_image_index}{'.jpg'}"
+                compFilename = f"{outputFilename}-{current_image_index}.jpg"
                 composite_image.save(compFilename)
 
-                print("\nComposite Filename: ", compFilename)
-                print("Composite Image ", current_image_index+1, " of ", numImages)
-                print("Files Used in this Composite Image: ", filesPerImage)
-                print("Composite Image Width: ", imageWidths)
+                print("\nComposite Filename:", compFilename)
+                print("Composite Image", current_image_index + 1, "of", numImages)
+                print("Files Used in this Composite Image:", filesPerImage)
+                print("Composite Image Width:", imageWidths)
 
-                total_slices -= filesPerImage[current_image_index]
                 current_image_index += 1
 
                 if current_image_index < len(imageWidths):
                     adjusted_max_width = imageWidths[current_image_index]
-                    composite_image = Image.new('RGB', (adjusted_max_width, output_height))
+                    composite_image = Image.new('RGB', (adjusted_max_width, image.height))
                     slice_count = 0
 
         # clean-up before exiting function
@@ -150,10 +135,8 @@ class GRIME_AI_CompositeSlices:
             progressBar.close()
             del progressBar
 
-
-    # ==================================================================================================================
-    #
-    # ==================================================================================================================
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def check_image_width(self, width, strip_width, option=1):
         MAX_WIDTH = 65535
 
