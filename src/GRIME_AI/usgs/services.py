@@ -11,12 +11,19 @@ from .types import CameraInfo, LatestImage
 ENDPOINT = "https://jj5utwupk5.execute-api.us-east-1.amazonaws.com"
 IMAGE_ENDPOINT = "https://usgs-nims-images.s3.amazonaws.com/overlay"
 
+# ================================================================================
+# ================================================================================
+#                               class USGSService
+# ================================================================================
+# ================================================================================
 class USGSService:
     """
     Pure service: fetches camera metadata, lists, images, and USGS discharge data.
     No Qt. No GUI side-effects. Raises exceptions on hard failures.
     """
 
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
     def __init__(self):
         self._camera_dict: Dict[str, dict] = {}
         self._site_count: int = 0
@@ -24,25 +31,43 @@ class USGSService:
         self._cam_id: Optional[str] = None
         self._cam_name: Optional[str] = None
 
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
     def initialize(self) -> None:
         uri = f"{ENDPOINT}/prod/cameras?enabled=true"
-        data = urllib.request.urlopen(uri).read()
-        camera_data = json.loads(data.decode("utf-8"))
-        cam_dict: Dict[str, dict] = {}
-        for element in camera_data:
-            if element.get("locus") == "aws" and not element.get("hideCam", True):
-                cam_id = element.get("camId")
-                if isinstance(cam_id, str):
-                    cam_dict[cam_id] = element
-        self._camera_dict = cam_dict
+
+        # WITH urllib, IT THROWS AN EXCEPTION INSTEAD OF RETURNING AN ERROR CODE WHEN IT DETECTS A NETWORK FAILURE
+        try:
+            data = urllib.request.urlopen(uri).read()
+
+            camera_data = json.loads(data.decode("utf-8"))
+
+            cam_dict: Dict[str, dict] = {}
+            for element in camera_data:
+                if element.get("locus") == "aws" and not element.get("hideCam", True):
+                    cam_id = element.get("camId")
+                    if isinstance(cam_id, str):
+                        cam_dict[cam_id] = element
+            self._camera_dict = cam_dict
+        except Exception as e:
+            self._camera_dict = {}
+
         self._site_count = len(self._camera_dict)
 
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def camera_dictionary(self) -> Dict[str, dict]:
         return self._camera_dict
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def camera_list(self) -> List[str]:
         return sorted(self._camera_dict.keys())
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def camera_info(self, camera_id: str) -> CameraInfo:
         cam = self._camera_dict.get(camera_id)
         if cam is None:
@@ -60,6 +85,8 @@ class USGSService:
             description=cam.get("camDesc")
         )
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def latest_image(self, site_name: str) -> LatestImage:
         url = f"{IMAGE_ENDPOINT}/{site_name}/{site_name}_newest.jpg"
         r = requests.get(url, stream=True)
@@ -69,12 +96,16 @@ class USGSService:
         content = urllib.request.urlopen(url).read()
         return LatestImage(error_code=0, content=content)
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def image_count(self, site_name: str, start_date: date, end_date: date,
                     start_time: time, end_time: time,
                     progress: Optional[callable] = None) -> int:
         names = self._collect_image_names(site_name, start_date, end_date, start_time, end_time, progress)
         return len(names)
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def download_images(self, site_name: str, start_date: date, end_date: date,
                         start_time: time, end_time: time, save_folder: str,
                         progress: Optional[callable] = None) -> Tuple[int, int]:
@@ -97,6 +128,8 @@ class USGSService:
                 missing += 1
         return downloaded, missing
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def fetch_stage_and_discharge(self, nwis_id: str, site_name: str,
                                   start_date: date, end_date: date,
                                   start_time: time, end_time: time,
@@ -113,8 +146,8 @@ class USGSService:
         self._reformat_file(txt_path, csv_path)
         return txt_path, csv_path
 
-    # ------------------------ internals ------------------------
-
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def _collect_image_names(self, site_name: str, start_date: date, end_date: date,
                              start_time: time, end_time: time,
                              progress: Optional[callable]) -> List[str]:
@@ -132,6 +165,8 @@ class USGSService:
                     names.extend(parts)
         return names
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def _build_image_datetime_filter(self, index: int, start_date: date,
                                      start_time: time, end_time: time) -> Tuple[str, str]:
         start_day = start_date + timedelta(days=index)
@@ -147,17 +182,23 @@ class USGSService:
         before = f"&before={before_dt.strftime('%Y-%m-%d:%H:%M:%S')}"
         return after, before
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def _fetch_list_of_images(self, site_name: str, after: str, before: str) -> str:
         url = f"{ENDPOINT}/prod/listFiles?camId={site_name}{after}{before}"
         resp = requests.get(url)
         resp.raise_for_status()
         return resp.text
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def _reformat_file(self, input_txt: str, output_csv: str) -> None:
         df = pd.read_csv(input_txt, delimiter="\t", comment="#")
         df = df[~df["agency_cd"].astype(str).str.contains("5s")]
         df.to_csv(output_csv, index=False)
 
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     @staticmethod
     def _to_float(x) -> Optional[float]:
         try:

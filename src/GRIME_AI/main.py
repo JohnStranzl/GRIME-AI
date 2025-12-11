@@ -434,6 +434,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         splash.show(self)
 
         # ------------------------------------------------------------------------------------------------------------------
+        # INITIALIZE VARIABLES
+        # ------------------------------------------------------------------------------------------------------------------
+        self.myNIMS = None
+        self.cameraDictionary = {}
+        self.phenocam_site_dictionary = {}
+
+        # ------------------------------------------------------------------------------------------------------------------
         # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
         # ------------------------------------------------------------------------------------------------------------------
         utils = GRIME_AI_Utils()
@@ -489,7 +496,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # INITIALIZE WIDGETS
         maxRows = self.tableWidget_ROIList.rowCount()
-        nCol = 0
         for i in range(0, maxRows):
             self.tableWidget_ROIList.removeRow(0)
 
@@ -615,39 +621,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.show()
 
-        try:
-            self.phenocam_site_dictionary = myNEON_API.scrape_phenocam_table()
-        except:
-            print('ERROR: Unable to access Phenocam site information on Phenocam server!')
-
-        ###JES - USING OPENSTREENMAP INSTEAD OF GOOLE TO AVOID PAYING A FEE TO GOOGLE.
-        #self.init_google_maps(self.cameraDictionary)
-
+        #shapefile_path = self.osm_widget.load_shapefile("Ogallala", "NE_Aggregated_polygons.shp")
         #geojson_str = self.shapefile_to_geojson_string(shapefile_path)
         geojson_str = None
         self.init_openstreetmap(self.cameraDictionary, redList=self.NEON_siteList, geojson_str=geojson_str)
 
-        shapefile_path = self.osm_widget.load_shapefile("Ogallala", "NE_Aggregated_polygons.shp")
-
+        # -----     USGS NIMS     -----     USGS NIMS     -----     USGS NIMS     -----     USGS NIMS     -----
         if self.cameraDictionary:
             for name, coords in self.cameraDictionary.items():
                 self.osm_widget.add_pin(coords["lat"], coords["lng"], color="usgs_green", label=name)
+
+        # -----     NEON     -----     NEON     -----     NEON     -----     NEON     -----     NEON     -----
+        if self.NEON_siteList:
+            for coords in self.NEON_siteList:
+                self.osm_widget.add_pin(coords.latitude, coords.longitude, color="gold", label=coords.siteName)
+
+        # -----      PHENOCAM      -----      PHENOCAM      -----      PHENOCAM      -----      PHENOCAM      -----
+        try:
+            self.phenocam_site_dictionary = myNEON_API.scrape_phenocam_table()
+        except Exception as e:
+            print('ERROR: Unable to access Phenocam site information on Phenocam server!')
 
         if self.phenocam_site_dictionary:
             for site_id, info in self.phenocam_site_dictionary.items():
                 self.osm_widget.add_pin(info["lat"], info["lon"], color="yellow", label=site_id)
 
-        if self.NEON_siteList:
-            for coords in self.NEON_siteList:
-                self.osm_widget.add_pin(coords.latitude, coords.longitude, color="gold", label=coords.siteName)
-
-        # IF THE PHENCOCAM SITE DICTIONARY IS NOT EMPTY, THEN POPULATE THE TREE WIDGET ON THE MAIN GRIME AI CANVAS.
-        # OTHERWISE, THE ASSUMPTION IS THAT THE PHENOCAM SERVER IS INACCESSIBLE/OFFLINE.
-        if self.phenocam_site_dictionary:
             self.populate_phenocam_tree()
 
     # ------------------------------------------------------------------------------------------------------------------
-    #
     # ------------------------------------------------------------------------------------------------------------------
     def init_openstreetmap(self, cameraDictionary, redList=None, geojson_str=None):
         osm_tab = self.findChild(QWidget, "tab_GoogleMaps")
@@ -675,6 +676,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # CENTER MAP ON LINCOLN, NE WHERE THE UNIVERSITY OF NEBRASKA-LINCOLN IS LOCATED.
         self.osm_widget.set_center(40.8136, -96.7026, zoom=12, add_marker=True, label="Lincoln, NE", color="red")
 
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def populate_phenocam_tree(self):
         """
         Populate the Phenocam tree widget with sites (roots) and camera-like children
@@ -747,9 +750,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             api.export_all_to_excel(output_dir=GRIME_AI_Save_Utils().get_phenocam_folder())
             print("COMPLETED: Phenocam Meta Data Export.")
 
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def _usgs_progress(self, idx: int, total: int, label: str | None) -> None:
         """Progress callback for USGSClient operations."""
         if not hasattr(self, "_usgsProgress"):
@@ -769,9 +771,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._usgsProgress.close()
             del self._usgsProgress
 
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def init_google_maps(self, cameraDictionary):
         google_tab = self.findChild(QWidget, "tab_GoogleMaps")
         self.google_maps_widget = GoogleMapWidget(cameraDictionary, parent=google_tab)
@@ -781,9 +782,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         layout.addWidget(self.google_maps_widget)
         google_tab.setLayout(layout)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def shapefile_to_geojson_string(self, shapefile_path):
         import geopandas as gpd
 
@@ -802,9 +802,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             return "No site info available."
 
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def populate_controls(self):
 
         # NEON CONTROLS
@@ -816,9 +815,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.edit_USGSSaveFilePath.setText(USGS_download_file_path)
 
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def buildFeatureFile(self):
         global dailyImagesList
         myFeatureExport = GRIME_AI_Feature_Export()
@@ -830,9 +829,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global imageFileFolder
         myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams, self.greenness_index_list)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def universalTestButton(self, testFunction):
         if testFunction == 1:
             print('This is Test Function 1.')
@@ -856,9 +855,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # segment colors
                 rgb1 = myGRIMe_Color.segmentColors(rgb, hsv, self.roiList)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def getColorSegmentationParams(self):
         if self.colorSegmentationDlg is not None:
             self.colorSegmentationParams.GCC            = self.colorSegmentationDlg.checkBox_GCC.isChecked()
@@ -890,9 +889,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.initROITable(self.greenness_index_list)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR   TOOLBAR
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def createToolBar(self):
         toolbar = QToolBar("GRIME-AI Toolbar")
         self.addToolBar(toolbar)
@@ -935,11 +934,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             toolbar.addAction(action)
             print(f"Toolbar Initialization: {text} icon path: {icon_file}")
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # PROCESS NEON SITE CHANGE
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def NEON_SiteClicked(self, item):
         global SITECODE
         global gWebImagesAvailable
@@ -954,8 +953,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if gProcessClick == 0:
                 gProcessClick = 1
 
-                # --------------------------------------------------------------------------------
-                # --------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
                 print("Updating site info...")
 
                 start_time = time.time()
@@ -963,8 +962,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 end_time = time.time()
                 print ("NEON Site Info Elapsed Time: ", end_time - start_time)
 
-                # --------------------------------------------------------------------------------
-                # --------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
                 print("Updating site products...")
                 time.sleep(2.0)
 
@@ -973,8 +972,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 end_time = time.time()
                 print ("NEON Site Products Elapsed Time: ", end_time - start_time)
 
-                # --------------------------------------------------------------------------------
-                # --------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
                 print("Download latest image...")
                 time.sleep(2.0)
 
@@ -983,8 +982,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 end_time = time.time()
                 print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
 
-                # --------------------------------------------------------------------------------
-                # --------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
+                # ------------------------------------------------------------------------------------
                 if nErrorCode == 404:
                     gWebImagesAvailable = 0
                     self.NEON_labelLatestImage.setText("No Images Available")
@@ -1002,23 +1001,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         print("NEON site selection complete.")
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # UPDATE NEON SITE PRODUCT INFORMATION
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def NEON_ProductClicked(self, item):
         NEON_updateProductTable(self, item)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # DOWNLOAD NEON PRODUCT FILES
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def pushbutton_NEONDownloadClicked(self, item):
         downloadProductDataFiles(self, item)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # PROCESS USGS DOWNLOAD MANAGER ACTIONS
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # ==================================================================================================================
     #
     # ==================================================================================================================
@@ -1185,18 +1184,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             print("Error in USGS_updateSiteInfo:", e)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def USGS_DisplayLatestImage(self):
         if self.USGS_latestImage != []:
             self.USGS_labelLatestImage.setPixmap(self.USGS_latestImage.scaled(self.USGS_labelLatestImage.size(),
                                                                          QtCore.Qt.KeepAspectRatio,
                                                                          QtCore.Qt.SmoothTransformation))
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def USGS_SiteClicked(self, item):
         USGSSiteIndex = self.USGS_updateSiteInfo(item)
 
@@ -1205,9 +1204,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.table_USGS_Sites.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
 
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def pushButton_NEON_BrowseImageFolder_Clicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
@@ -1219,9 +1218,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         JsonEditor().update_json_entry("NEON_Image_Folder", folder)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     #
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def pushButton_USGS_BrowseImageFolder_Clicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
@@ -1283,9 +1282,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
                 return
 
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             # CALCULATE COLOR CLUSTERS FOR THE ROI AND SAVE THEM TO THE ROI LIST
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             # EXTRACT THE ROI FROM THE ORIGINAL IMAGE
             roiObj.setNumColorClusters(roiParameters.numColorClusters)
 
@@ -1304,9 +1303,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             self.roiList.append(roiObj)
 
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             # DISPLAY IN FEATURE TABLE
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             #if (nRow == 0):
             #    numToAdd = 3
             #else:
@@ -1341,9 +1340,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # self.tableWidget_ROIList.setCellWidget(nRow, nCol, QCheckBox())
 
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             #
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             global currentImageIndex
 
             self.labelOriginalImage.clearROIs()
@@ -1352,10 +1351,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             processLocalImage(self, currentImageIndex)
             self.refreshImage()
 
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             # ONCE AN ROI IS DEFINED FOR A SPECIFIC NUMBER OF COLOR CLUSTERS, DISABLE THE CONTROL SO THAT THE USER
             # CANNOT CHANGE THE VALUE FOR SUBSEQUENT TRAINED ROIs.
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             if self.colorSegmentationDlg != None:
                 if len(self.roiList) > 0:
                     self.colorSegmentationDlg.disable_spinbox_color_clusters(True)
@@ -1946,7 +1945,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def menubar_ImageOrganizer(self):
 
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         # JES - The Image Organizer functionality is currently in development and not intended for public release.
         # JES - Access is restricted to the development team. While it may be technically possible to circumvent
         # JES - these restrictions, GRIME Lab and its developers accept no liability or responsibility for any
@@ -1956,7 +1955,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # JES - you may not use this file except in compliance with the License.
         # JES - You may obtain a copy of the License at:
         # JES -     http://www.apache.org/licenses/LICENSE-2.0
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         if getpass.getuser() == "johns" or getpass.getuser() == "tgilmore10" or getpass.getuser() == "rissa3":
             pass
         else:
@@ -1965,9 +1964,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             response = msgBox.displayMsgBox()
             return
 
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         # BEGIN PROCESSING
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         print("[DEBUG] menubar_ImageOrganizer triggered")
 
         # Close any existing instance first
@@ -2086,7 +2085,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pass
 
 
-    # ------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------
     def closeFilefolderDlg(self):
             pass
 
@@ -2283,7 +2282,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 response = msgBox.displayMsgBox(on_top=True)
 
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def maskDialogClose(self):
         if self.maskEditorDlg != None:
             self.maskEditorDlg.close()
@@ -2292,20 +2291,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.labelOriginalImage.setDrawingMode(DrawingMode.OFF)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def fillPolygonChanged(self, bFill):
         self.labelOriginalImage.enablePolygonFill(bFill)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def resetMask(self):
         self.labelOriginalImage.resetMask()
         self.labelOriginalImage.update()
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def addMask(self):
         self.labelOriginalImage.incrementPolygon()
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def generateMask(self):
         global currentImageFilename
 
@@ -2316,14 +2315,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         heightMultiplier = currentImage.size().height() / scaledCurrentImage.size().height()
 
         # CONVERT IMAGE TO A MAT FORMAT TO USE ITS PARAMETERS TO CREATE A MASK IMAGE TEMPLATE
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
 
         # CREATE A MASK IMAGE
         mask = np.zeros(img1.shape[:2], np.uint8)
 
         # ITERATE THROUGH EACH ONE OF THE POLYGONS
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         polygonList = self.labelOriginalImage.getPolygon()
 
         for polygon in polygonList:
@@ -2337,7 +2336,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         masked = cv2.bitwise_and(img1, img1, mask=mask)
 
         # DISPLAY THE MASK IN THE GUI
-        # --------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------
         qImg = QImage(masked.data, masked.shape[1], masked.shape[0], QImage.Format_BGR888)
         pix = QPixmap(qImg)
         self.labelColorSegmentation.setPixmap(pix.scaled(self.labelColorSegmentation.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
@@ -2404,7 +2403,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # CONVERT colorBar TO A QImage FOR USE IN DISPLAYING IN QT GUI
                 qImg = QImage(colorBar.data, colorBar.shape[1], colorBar.shape[0], QImage.Format_BGR888)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def changePolygonColor(self, polygonColor):
         self.labelOriginalImage.setBrushColor(polygonColor)
         self.labelOriginalImage.drawPolygon()
@@ -2611,8 +2610,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         features = self.compute_whole_image_features(img)
         self.display_whole_image_features(features)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def compute_whole_image_features(self, img):
         """Return computed features for the whole image without touching the UI."""
         strIntensity, strEntropy = self.WholeImage_ExtractFeatures(
@@ -2639,8 +2638,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "greenness": greenness_values,
         }
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def display_whole_image_features(self, features):
         """Update the Qt table with the computed features."""
         nRow = self.tableWidget_ROIList.rowCount()
@@ -2714,8 +2713,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         progressBar.close()
         del progressBar
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     @dataclass
     class ROIFeatures:
         roi_name: str
@@ -2724,8 +2723,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         intensity: float
         entropy: float
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def compute_roi_features(self, roiObj, img) -> ROIFeatures:
         rgb = extractROI(roiObj.getImageROI(), img)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
@@ -2756,8 +2755,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             entropy=entropy,
         )
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def display_roi_features(self, row: int, features: ROIFeatures):
         # Column 0: ROI name
         self.tableWidget_ROIList.setCellWidget(row, 0, QtWidgets.QLabel(features.roi_name))
@@ -2790,8 +2789,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Entropy
         self.tableWidget_ROIList.setCellWidget(row, col, QtWidgets.QLabel(f"{features.entropy:.4f}"))
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     def draw_roi_overlay(self, painter, roiObj):
         pen = QPen(QtCore.Qt.red, 1, QtCore.Qt.SolidLine)
         painter.setPen(pen)
@@ -2998,9 +2997,9 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
             tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
             currentImage = QPixmap(tempCurrentImage)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # DISPLAY IMAGE FROM NEON SITE
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     if currentImage:
         numpyImg = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
 
@@ -3406,10 +3405,10 @@ def downloadProductDataFiles(self, item):
 
     myNEON_API = NEON_API()
 
-    # ----------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------------
     # SAVE DOWNLOADED DATA TO THE USER GRIME-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
-    # ----------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------------
     NEON_download_file_path = self.edit_NEONSaveFilePath.text()
     JsonEditor().update_json_entry("NEON_Root_Folder", NEON_download_file_path)
 
@@ -3435,9 +3434,9 @@ def downloadProductDataFiles(self, item):
             os.makedirs(NEON_download_file_path)
 
 
-    # --------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
-    # --------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     rowRange = range(self.NEON_tableProducts.rowCount())
 
     for nRow in rowRange:
@@ -3455,7 +3454,7 @@ def downloadProductDataFiles(self, item):
             PRODUCTCODE = strProductIDCell.split(':')[0]
 
             # PHENOCAM IMAGES
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             if nProductID == 20002:
                 downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
                 if not os.path.exists(downloadsFilePath):
@@ -3466,7 +3465,7 @@ def downloadProductDataFiles(self, item):
                 processLocalImage(self, imageFileFolder=downloadsFilePath)
 
             # ALL OTHER NEON DATA
-            # ----------------------------------------------------------------------------------------------------------
+            # --------------------------------------------------------------------------------------------------------------
             if nProductID != 20002:
                 strStartYearMonth = str(start_date.year) + '-' + str(start_date.month).zfill(2)
                 strEndYearMonth = str(end_date.year) + '-' + str(end_date.month).zfill(2)
@@ -3508,9 +3507,9 @@ def downloadProductDataFiles(self, item):
         msgBox = GRIME_AI_QMessageBox('Download Complete!', 'Download Complete!', buttons=QMessageBox.Close)
     response = msgBox.displayMsgBox()
 
-        # ----------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # NITRATE DATA
-        # ----------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # if nProductID == 20033:
         #     nitrateList = myNEON_API.parseNitrateCSV()
         #
@@ -3693,16 +3692,16 @@ def run_gui():
 
     frame.move(app.desktop().screen().rect().center() - frame.rect().center())
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     app.processEvents()
 
     frame.graphicsView.setVisible(True)
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     # http://localhost:8888/notebooks/intro-seg.ipynb
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
     bStartupComplete = True
 
     # Run the program
