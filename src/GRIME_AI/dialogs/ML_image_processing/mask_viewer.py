@@ -6,6 +6,7 @@ import cv2
 from PyQt5 import QtWidgets, QtGui, QtCore
 import pycocotools.mask as maskutils
 
+from GRIME_AI.dialogs.ML_image_processing.mask_visualizer import MaskVisualizer
 
 # ====================================================================================
 # ====================================================================================
@@ -107,6 +108,32 @@ class CocoViewerTab(QtWidgets.QWidget):
         layout.addLayout(controls_layout)
         layout.addWidget(self.status)
         layout.addWidget(self.stats_label)
+
+        self.visualizer = MaskVisualizer(category_color_fn=self.category_color, marker_color=(255, 255, 255))
+
+    # --------------------------------------------------------------------------------
+    # DELEGATIONS
+    # --------------------------------------------------------------------------------
+    def overlay_all_masks(self, img, anns):
+        return self.visualizer.overlay_all_masks(img, anns)
+
+    def overlay_single_mask(self, img, ann):
+        return self.visualizer.overlay_single_mask(img, ann)
+
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    def category_color(self, cid):
+        """
+        Generate a deterministic RGB color for a category ID.
+
+        Args:
+            cid (int): Category ID.
+
+        Returns:
+            tuple: (R, G, B) color values.
+        """
+        np.random.seed(cid)
+        return tuple(np.random.randint(0, 255, size=3).tolist())
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
@@ -284,106 +311,6 @@ class CocoViewerTab(QtWidgets.QWidget):
                 parts.append(f"{cat_name} ({cid}): {count}")
             stats_text += " | " + " | ".join(parts)
         self.stats_label.setText(stats_text)
-
-    # --------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------
-    def category_color(self, cid):
-        """
-        Generate a deterministic RGB color for a category ID.
-
-        Args:
-            cid (int): Category ID.
-
-        Returns:
-            tuple: (R, G, B) color values.
-        """
-        np.random.seed(cid)
-        return tuple(np.random.randint(0, 255, size=3).tolist())
-
-    # --------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------
-    def overlay_all_masks(self, img, anns):
-        """
-        Overlay all masks onto the image with category-specific colors.
-
-        Args:
-            img (ndarray): BGR image array.
-            anns (list): List of annotations for the current image.
-
-        Returns:
-            ndarray: Blended BGR image with masks overlay.
-        """
-        overlay = img.copy()
-        h, w = img.shape[:2]
-        for ann in anns:
-            seg = ann.get("segmentation", [])
-            color = self.category_color(ann.get("category_id", 0))
-            if isinstance(seg, list) and len(seg) > 0:
-                try:
-                    polys = seg if isinstance(seg[0], (list, tuple)) else [seg[0]]
-                    for poly in polys:
-                        pts = np.array(poly, dtype=np.float32).reshape(-1, 2).astype(np.int32)
-                        cv2.fillPoly(overlay, [pts], color)
-                except Exception:
-                    continue
-            elif isinstance(seg, dict):
-                try:
-                    counts = seg.get("counts", None)
-                    if isinstance(counts, list):
-                        # Uncompressed RLE: convert with frPyObjects
-                        rle = maskutils.frPyObjects(seg, h, w)
-                        m = maskutils.decode(rle)
-                    else:
-                        # Compressed RLE: ensure size present
-                        if "size" not in seg:
-                            seg = {"counts": counts, "size": [h, w]}
-                        m = maskutils.decode(seg)
-                    if m is not None:
-                        overlay[m > 0] = color
-                except Exception:
-                    continue
-        return cv2.addWeighted(overlay, 0.5, img, 0.5, 0)
-
-    # --------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------
-    def overlay_single_mask(self, img, ann):
-        """
-        Overlay a single mask onto the image.
-
-        Args:
-            img (ndarray): BGR image array.
-            ann (dict): Annotation with segmentation and category_id.
-
-        Returns:
-            ndarray: Blended BGR image with one mask overlay.
-        """
-        overlay = img.copy()
-        h, w = img.shape[:2]
-        seg = ann.get("segmentation", [])
-        color = self.category_color(ann.get("category_id", 0))
-        if isinstance(seg, list) and len(seg) > 0:
-            try:
-                polys = seg if isinstance(seg[0], (list, tuple)) else [seg[0]]
-                for poly in polys:
-                    pts = np.array(poly, dtype=np.float32).reshape(-1, 2).astype(np.int32)
-                    cv2.fillPoly(overlay, [pts], color)
-            except Exception:
-                pass
-        elif isinstance(seg, dict):
-            try:
-                counts = seg.get("counts", None)
-                if isinstance(counts, list):
-                    rle = maskutils.frPyObjects(seg, h, w)
-                    m = maskutils.decode(rle)
-                else:
-                    if "size" not in seg:
-                        seg = {"counts": counts, "size": [h, w]}
-                    m = maskutils.decode(seg)
-                if m is not None:
-                    overlay[m > 0] = color
-            except Exception:
-                pass
-        return cv2.addWeighted(overlay, 0.5, img, 0.5, 0)
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
