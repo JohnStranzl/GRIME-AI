@@ -20,11 +20,11 @@ from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfi
 #    Trainer = None
 
 
-# ======================================================================================================================
-# ======================================================================================================================
-#  =====     =====     =====     =====     =====   MODULE LEVEL HELPERS    =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# ===                        MODULE LEVEL HELPERS                          ===
+# ============================================================================
+# ============================================================================
 def _check_folder(folder: Path) -> Tuple[bool, List[str]]:
     """
     Validates a single folder by:
@@ -86,11 +86,11 @@ def _iter_dirs(root: Path) -> List[Path]:
             yield sub
             yield from _iter_dirs(sub)
 
-# ======================================================================================================================
-# ======================================================================================================================
-#  =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# ===                     class DraggableListWidget                        ===
+# ============================================================================
+# ============================================================================
 # Custom ListWidget classes with drag and drop support.
 class DraggableListWidget(QListWidget):
     def mimeData(self, items):
@@ -100,11 +100,11 @@ class DraggableListWidget(QListWidget):
         return mimeData
 
 
-# ======================================================================================================================
-# ======================================================================================================================
-#  =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# ===                     class DroppableListWidget                        ===
+# ============================================================================
+# ============================================================================
 class DroppableListWidget(QListWidget):
     def dropEvent(self, event):
         if event.mimeData().hasText():
@@ -132,9 +132,12 @@ class DroppableListWidget(QListWidget):
         else:
             event.ignore()
 
-# ======================================================================================================================
-# Main training tab widget
-# ======================================================================================================================
+
+# ============================================================================
+# ============================================================================
+# ===                         class TrainingTab                            ===
+# ============================================================================
+# ============================================================================
 class TrainingTab(QtWidgets.QWidget):
     ml_train_signal = QtCore.pyqtSignal()
 
@@ -142,9 +145,6 @@ class TrainingTab(QtWidgets.QWidget):
         super().__init__(parent)
         ui_path = Path(__file__).parent / "training_tab.ui"
         uic.loadUi(str(ui_path), self)
-
-        # Default selection
-        self.selected_training_model = "sam2"
 
         # Replace default QListWidgets with drag/drop versions while preserving object names and layout positions
         self._install_drag_drop_lists()
@@ -190,8 +190,11 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+        # Default selection
+        self.selected_training_model = "sam2"
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_ui_properties(self):
         """Set size policies and layout stretch factors."""
         self.listWidget_availableFolders.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -212,8 +215,8 @@ class TrainingTab(QtWidgets.QWidget):
         self.horizontalListLayout.setStretch(1, 0)
         self.horizontalListLayout.setStretch(2, 1)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_drag_and_drop(self):
         """Configure drag & drop for folder lists and set style for the Segment button."""
         self.listWidget_availableFolders.setDragEnabled(True)
@@ -222,8 +225,8 @@ class TrainingTab(QtWidgets.QWidget):
         self.listWidget_selectedFolders.setDragDropMode(QAbstractItemView.DropOnly)
         self.listWidget_selectedFolders.installEventFilter(self)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def eventFilter(self, source, event):
         """
         Process drag-and-drop events on the selected folders list.
@@ -253,8 +256,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         return super().eventFilter(source, event)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     '''
     def setup_ui_properties(self):
         """Set size policies and layout stretch factors."""
@@ -286,13 +289,12 @@ class TrainingTab(QtWidgets.QWidget):
         """)
     '''
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_connections(self):
         """Connect signals with their slot methods."""
 
         # Wire up signals
-        self.pushButton_train.clicked.connect(self.train)
         self.pushButton_reset.clicked.connect(self.reset_selection)
         self.pushButton_moveRight.clicked.connect(self.move_to_right)
         self.pushButton_moveLeft.clicked.connect(self.move_to_available)
@@ -323,28 +325,28 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.comboBox_train_label_selection.currentIndexChanged.connect(self.on_train_label_changed)
 
-        # Default selection
-        self.selected_training_model = "sam2"
-
         # Connect signals
         self.radioButton_train_model_SAM2.toggled.connect(lambda checked: self.set_training_model("sam2", checked))
-        self.radioButton_train_model_LoRA.toggled.connect(lambda checked: self.set_training_model("segformer", checked))
+        self.radioButton_train_model_segformer.toggled.connect(lambda checked: self.set_training_model("segformer", checked))
         self.radioButton_train_model_MaskRCNN.toggled.connect(lambda checked: self.set_training_model("maskrcnn", checked))
 
-        #self.buttonBox_close.rejected.connect(self.reject)
+        # Default selection
+        self.selected_training_model = self.get_selected_model()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    #self.buttonBox_close.rejected.connect(self.reject)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def handle_left_item_doubleclick(self, item):
         self.move_items_to_selected([item])
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def handle_right_item_doubleclick(self, item):
         self.move_items_to_available([item])
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def resizeEvent(self, event):
         """
         Ensure list widgets update their geometry on dialog resize.
@@ -353,14 +355,14 @@ class TrainingTab(QtWidgets.QWidget):
         self.listWidget_availableFolders.updateGeometry()
         self.listWidget_selectedFolders.updateGeometry()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def initialize_dialog_from_config(self, config):
         self.site_config = config
         self.setup_from_config_file()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_from_config_file(self):
         """
         Initialize dialog controls from a configuration dictionary.
@@ -395,8 +397,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.current_path = self.site_config.get("Path", None)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def reset_lists(self):
         """
         Clear both list widgets and restore available folders from the original list.
@@ -409,15 +411,15 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def reject(self):
         # DO NOTHING. LET IT CLOSE. IF THE CALLING PROGRAM CREATED THE DIALOG USING EXEC, THE CALLING INSTANTIATING
         # PROGRAM CAN INSPECT THE RETURN RESULT
         super().reject()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_to_left(self):
         """
         Move selected items back from the selected folders list to the available folders list,
@@ -440,8 +442,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_items_to_available(self, items):
         for item in items:
             name = item.text()
@@ -460,8 +462,8 @@ class TrainingTab(QtWidgets.QWidget):
                         break
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def set_training_model(self, model_name: str, checked: bool):
         """Update selected_training_model when a radio button is toggled on."""
         if checked:  # only update when the button is checked, not unchecked
@@ -469,16 +471,16 @@ class TrainingTab(QtWidgets.QWidget):
             print(f"Selected training model: {self.selected_training_model}")
             self._update_lora_ui_for_model() # Turn LoRA controls on/off depending on selected model
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _set_lora_enabled(self, enabled: bool):
         """Enable/disable all LoRA-specific controls in one place."""
         for w in getattr(self, "_lora_widgets", []):
             if w is not None:
                 w.setEnabled(enabled)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _update_lora_ui_for_model(self):
         """
         Turn LoRA section on only when the LoRA/SegFormer training model
@@ -487,15 +489,28 @@ class TrainingTab(QtWidgets.QWidget):
         is_lora = (getattr(self, "selected_training_model", "") == "segformer")
         self._set_lora_enabled(is_lora)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def on_train_label_changed(self, index: int):
+        """
+        Update site_config with the selected training label(s).
+        Store both label_id and label_name into TRAINING_CATEGORIES.
+        """
         selected_training_labels = self.get_selected_training_labels()
-        print("\n".join(
-            [f"Selected label ID: {item['label_id']}, Name: {item['label_name']}" for item in selected_training_labels]))
+        if not selected_training_labels:
+            return
 
     # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+        self.site_config.setdefault("train_model", {})
+
+        # Overwrite TRAINING_CATEGORIES with the new selection
+        self.site_config["train_model"]["TRAINING_CATEGORIES"] = selected_training_labels
+
+        # Save back to JSON
+        self._mgr.update_config(self.site_config, save=True)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def get_selected_training_labels(self):
         """
         Fetch the selected training label from comboBox_train_label_selection
@@ -522,15 +537,15 @@ class TrainingTab(QtWidgets.QWidget):
             "label_name": label_name
         }]
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_custom_list_widgets(self):
         """Replace default list widgets with custom draggable/droppable ones."""
         self.listWidget_availableFolders.__class__ = DraggableListWidget
         self.listWidget_selectedFolders.__class__ = DroppableListWidget
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def browse_model_training_images_folder(self):
         """Open a dialog to choose a folder and update the folder path field."""
         folder = QFileDialog.getExistingDirectory(self, "Select training images folder", os.getcwd())
@@ -544,9 +559,9 @@ class TrainingTab(QtWidgets.QWidget):
 
             self.updateTrainButtonState()
 
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # Setup helpers
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _find_container_layout_and_index(self, widget):
         """
         Return (layout, index) for the slot in which `widget` resides.
@@ -576,6 +591,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         return None, -1
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _install_drag_drop_lists(self) -> None:
         # Replace available list
         avail_layout, avail_index = self._find_container_layout_and_index(self.listWidget_availableFolders)
@@ -615,8 +632,8 @@ class TrainingTab(QtWidgets.QWidget):
             old.deleteLater()
             self.listWidget_selectedFolders = sel_dd
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _init_labels_widget_reference(self) -> None:
         """
         Detect whether a label selection list exists (listWidget_labels).
@@ -627,21 +644,22 @@ class TrainingTab(QtWidgets.QWidget):
         else:
             self.categories_available = False
 
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # UI population and collection
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _populate_ui_from_config(self, cfg: Dict[str, Any]) -> None:
         # Path for training images
         self.lineEdit_model_training_images_path.setText(cfg.get("segmentation_images_path", ""))
 
         # Model selection radio buttons
         model = cfg.get("load_model", {}).get("MODEL", "sam2").lower()
+        self.selected_training_model = model
         self.radioButton_train_model_SAM2.setChecked(model == "sam2")
-        self.radioButton_train_model_LoRA.setChecked(model == "segformer")
+        self.radioButton_train_model_segformer.setChecked(model == "segformer")
         self.radioButton_train_model_MaskRCNN.setChecked(model == "maskrcnn")
 
         # Labels/categories
-        labels = cfg.get("load_model", {}).get("TRAINING_CATEGORIES", [])
+        labels = cfg.get("train_model", {}).get("TRAINING_CATEGORIES", [])
         if hasattr(self, "comboBox_train_label_selection"):
             self.comboBox_train_label_selection.clear()
             for label in labels:
@@ -676,18 +694,27 @@ class TrainingTab(QtWidgets.QWidget):
         for p in cfg.get("selected_folders", []):
             self.listWidget_selectedFolders.addItem(str(p))
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def get_selected_model(self) -> str:
+
+        # THIS DESIGN PATTERN WILL ALLOW US TO EASILY ADD ANY ADDITIONAL
+        # RADIOBUTTONS ASSOCIATED WITH TRAINING MODELS
+        button_map = {
+            self.radioButton_train_model_SAM2: "sam2",
+            self.radioButton_train_model_segformer: "segformer",
+            self.radioButton_train_model_MaskRCNN: "maskrcnn",
+        }
+        for button, model in button_map.items():
+            if button.isChecked():
+                return model
+        return "sam2"  # default
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _collect_ui_values(self) -> Dict[str, Any]:
-        # Model selection
-        if self.radioButton_train_model_SAM2.isChecked():
-            model = "sam2"
-        elif self.radioButton_train_model_LoRA.isChecked():
-            model = "segformer"
-        elif self.radioButton_train_model_MaskRCNN.isChecked():
-            model = "maskrcnn"
-        else:
-            model = "sam2"
+
+        self.selected_training_model = self.get_selected_model()
 
         # Learning rates parsing
         lr_text = self.lineEdit_learningRates.text().strip()
@@ -702,13 +729,9 @@ class TrainingTab(QtWidgets.QWidget):
                         pass
 
         # Selected labels
-        selected_labels: List[str] = []
-        if self.categories_available and hasattr(self, "listWidget_labels") and isinstance(self.listWidget_labels,
-                                                                                           QtWidgets.QListWidget):
-            for idx in range(self.listWidget_labels.count()):
-                item = self.listWidget_labels.item(idx)
-                if item and item.isSelected():
-                    selected_labels.append(item.text())
+        selected_labels = self.comboBox_train_label_selection.currentText()
+        # Split into id and name
+        label_id, label_name = selected_labels.split(" - ", 1)
 
         values: Dict[str, Any] = {
             "siteName": self.lineEdit_siteName.text().strip(),
@@ -728,23 +751,29 @@ class TrainingTab(QtWidgets.QWidget):
                                   for i in range(self.listWidget_availableFolders.count())],
             "selected_folders": [self.listWidget_selectedFolders.item(i).text()
                                  for i in range(self.listWidget_selectedFolders.count())],
+            "train_model": {
+                "TRAINING_CATEGORIES": [
+                    {
+                        "label_id": label_id.strip(),
+                        "label_name": label_name.strip()
+                    }
+                ]
+            },
             "load_model": {
                 **self.site_config.get("load_model", {}),
-                "MODEL": model,
-                "SELECTED_TRAINING_LABELS": selected_labels if selected_labels
-                else self.site_config.get("load_model", {}).get("SELECTED_TRAINING_LABELS", []),
+                "MODEL": self.selected_training_model,
             }
         }
 
-        # 🔑 NEW: update Path section based on selected folders
+        # UPDATE PATH SECTION BASED ON SELECTED FOLDERS
         root_folder = self.lineEdit_model_training_images_path.text().strip()
         if root_folder:
             self.update_path_from_selection(root_folder, values)
 
         return values
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def update_path_from_selection(self, root_folder: str, values: Dict[str, Any]):
         """
         Collect selected folders from listWidget_selectedFolders and update values["Path"]
@@ -779,10 +808,11 @@ class TrainingTab(QtWidgets.QWidget):
 
         print("Updated Path section from selected folders.")
 
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # Actions and slots
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def get_selected_training_model(self):
+        self.selected_training_model = self.get_selected_model()
         return self.selected_training_model
 
     def update_model_config(self) -> None:
@@ -795,23 +825,15 @@ class TrainingTab(QtWidgets.QWidget):
         Called when the Train button is clicked.
         Validates model path, images folder, label selections, and image presence.
         """
-        # Verify that the user provided a site name for training
-        site_name = self.lineEdit_siteName.text().strip()
-        if not site_name:
-            msg = "You must specify a site name before training can begin."
-            msgBox = GRIME_AI_QMessageBox('Missing Site Name', msg, GRIME_AI_QMessageBox.Ok, icon=QMessageBox.Warning)
-            msgBox.displayMsgBox()
+        msg = self.validate_training_inputs()
+        if msg:
+            GRIME_AI_QMessageBox(
+                'Missing Parameters',
+                msg,
+                GRIME_AI_QMessageBox.Ok,
+                icon=QMessageBox.Warning
+            ).displayMsgBox()
             return  # stop further execution until user provides a site name
-
-        # Label validation if categories were expected
-        '''
-        if self.categories_available:
-            selected_labels = []
-            for idx in range(self.listWidget_labels.count()):
-                item = self.listWidget_labels.item(idx)
-                if item and item.isSelected():
-                    selected_labels.append(item.text())
-        '''
 
         # WRITE SETTINGS TO THE SITE_CONFIG.JSON
         self.update_model_config()
@@ -819,8 +841,8 @@ class TrainingTab(QtWidgets.QWidget):
         print("\nTrain button clicked. Starting training process...")
         self.ml_train_signal.emit()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def reset_selection(self):
         self.listWidget_selectedFolders.clear()
         self.listWidget_availableFolders.clear()
@@ -830,8 +852,8 @@ class TrainingTab(QtWidgets.QWidget):
         self.populate_train_label_combobox([])
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_to_selected(self):
         for item in self.listWidget_availableFolders.selectedItems():
             self.listWidget_selectedFolders.addItem(item.text())
@@ -841,8 +863,8 @@ class TrainingTab(QtWidgets.QWidget):
         self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_to_right(self):
         selected_items = self.listWidget_availableFolders.selectedItems()
         self._move_items(selected_items)
@@ -851,8 +873,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_to_available(self):
         for item in self.listWidget_selectedFolders.selectedItems():
             text = item.text()
@@ -863,9 +885,9 @@ class TrainingTab(QtWidgets.QWidget):
         self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
 
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # Folder population and annotation aggregation
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def populate_available_folders(self):
         root = Path(self.lineEdit_model_training_images_path.text().strip()).resolve()
         self.listWidget_availableFolders.clear()
@@ -913,8 +935,8 @@ class TrainingTab(QtWidgets.QWidget):
                 lines += [f"    • {m}" for m in miss]
             QMessageBox.information(self, "Incomplete Training Sets", "\n".join(lines))
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _move_items(self, items):
         for item in items:
             name = item.text()
@@ -931,13 +953,13 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def move_items_to_selected(self, items):
         self._move_items(items)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _refresh_annotations_from_selection(self):
         # ENSURE THE SELECTED LIST VISUALLY UPDATES BEFORE WE COMPUTE LABELS
         self.listWidget_selectedFolders.repaint()
@@ -956,9 +978,9 @@ class TrainingTab(QtWidgets.QWidget):
         self.unique_training_labels = self.collect_unique_labels(self.annotation_list)
         self.populate_train_label_combobox(self.unique_training_labels)
 
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # Annotation helpers
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _build_annotation_list(self, base_path: str, folder_names: list[str]) -> list[str]:
         root_folder = os.path.normpath(os.path.abspath(base_path))
         annotations = []
@@ -972,8 +994,8 @@ class TrainingTab(QtWidgets.QWidget):
         return annotations
         self.populate_train_label_combobox(self.unique_training_labels)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def load_labels_from_annotation(self, folder_path):
         annotation_file = os.path.join(folder_path, "instances_default.json")
         if not os.path.exists(annotation_file):
@@ -988,8 +1010,8 @@ class TrainingTab(QtWidgets.QWidget):
                 labels.add(f"{cat['id']} - {cat['name']}")
         return sorted(labels)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def collect_unique_labels(self, annotation_files: list[str]) -> list[str]:
         """
         Collects all unique category labels from a list of annotation files.
@@ -1012,8 +1034,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         return sorted(all_labels)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def populate_train_label_combobox(self, labels: list[str]):
         self.comboBox_train_label_selection.clear()
         for label in sorted(labels):
@@ -1023,17 +1045,113 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     def updateTrainButtonState(self):
         """
-        Enable Train button only when there is a site name, selected folders, and (optionally) labels.
+        Update Train button appearance and tooltip based on current inputs.
+        Do NOT show any popups here; only passive feedback.
         """
-        has_site = bool(self.lineEdit_siteName.text().strip())
-        has_selected = self.listWidget_selectedFolders.count() > 0
+        msg = self.validate_training_inputs()
 
-        labels_ok = True
-        if self.categories_available and hasattr(self, "listWidget_labels") and isinstance(self.listWidget_labels, QtWidgets.QListWidget):
-            labels_ok = any(self.listWidget_labels.item(i).isSelected() for i in range(self.listWidget_labels.count())) \
-                        or self.listWidget_labels.count() == 0
+        if msg:
+            # Keep enabled (so clicks can be handled), but gray it out and set a helpful tooltip
+            self.pushButton_train.setEnabled(True)
+            #self.pushButton_train.setStyleSheet("background-color: lightgray; color: darkgray;")
+            # Short tooltip, not the full message box text (less annoying)
+            self.pushButton_train.setToolTip("Complete required fields before training.")
+        else:
+            self.pushButton_train.setEnabled(True)
+            #self.pushButton_train.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+            self.pushButton_train.setToolTip("Start training with current configuration.")
 
-        self.pushButton_train.setEnabled(has_site and has_selected and labels_ok)
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def validate_training_inputs(self) -> str:
+        """
+        Validate all required training inputs and return a string of missing parameters.
+        If everything is valid, return an empty string.
+        """
+        missing = []
+
+        # Site name
+        if not self.lineEdit_siteName.text().strip():
+            missing.append("Site name")
+
+        # Training images folder path
+        if not self.lineEdit_model_training_images_path.text().strip():
+            missing.append("Model training images folder")
+
+        # Selected folders
+        if self.listWidget_selectedFolders.count() == 0:
+            missing.append("Selected training folders")
+
+        # Labels (if categories are available)
+        if self.categories_available and hasattr(self, "listWidget_labels") and isinstance(self.listWidget_labels,
+                                                                                           QtWidgets.QListWidget):
+            any_selected = any(
+                self.listWidget_labels.item(i).isSelected() for i in range(self.listWidget_labels.count()))
+            if not any_selected and self.listWidget_labels.count() > 0:
+                missing.append("Training labels")
+
+        # ComboBox train label selection
+        if not self.comboBox_train_label_selection.currentText().strip():
+            missing.append("Train label selection")
+
+        # Radio buttons (mutually exclusive group: require at least one checked)
+        if not (
+                self.radioButton_train_model_SAM2.isChecked()
+                or self.radioButton_train_model_LoRA.isChecked()
+                or self.radioButton_train_model_MaskRCNN.isChecked()
+        ):
+            missing.append("Training model selection")
+
+        # Learning rates
+        lr_text = self.lineEdit_learningRates.text().strip()
+        if not lr_text:
+            missing.append("Learning rate(s)")
+
+        # Optimizer
+        if not self.comboBox_optimizer.currentText().strip():
+            missing.append("Optimizer")
+
+        # Loss function
+        if not self.comboBox_lossFunction.currentText().strip():
+            missing.append("Loss function")
+
+        # Weight decay
+        if self.doubleSpinBox_weightDecay.value() == 0.0:
+            missing.append("Weight decay")
+
+        # Epochs
+        if self.spinBox_epochs.value() <= 0:
+            missing.append("Number of epochs")
+
+        # Batch size
+        if self.spinBox_batchSize.value() <= 0:
+            missing.append("Batch size")
+
+        # Save frequency
+        if self.spinBox_saveFrequency.value() <= 0:
+            missing.append("Save model frequency")
+
+        # Validation frequency
+        if self.spinBox_validationFrequency.value() <= 0:
+            missing.append("Validation frequency")
+
+        # Patience (only matters if early stopping is checked)
+        if self.checkBox_earlyStopping.isChecked() and self.spinBox_patience.value() <= 0:
+            missing.append("Early stopping patience")
+
+        # Device
+        if not self.comboBox_device.currentText().strip():
+            missing.append("Device")
+
+        # Build message string
+        if missing:
+            return "Missing required parameters: " + ", ".join(missing)
+        return ""
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def get_training_images_root_folder(self):
+        return self.lineEdit_model_training_images_path.text().strip()
 
     # ******************************************************************************************************************
     # *   OTHER    OTHER     OTHER     OTHER     OTHER     OTHER     OTHER     OTHER     OTHER     OTHER     OTHER     *

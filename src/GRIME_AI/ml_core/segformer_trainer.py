@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation
 
 from GRIME_AI.ml_core.coco_segmentation_datasets import MultiCocoTargetDataset
-from GRIME_AI.ml_core.lora_segmentation_losses import DiceLoss
+from GRIME_AI.ml_core.lora_segmentation_losses import BinaryDiceLoss
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 
 # ======================================================================================================================
@@ -91,20 +91,23 @@ class SegFormerTrainer:
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    def build_model(self, num_labels: int = 2) -> nn.Module:
+    def build_model(self, num_labels: int) -> nn.Module:
         """
         Build base SegFormer (no LoRA). If you want LoRA, wrap the returned model externally.
         """
+
         model = SegformerForSemanticSegmentation.from_pretrained(
             "nvidia/segformer-b0-finetuned-cityscapes-1024-1024",
             ignore_mismatched_sizes=True
         )
         model.config.num_labels = num_labels
+        model.config.id2label = {i: f"class_{i}" for i in range(num_labels)}
+        model.config.label2id = {v: k for k, v in model.config.id2label.items()}
         model.decode_head.classifier = nn.Conv2d(
             model.decode_head.classifier.in_channels, num_labels, kernel_size=1
         )
-
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         return model.to(device).train()
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -129,8 +132,6 @@ class SegFormerTrainer:
     # ------------------------------------------------------------------------------------------------------------------
     @torch.no_grad()
     def evaluate(self, model, val_loader):
-        torch.use_deterministic_algorithms(True)
-
         model.eval()
         ious, precisions, recalls, f1s = [], [], [], []
         for imgs, masks in val_loader:
@@ -231,8 +232,6 @@ class SegFormerTrainer:
 
         return save_path
 
-        return save_path
-
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def _init_progress(self, train_loader, val_loader):
@@ -291,7 +290,16 @@ class SegFormerTrainer:
 
         self._init_progress(train_loader, val_loader)
 
-        model = model or self.build_model(num_labels=2)
+        # BINARY SEGMENTATION
+        #num_labels = max(2, len(categories or [self.cfg.target_category_name]))
+        # MULTI-CLASS SEGMENTATION
+        #num_labels = (categories or [self.cfg.target_category_name])
+        if categories:
+            num_labels = len(categories)
+        else:
+            num_labels = 2  # background + one target
+
+        model = model or self.build_model(num_labels=num_labels)
         optimizer = optimizer or torch.optim.AdamW(
             model.parameters(),
             lr=self.cfg.lr,
@@ -299,10 +307,10 @@ class SegFormerTrainer:
         )
 
         ce_loss = nn.CrossEntropyLoss(ignore_index=255)
-        dice_loss = DiceLoss()
+        dice_loss = BinaryDiceLoss()
         scaler = torch.cuda.amp.GradScaler(enabled=self.cfg.amp)
 
-        metrics_log_path = os.path.join(self.cfg.output_dir, "metrics.jsonl")
+        metrics_log_path = os.path.join(self.cfg.output_dir, "metrics.json")
         train_losses, val_ious, val_precisions, val_recalls, val_f1s = [], [], [], [], []
 
         last_completed_epoch = 0
@@ -314,7 +322,10 @@ class SegFormerTrainer:
 
                 for imgs, masks in train_loader:
                     imgs = imgs.to(self.cfg.device, non_blocking=True)
+
                     masks = masks.to(self.cfg.device, non_blocking=True)
+                    masks = masks.round().long()
+                    masks[(masks < 0) | (masks > num_labels - 1)] = 255
 
                     optimizer.zero_grad(set_to_none=True)
 
@@ -335,12 +346,21 @@ class SegFormerTrainer:
                             logits = torch.nn.functional.interpolate(
                                 logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
                             )
-                            loss = ce_loss(logits, masks) + dice_loss(logits, masks)
+                            # CE takes logits, Dice takes probabilities
+                            # Binary-safe version
+                            ce = ce_loss(logits, masks)
+
+                            # Binary Dice: slice foreground channel and match mask shape
+                            probs = torch.softmax(logits, dim=1)[:, 1:2]  # [B,1,H,W]
+                            masks_bin = (masks == 1).float().unsqueeze(1)  # [B,1,H,W]
+
+                            dice = dice_loss(probs, masks_bin)
+                            loss = ce + dice
 
                         scaler.scale(loss).backward()
                         scaler.unscale_(optimizer)
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.cfg.grad_clip_norm)
-                        scaler.step(optimizer);
+                        scaler.step(optimizer)
                         scaler.update()
 
                     total_loss += float(loss.detach().cpu())

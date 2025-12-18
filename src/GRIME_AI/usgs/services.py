@@ -119,10 +119,20 @@ class USGSService:
             try:
                 file_url = f"{IMAGE_ENDPOINT}/{site_name}/{image}"
                 dst = os.path.join(save_folder, image)
-                if not os.path.isfile(dst):
+
+                # Normalize: if `image` is absolute, strip it down
+                dst = os.path.join(save_folder, os.path.basename(image))
+
+                # Only increment if we actually download
+                if not os.path.isfile(dst) or os.path.getsize(dst) == 0:
                     urllib.request.urlretrieve(file_url, dst)
                 downloaded += 1
-            except Exception:
+                else:
+                    # Optional: track skipped files separately
+                    # skipped += 1
+                    pass
+            except Exception as e:
+                print(f"Download failed for {dst}: {e}")
                 missing += 1
         return downloaded, missing
 

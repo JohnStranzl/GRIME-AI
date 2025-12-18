@@ -188,7 +188,8 @@ class SAM2Trainer:
             self.all_folders.extend(folders)
             self.all_annotations.extend(annotations)
 
-        self.dataset = self.dataset_util.load_images_and_annotations(self.all_folders, self.all_annotations)
+        target_label = self.site_config["load_model"]["SEGMENTATION_CATEGORIES"][0]
+        self.dataset = self.dataset_util.load_images_and_annotations(self.all_folders, self.all_annotations, target_label)
         self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
         self.categories = self.build_unique_categories(self.all_annotations)
 
@@ -329,6 +330,8 @@ class SAM2Trainer:
         divergence_threshold = 1e3
         last_completed_epoch = 0
 
+        target_label = self.site_config["load_model"]["SEGMENTATION_CATEGORIES"][0]
+
         try:
             for epoch in range(epochs):
                 print(f"\nEpoch {epoch + 1}/{epochs}")
@@ -341,7 +344,8 @@ class SAM2Trainer:
                         optimizer=optimizer,
                         progressBar=progressBar,
                         use_amp=use_amp,
-                        scaler=scaler
+                        scaler=scaler,
+                        target_label=target_label
                     )
                 else:
                     avg_epoch_loss, train_accuracy, train_dice, train_iou = self._train_one_epoch(
@@ -350,7 +354,8 @@ class SAM2Trainer:
                         predictor=predictor,
                         optimizer=optimizer,
                         progressBar=progressBar,
-                        use_amp=use_amp
+                        use_amp=use_amp,
+                        target_label = target_label
                     )
 
                 if avg_epoch_loss is None:
@@ -464,8 +469,8 @@ class SAM2Trainer:
         print("All SDPA backends failed; will use default attention")
         return None
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _train_one_epoch(
             self,
             epoch,
@@ -502,11 +507,9 @@ class SAM2Trainer:
         dice_loss_fn = DiceLoss()
 
         for idx, image_file in enumerate(train_images):
-            if self.progress_bar_closed:  # ✅ ISSUE #8 FIX: Direct attribute access
+            if self.progress_bar_closed:
                 self._terminate_training(progressBar)
                 return None, None, None, None
-
-            image = np.array(Image.open(image_file).convert("RGB"))
 
             # --- Load ground truth mask ---
             true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index)
@@ -515,12 +518,18 @@ class SAM2Trainer:
                 continue
 
             # --- Filter mask by target_label ---
-            if target_label is not None:
-                if hasattr(self.dataset_util,
-                           "label_to_index") and target_label in self.dataset_util.label_to_index:
-                    label_index = self.dataset_util.label_to_index[target_label]
-                    true_mask = (true_mask == label_index).astype(np.uint8)
+            if target_label is None:
+                raise ValueError("target_label is required but was None.")
 
+            # Find the ID for the target_label
+            target_id = next(
+                (cat['id'] for cat in self.categories if cat['name'] == target_label),
+                None  # default if not found
+            )
+
+            true_mask = (true_mask == target_id).astype(np.uint8)
+
+            image = np.array(Image.open(image_file).convert("RGB"))
             predictor.set_image(image)
 
             # Prompt embeddings

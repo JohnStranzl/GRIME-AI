@@ -7,14 +7,38 @@ import numpy as np
 import json
 
 
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+def get_category_id(annotations: dict, target_label: str) -> int:
+    # Normalize the input label
+    target = target_label.strip().lower()
+
+    # Build a name -> id map (normalized)
+    name_to_id = {
+        str(cat.get("name", "")).strip().lower(): int(cat.get("id"))
+        for cat in annotations.get("categories", [])
+        if "id" in cat and "name" in cat
+    }
+
+    if target not in name_to_id:
+        available = [cat.get("name") for cat in annotations.get("categories", [])]
+        raise ValueError(
+            f"Label '{target_label}' not found in annotations categories. "
+            f"Available: {available}"
+        )
+
+    return name_to_id[target]
+
+
 class DatasetUtils:
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __init__(self):
         self.image_shape_cache = {}
 
-    # --------------------------------------------------------------------------------------------------------------
-    def load_images_and_annotations(self, folders, annotation_files):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def load_images_and_annotations(self, folders, annotation_files, target_label):
         """
         Load images and annotations from multiple folder/annotation pairs.
 
@@ -48,21 +72,15 @@ class DatasetUtils:
                 annotations = json.load(f)
 
             # find category id for "water" or "Vegetation"
-            water_category_id = None
-            for category in annotations.get("categories", []):
-                if category.get("name") in ("water", "Vegetation"):
-                    water_category_id = category.get("id")
-                    break
+            category_id = get_category_id(annotations, target_label)
 
-            if water_category_id is None:
-                raise ValueError(
-                    f"The 'water' or 'Vegetation' category was not found in {annotation_file}."
-                )
+            if category_id is None:
+                raise ValueError(f"The 'water' or 'Vegetation' category was not found in {annotation_file}.")
 
             # filter annotations for that category
             water_annotations = [
                 ann for ann in annotations.get("annotations", [])
-                if ann.get("category_id") == water_category_id
+                if ann.get("category_id") == category_id
             ]
 
             # store in dataset
@@ -76,8 +94,8 @@ class DatasetUtils:
 
         return dataset
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def build_annotation_index(self, dataset):
         """
         Build and return a mapping from image file basenames to their corresponding annotation data.
@@ -89,8 +107,8 @@ class DatasetUtils:
                 annotation_index[base_name] = data["annotations"]
         return annotation_index
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def load_true_mask(self, image_file,annotation_index):
         """
         Efficiently loads the true mask for an image by using the precomputed annotation_index.
@@ -129,8 +147,8 @@ class DatasetUtils:
 
         return combined_mask.astype(np.float32)
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def split_dataset(self, dataset_dict, train_split=0.9, val_split=0.1):
         all_images = []
         for data in dataset_dict.values():
@@ -176,8 +194,8 @@ class DatasetUtils:
             print("Empty split — cannot train/validate properly.")
     '''
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def save_split_dataset(self, train_images, val_images, output_file):
         """
         Save metadata-only split: no image copying.
@@ -203,8 +221,8 @@ class DatasetUtils:
 
         print(f"[split] Saved metadata-only split to {output_file}")
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def get_image_size(self, image_path: str) -> tuple[int, int]:
         """
         Returns (height, width) of the image.
@@ -214,8 +232,8 @@ class DatasetUtils:
             raise FileNotFoundError(f"Image not found: {image_path}")
         return img.shape[:2]
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def get_annotations_for_image(
         self,
         image_path: str,
@@ -229,8 +247,8 @@ class DatasetUtils:
         # if they are stems/IDs you may need Path(image_path).stem
         return annotation_index.get(image_path, [])
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def rasterize_polygon(
         self,
         segmentation: list,
@@ -252,8 +270,8 @@ class DatasetUtils:
             raise ValueError("Unsupported segmentation format")
         return mask
 
-    # --------------------------------------------------------------------------------------------------------------
-    # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def load_all_true_masks(
         self,
         image_path: str,

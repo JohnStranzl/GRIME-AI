@@ -164,7 +164,7 @@ class GRIME_AI_Feature_Export:
         # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
         header = 'Image, Date (ISO), Time (ISO)'
 
-        #if colorSegmentationParams.wholeImage:
+        ###JES if colorSegmentationParams.wholeImage:
         if 1:
             header = self.build_image_scalar_header(header, roiList, colorSegmentationParams)
 
@@ -497,10 +497,6 @@ class GRIME_AI_Feature_Export:
                                - "embed": Embed the plot into the Excel file.
                                - "both": Save the plot as an image file and embed it into the Excel file.
         """
-        #if not os.path.exists(excel_filename):
-        #    with open(excel_filename, 'w') as file:
-        #        pass  # Create an empty file
-        #    print(f"File '{excel_filename}' created.")
         # Ensure the file exists
         if not os.path.exists(excel_filename):
             # Create the file with a default visible sheet

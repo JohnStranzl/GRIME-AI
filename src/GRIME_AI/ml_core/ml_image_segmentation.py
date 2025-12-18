@@ -134,7 +134,8 @@ class MLImageSegmentation:
                 device,
                 self.SEGFORMER_MODEL,
                 self.segmentation_images_path,
-                self.predictions_output_path
+                self.predictions_output_path,
+                class_index=1		###JES - CHANGE THIS!!!
             )
             predictor = engine.run_segformer_inference(
                 copy_original_image, save_masks, selected_label_categories, progressBar

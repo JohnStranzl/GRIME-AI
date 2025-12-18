@@ -17,12 +17,78 @@ from pycocotools.coco import COCO
 from pycocotools import mask as mask_utils
 from typing import Dict, Any, List
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====      Helper Functions       =====     =====     =====     =====    =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# ===                         Helper Functions                             ===
+# ============================================================================
+# ============================================================================
+def normalize_path(annotation_files):
+    """
+    Normalize a list of annotation file inputs into a flat list of strings.
+    Handles cases like:
+      ["file.json"]
+      [["file.json"]]
+      [[["file.json"]]]
+    """
+    def unwrap_path(path):
+        # Recursively unwrap nested lists until a string path is found
+        while isinstance(path, list):
+            if not path:  # empty list guard
+                raise ValueError("Got an empty list instead of a path")
+            path = path[0]
+        if not isinstance(path, str):
+            raise ValueError(f"Expected string path, got {type(path)}")
+        return path
+
+    result = []
+    for f in annotation_files:
+        result.append(unwrap_path(f))
+    return result
+
+def to_string_path(x):
+    """
+    Unwrap arbitrarily nested lists/tuples until a single string path is returned.
+    Raises if the final value is not a string.
+    """
+    while isinstance(x, (list, tuple)):
+        if not x:
+            raise ValueError("Empty list/tuple received where a path was expected.")
+        x = x[0]
+    if not isinstance(x, str):
+        raise ValueError(f"Expected a string path, got {type(x)}")
+    return x
+
+
+def to_path_list(x):
+    """
+    Normalize input into a list[str].
+    Accepts:
+      - str -> [str]
+      - list/tuple of str -> [str]
+      - arbitrarily nested lists/tuples -> flattened [str]
+    Never iterates into strings (so no character-splitting).
+    """
+    if isinstance(x, str):
+        return [x]
+
+    result = []
+
+    def walk(y):
+        if isinstance(y, str):
+            result.append(y)
+        elif isinstance(y, (list, tuple)):
+            for z in y:
+                walk(z)
+        else:
+            raise ValueError(f"Unexpected type in path list: {type(y)}")
+
+    walk(x)
+    return result
+
 def load_image(images_dir: str, img_info: Dict[str, Any]) -> np.ndarray:
+
+    images_dir = to_string_path(images_dir)
+
     path = os.path.normpath(os.path.join(images_dir, img_info['file_name']))
     img = cv2.imread(path, cv2.IMREAD_COLOR)
     if img is None:
@@ -49,12 +115,14 @@ def build_mask(coco, img_id: int, cat_id: int, height: int, width: int) -> np.nd
         mask = np.maximum(mask, m.astype(np.uint8))
     return mask
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====   class CocoWaterDataset    =====     =====     =====     =====    =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# = = =                      class CocoWaterDataset                      = = =
+# ============================================================================
+# ============================================================================
 class CocoWaterDataset(Dataset):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __init__(self, images_dir: str, ann_path: str, target_category_name: str, image_size: int, split: str = "train", val_ratio: float = 0.1):
         super().__init__()
         self.images_dir = images_dir
@@ -76,6 +144,8 @@ class CocoWaterDataset(Dataset):
         self.to_tensor = T.ToTensor()
         self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __getitem__(self, idx: int):
         img_id = self.img_ids[idx]
         img_info = self.coco.loadImgs([img_id])[0]
@@ -89,17 +159,19 @@ class CocoWaterDataset(Dataset):
         mask_t = torch.from_numpy(mask_resized).long()
         return img_t, mask_t
 
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __len__(self):
         return len(self.img_ids)
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     ===== class MultiCocoTargetDataset =====     =====     =====     =====    =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# = = =                  class MultiCocoTargetDataset                    = = =
+# ============================================================================
+# ============================================================================
 class MultiCocoTargetDataset(Dataset):
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __init__(self, images_dirs, ann_paths, target_category_name, image_size, split="train", val_ratio=0.1):
         super().__init__()
         assert len(images_dirs) == len(ann_paths)
@@ -110,6 +182,7 @@ class MultiCocoTargetDataset(Dataset):
 
         rng = np.random.default_rng(12345)
         for images_dir, ann_path in zip(images_dirs, ann_paths):
+            ann_path = to_string_path(ann_path)
             coco = COCO(ann_path)
             cat_ids = coco.getCatIds(catNms=[target_category_name])
             if not cat_ids:
@@ -125,8 +198,8 @@ class MultiCocoTargetDataset(Dataset):
             for img_id in chosen:
                 self.entries.append((coco, img_id, images_dir, water_cat_id))
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __getitem__(self, idx):
         coco, img_id, images_dir, water_cat_id = self.entries[idx]
         img_info = coco.loadImgs([img_id])[0]
@@ -140,7 +213,7 @@ class MultiCocoTargetDataset(Dataset):
         mask_t = torch.from_numpy(mask_resized).long()
         return img_t, mask_t
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def __len__(self):
         return len(self.entries)

@@ -12,25 +12,58 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====       class DiceLoss        =====     =====     =====     =====    =====
-# ======================================================================================================================
-# ======================================================================================================================
-class DiceLoss(nn.Module):
+# ============================================================================
+# ============================================================================
+# ===                         class BinaryDiceLoss                         ===
+# ============================================================================
+# ============================================================================
+class BinaryDiceLoss(nn.Module):
+    # Binary Dice Loss: expects probs [B,1,H,W], targets [B,1,H,W] in {0,1}
     def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
 
     def forward(self, probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        # probs, targets: [B,1,H,W] in [0,1]
-        probs_f = probs.view(probs.size(0), -1)
-        targets_f = targets.view(targets.size(0), -1)
+        # Flatten
+        probs_f = probs.reshape(probs.size(0), -1)
+        targets_f = targets.reshape(targets.size(0), -1)
+
         inter = (probs_f * targets_f).sum(dim=1)
         union = probs_f.sum(dim=1) + targets_f.sum(dim=1)
         dice = (2.0 * inter + self.eps) / (union + self.eps)
+
         return 1.0 - dice.mean()
 
+
+# ============================================================================
+# ============================================================================
+# ===                        class MultiClassDiceLoss                      ===
+# ============================================================================
+# ============================================================================
+class MultiClassDiceLoss(nn.Module):
+    # Multi-class Dice Loss: expects probs [B,C,H,W], targets [B,H,W] with class indices
+    def __init__(self, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        num_classes = probs.size(1)
+        total_dice = 0.0
+
+        for c in range(num_classes):
+            probs_c = probs[:, c]                  # [B,H,W]
+            targets_c = (targets == c).float()     # one-hot mask for class c
+
+            probs_f = probs_c.reshape(probs_c.size(0), -1)
+            targets_f = targets_c.reshape(targets_c.size(0), -1)
+
+            inter = (probs_f * targets_f).sum(dim=1)
+            union = probs_f.sum(dim=1) + targets_f.sum(dim=1)
+            dice_c = (2.0 * inter + self.eps) / (union + self.eps)
+
+            total_dice += dice_c.mean()
+
+        return 1.0 - total_dice / num_classes
 
 # ======================================================================================================================
 # ======================================================================================================================

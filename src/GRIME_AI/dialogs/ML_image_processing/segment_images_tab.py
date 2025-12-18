@@ -7,12 +7,16 @@
 # License: Apache License, Version 2.0
 
 import os
+import re
+
+import numpy as np
 
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5 import QtCore
+from PyQt5.QtCore import pyqtSignal
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QWidget, QFileDialog, QMessageBox, QSizePolicy
 from PyQt5.uic import loadUi
@@ -542,9 +546,16 @@ class SegmentImagesTab(QWidget):
         # Extract categories if checkpoint loaded
         if isinstance(ckpt, dict):
             labels = ckpt.get("categories") or ckpt.get("classes") or ckpt.get("labels") \
-                     or (ckpt.get("meta") or {}).get("classes") or ckpt.get("target_category_name")
+                     or (ckpt.get("meta") or {}).get("classes") or ckpt.get("target_label")
 
         labels = _normalize_labels(labels)
+
+        try:
+            target_label = ckpt.get("target_label")
+            if not target_label:
+                print("No target label found in checkpoint")
+        except Exception:
+            target_label = None
 
         # Clear previous entries
         self.listWidget_labels.clear()
@@ -576,6 +587,37 @@ class SegmentImagesTab(QWidget):
             else:
                 name = str(entry)
             self.listWidget_labels.addItem(str(name))
+
+        self.select_label(target_label)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def select_label(self, target_label):
+        target_text = ""
+
+        # Case 1: dict
+        if isinstance(target_label, dict):
+            target_text = target_label.get("label_name", "")
+
+        # Case 2: list of dicts
+        elif isinstance(target_label, list) and target_label:
+            if isinstance(target_label[0], dict):
+                target_text = target_label[0].get("label_name", "")
+            elif isinstance(target_label[0], str):
+                target_text = target_label[0]
+
+        # Case 3: plain string
+        elif isinstance(target_label, str):
+            target_text = target_label
+
+        if target_text:
+            items = self.listWidget_labels.findItems(target_text, QtCore.Qt.MatchExactly)
+            if items:
+                item = items[0]
+                self.listWidget_labels.clearSelection()  # optional, ensures only one selected
+                item.setSelected(True)  # mark as selected
+                self.listWidget_labels.setCurrentItem(item)  # make it active
+                self.listWidget_labels.scrollToItem(item)  # ensure visible
 
 
 # WILL NEED THIS IN ORDER TO UPDATE THE JSON SETTINGS FILE

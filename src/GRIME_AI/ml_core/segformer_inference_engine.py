@@ -36,7 +36,7 @@ from GRIME_AI.ml_core.ml_helpers import (init_coco_structure, add_coco_entries, 
 # ======================================================================================================================
 class SegFormerInferenceEngine:
     def __init__(self, device, segformer_model, input_dir, output_dir,
-                 image_size: int = 512, threshold: float = 0.2):
+                 image_size: int = 512, threshold: float = 0.2, class_index = 1):
         # Original attributes
         self.device = device
         self.SEGFORMER_MODEL = segformer_model
@@ -46,6 +46,7 @@ class SegFormerInferenceEngine:
         # Parameters
         self.image_size = image_size
         self.threshold = threshold
+        self.class_index = class_index
 
         # Transforms
         self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406],
@@ -80,7 +81,7 @@ class SegFormerInferenceEngine:
         )
         model = get_peft_model(base, lora_cfg)
 
-        ckpt = torch.load(self.SEGFORMER_MODEL, map_location="cpu")
+        ckpt = torch.load(self.SEGFORMER_MODEL, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["model_state_dict"], strict=False)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return model.to(device).eval()
@@ -108,29 +109,29 @@ class SegFormerInferenceEngine:
         )
 
         probs = torch.softmax(logits, dim=1)
-        water_prob_resized = probs[0, 1].cpu().numpy()  # model-size probability map
-        pred_resized = (water_prob_resized > self.threshold).astype(np.uint8)
+        class_prob_resized = probs[0, self.class_index].cpu().numpy()   # model size probability map
+        pred_resized = (class_prob_resized > self.threshold).astype(np.uint8)
 
-        # --- Map predictions back to original image size ---
+        # --- MAP PREDICTIONS BACK TO ORIGINAL IMAGE SIZE ---
         pred = cv2.resize(pred_resized, (w, h), interpolation=cv2.INTER_NEAREST)
-        water_prob = cv2.resize(water_prob_resized, (w, h), interpolation=cv2.INTER_LINEAR)
+        class_prob = cv2.resize(class_prob_resized, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # --- Prepare output paths ---
+        # --- PREPARE OUTPUT PATHS ---
         base = os.path.splitext(os.path.basename(image_path))[0]
         out_dir = os.path.dirname(out_path)
         os.makedirs(out_dir, exist_ok=True)
 
-        # --- Save outputs aligned to original image ---
+        # --- SAVE OUTPUTS ALIGNED TO ORIGINAL IMAGE ---
         self._save_overlay(img, pred, out_path)
         self._save_mask(pred, out_dir, base)
-        self._save_heatmaps(torch.tensor(water_prob), out_dir, base)
-        self._save_panel(img, pred, torch.tensor(water_prob), out_dir, base)
+        self._save_heatmaps(torch.tensor(class_prob), out_dir, base)
+        self._save_panel(img, pred, torch.tensor(class_prob), out_dir, base)
         if gt_mask_path:
             self._save_error_map(img, pred, gt_mask_path, out_dir, base)
         self._save_components(img, pred, out_dir, base)
 
         # Return for downstream COCO bookkeeping
-        return pred, water_prob
+        return pred, class_prob
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------

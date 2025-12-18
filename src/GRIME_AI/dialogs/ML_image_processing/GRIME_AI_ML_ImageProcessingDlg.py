@@ -33,7 +33,7 @@ from GRIME_AI.dialogs.ML_image_processing.annotation_tab import AnnotationTab
 from GRIME_AI.dialogs.ML_image_processing.coco_generation import COCOGeneration
 from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 from GRIME_AI.dialogs.ML_image_processing.annotation_analyzer_tab import AnnotationAnalyzerTab
-from GRIME_AI.dialogs.ML_image_processing.coco_viewer_tab import CocoViewerTab
+from GRIME_AI.dialogs.ML_image_processing.mask_viewer import CocoViewerTab
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -67,32 +67,6 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.setMinimumSize(int(new_width * 0.7), int(new_height * 0.7))
 
         print(f"Dialog resized: {default_width}x{default_height} → {new_width}x{new_height}")
-
-        # --------------------------------------------------------------------------------------------------------------
-        # LOAD CONFIGURATION SETTINGS THAT MAY BE REQUIRED FOR THE  TABS
-        # --------------------------------------------------------------------------------------------------------------
-        settings_folder = Path(GRIME_AI_Save_Utils().get_settings_folder()).resolve()
-        config_file = (settings_folder / "site_config.json").resolve()
-
-        mgr = ModelConfigManager(str(config_file))
-
-        if not config_file.exists():
-            # File doesn’t exist → start fresh from template
-            self.site_config = mgr.create_template()
-            self.update_model_config()
-        else:
-            try:
-                loaded = mgr.load_config(return_type="dict")
-                # If load_config returns None or empty dict, fall back
-                if not loaded or not isinstance(loaded, dict):
-                    self.site_config = mgr.create_template()
-                    self.update_model_config()
-                else:
-                    self.site_config = loaded
-            except (JSONDecodeError, ValueError):
-                # File exists but is empty or invalid JSON → reset
-                self.site_config = mgr.create_template()
-                self.update_model_config()
 
         # --------------------------------------------------------------------------------------------------------------
         # TRAINING TAB    ---    TRAINING TAB    ---   TRAINING TAB    ---    TRAINING TAB    ---    TRAINING TAB
@@ -158,6 +132,32 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.coco_viewer_tab = CocoViewerTab(self)
 
         self.tabWidget.addTab(self.coco_viewer_tab, "COCO Viewer")
+
+        # --------------------------------------------------------------------------------------------------------------
+        # LOAD CONFIGURATION SETTINGS THAT MAY BE REQUIRED FOR THE  TABS
+        # --------------------------------------------------------------------------------------------------------------
+        settings_folder = Path(GRIME_AI_Save_Utils().get_settings_folder()).resolve()
+        config_file = (settings_folder / "site_config.json").resolve()
+
+        mgr = ModelConfigManager(str(config_file))
+
+        if not config_file.exists():
+            # File doesn’t exist → start fresh from template
+            self.site_config = mgr.create_template()
+            self.update_model_config()
+        else:
+            try:
+                loaded = mgr.load_config(return_type="dict")
+                # If load_config returns None or empty dict, fall back
+                if not loaded or not isinstance(loaded, dict):
+                    self.site_config = mgr.create_template()
+                    self.update_model_config()
+                else:
+                    self.site_config = loaded
+            except (JSONDecodeError, ValueError):
+                # File exists but is empty or invalid JSON → reset
+                self.site_config = mgr.create_template()
+                self.update_model_config()
 
         # --------------------------------------------------------------------------------------------------------------
         ###JES hide GRIME AI annotation/labeling; users must use CVAT
@@ -402,10 +402,10 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         """
         Collect values from dialog controls and return them as a dictionary.
         """
-        #site_config["load_model"]["TRAINING_CATEGORIES"] = self.get_selected_training_labels()
+        site_config["train_model"]["TRAINING_CATEGORIES"] = self.get_selected_training_labels()
 
         # Build Path section
-        root_folder = os.path.normpath(os.path.abspath(self.lineEdit_model_training_images_path.text().strip()))
+        root_folder = os.path.normpath(os.path.abspath(self.training_tab.get_training_images_root_folder))
         selected_folders = site_config.get("selected_folders", [])
         if selected_folders:
             new_folders = []
@@ -641,6 +641,9 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
 
     def get_saved_masks(self):
         return self.segment_tab.checkBox_save_predicted_masks.isChecked()
+
+    def get_selected_training_labels(self):
+        return self.training_tab.get_selected_training_labels()
 
     def get_selected_label_categories(self):
         return self.segment_tab.selected_label_categories

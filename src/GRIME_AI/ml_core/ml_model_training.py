@@ -44,11 +44,24 @@ from omegaconf import DictConfig
 DEBUG = False  # Set to True if you want print statements
 
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====    class MLModelTraining   =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# ===                             HELPER FUNCTIONS                       =====
+# ============================================================================
+# ============================================================================
+def normalize_files(annotation_files):
+    # If it's a list of lists, flatten one level
+    if annotation_files and isinstance(annotation_files[0], list):
+        return [item for sublist in annotation_files for item in sublist]
+    # Otherwise assume it's already a flat list of strings
+    return annotation_files
+
+
+# ============================================================================
+# ============================================================================
+# ===                            class MLModelTraining                     ===
+# ============================================================================
+# ============================================================================
 class MLModelTraining:
 
     def __init__(self, cfg: DictConfig = None):
@@ -86,6 +99,7 @@ class MLModelTraining:
         self.all_folders = []
         self.all_annotations = []
         self.categories = []
+        self.model_output_folder = None
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -122,9 +136,9 @@ class MLModelTraining:
         ###JES TEST TEST TEST TEST TEST
         ###JES mode = "sam3"
 
-        # --------------------------------------------------------------------------------------------------------------
-        #       SAM2   ---   SAM2   ---   SAM2   ---   SAM2   ---   SAM2   ---   SAM2   ---   SAM2   ---   SAM2
-        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------
+        #      SAM2   ---   SAM2   ---   SAM2   ---   SAM2   ---   SAM2
+        # --------------------------------------------------------------------
         if mode.lower() == "sam2":
             from GRIME_AI.ml_core.sam2_trainer import SAM2Trainer
             mySAM2_pipeline = SAM2Trainer(self.cfg)
@@ -137,17 +151,17 @@ class MLModelTraining:
             else:
                 print("No checkpoints were saved during training")
 
-        # --------------------------------------------------------------------------------------------------------------
-        #       SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3
-        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------
+        #      SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3
+        # --------------------------------------------------------------------
         elif mode.lower() == "sam3":
             from GRIME_AI.ml_core.sam3_trainer import SAM3Trainer
             mySAM3_pipeline = SAM3Trainer(self.cfg)
             mySAM3_pipeline.run_training_pipeline()
 
-        # --------------------------------------------------------------------------------------------------------------
-        #       SegFormer   ---   SegFormer   ---   SegFormer   ---   SegFormer   ---   SegFormer   ---   SegFormer
-        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------
+        #     SegFormer  ---  SegFormer  ---  SegFormer  ---  SegFormer
+        # --------------------------------------------------------------------
         elif mode.lower() == "segformer":
             # Collect folders and annotations
             paths = self.site_config.get('Path', [])
@@ -166,7 +180,7 @@ class MLModelTraining:
                 images_dir="",
                 ann_path="",
                 categories=self.categories,
-                target_category_name=self.site_config["load_model"]["TRAINING_CATEGORIES"][0]["label_name"],
+                target_category_name=self.site_config["train_model"]["TRAINING_CATEGORIES"][0]["label_name"],
                 output_dir=self.model_output_folder,
             )
 
@@ -219,8 +233,8 @@ class MLModelTraining:
         print(f"Execution Ended: {now_end.strftime('%y%m%d %H:%M:%S')}")
 
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def run_segformer(self, image_dirs, ann_paths, cfg: SegFormerConfig,
                       use_lora: bool = False,
                       lora_target_modules=None,
@@ -263,12 +277,14 @@ class MLModelTraining:
 
         return trained
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def build_unique_categories(self, annotation_files):
         merged = []
         id_to_name = {}
         name_to_id = {}
+
+        annotation_files = normalize_files(annotation_files)
 
         for p in annotation_files:
             try:
@@ -300,3 +316,4 @@ class MLModelTraining:
         # dedupe
         unique = {(c['id'], c['name']): c for c in merged}
         return list(unique.values())
+

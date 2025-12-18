@@ -139,8 +139,10 @@ class ModelConfigManager:
                 "SAM3_MODEL": "",
                 "SEGFORMER_MODEL": "",
                 "MASKRCNN_MODEL": "",
-                "TRAINING_CATEGORIES": [],
                 "SEGMENTATION_CATEGORIES": []
+            },
+            "train_model": {
+                "TRAINING_CATEGORIES": [],
             },
             "Path": [
                 {

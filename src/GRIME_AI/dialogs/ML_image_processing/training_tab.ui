@@ -160,7 +160,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QRadioButton" name="radioButton_train_model_LoRA">
+               <widget class="QRadioButton" name="radioButton_train_model_segformer">
                 <property name="text">
                  <string>SegFormer w/LoRA</string>
                 </property>

@@ -755,7 +755,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _usgs_progress(self, idx: int, total: int, label: str | None) -> None:
         """Progress callback for USGSClient operations."""
         if not hasattr(self, "_usgsProgress"):
-            self._usgsProgress = QProgressWheel(self)
+            self._usgsProgress = QProgressWheel(parent=self)
             self._usgsProgress.setRange(0, total)
             self._usgsProgress.setWindowTitle("USGS Operation")
             self._usgsProgress.show()
@@ -770,6 +770,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if idx >= total:
             self._usgsProgress.close()
             del self._usgsProgress
+
+    def force_close_progress(self):
+        """Forcefully close and clean up the progress wheel if it exists."""
+        if hasattr(self, "_usgsProgress"):
+            try:
+                self._usgsProgress.close()  # triggers closeEvent
+                self._usgsProgress.deleteLater()  # ensure cleanup
+            finally:
+                del self._usgsProgress
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1599,13 +1608,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 startTime,
                 endTime,
                 saveFolder,
-                progress=self._usgs_progress  # <-- new: hook for your QProgressWheel
+                progress=self._usgs_progress
             )
 
-            saveFolder = os.path.join(downloadsFilePath, "../../data")
+            saveFolder = os.path.join(downloadsFilePath, "data")
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
             self.myNIMS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
+
+            self.force_close_progress()
 
             #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
 
@@ -1649,7 +1660,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
 
         hyperparameterDlg.ml_train_signal.connect(train_main)
-        hyperparameterDlg.ml_segment_signal.connect(load_model_main)
+        hyperparameterDlg.ml_segment_signal.connect(segment_main)
 
         #hyperparameterDlg.accepted.connect(closehyperparameterDlg)
         #hyperparameterDlg.rejected.connect(closehyperparameterDlg)
@@ -3839,7 +3850,7 @@ def run_cli(args):
         )
 
         # 5. Invoke the Hydra-decorated entry point
-        load_model_main(cfg)
+        segment_main(cfg)
     else:
         parser.print_help()
         sys.exit(1)
@@ -3884,46 +3895,48 @@ print(myconfig_name)
 # Resolve config path relative to this script
 dirname = os.path.dirname(os.path.abspath(__file__))
 myconfig_path = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1")
-print("Config path:", myconfig_path)
 myconfig_name = "sam2.1_hiera_l"
 ###JES myconfig_name = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l")
-print("Config name:", myconfig_name)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name, version_base="1.3")
 def train_main(cfg: DictConfig) -> None:
-    # If Hydra is already initialized, clear it
-    if GlobalHydra.instance().is_initialized():
-        GlobalHydra.instance().clear()
-    print("Hydra SAM2 training config:")
-    print(OmegaConf.to_yaml(cfg))
-
     global hyperparameterDlg
-    if hyperparameterDlg != None:
-        copy_original_image = hyperparameterDlg.get_copy_original_image()
-        save_masks = hyperparameterDlg.get_saved_masks()
-        selected_label_categories = hyperparameterDlg.get_selected_label_categories()
+    if hyperparameterDlg is not None:
+        # FETCH ANY DATA WE NEED FROM THE MACHINE LEARNING DIALOG
         selected_training_model = hyperparameterDlg.get_selected_training_model()
-        selected_segment_model = hyperparameterDlg.get_selected_segment_model()
 
+        # WE ONLY USE HYDRA WITH SEGMENT ANYTHING MODEL (SAM, SAM2, SAM3)
+        if selected_training_model.lower().startswith("sam"):
+            print("Config path:", myconfig_path)
+            print("Config name:", myconfig_name)
+
+            # If Hydra is already initialized, clear it
+            if GlobalHydra.instance().is_initialized():
+                GlobalHydra.instance().clear()
+            print("Hydra SAM2 training config:")
+            print(OmegaConf.to_yaml(cfg))
+
+        # CLOSE UP THE MACHINE LEARNING DIALOG BOX
+        # WE'RE DONE GETTING WHAT WE NEED FROM IT
         hyperparameterDlg.close()
         del hyperparameterDlg
         hyperparameterDlg = None
 
-        # Instantiate your SAM2 training object (assumed to accept cfg)
+        # BEGIN TRAINING THE MODEL
         print("Instantiate MLModelTraining class...")
         myML_Dispatcher = MLModelTraining(cfg)
-        print("Execute ML training...")
 
+        print("Execute ML training...")
         myML_Dispatcher.Model_Training_Dispatcher(cfg=cfg, mode=selected_training_model)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
 @hydra.main(config_path=myconfig_path, config_name=myconfig_name, version_base="1.3")
-def load_model_main(cfg: DictConfig) -> None:
+def segment_main(cfg: DictConfig) -> None:
     # If Hydra is already initialized, clear it
     if GlobalHydra.instance().is_initialized():
         GlobalHydra.instance().clear()
@@ -3931,11 +3944,10 @@ def load_model_main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     global hyperparameterDlg
-    if hyperparameterDlg != None:
+    if hyperparameterDlg is not None:
         copy_original_image = hyperparameterDlg.get_copy_original_image()
         save_masks = hyperparameterDlg.get_saved_masks()
         selected_label_categories = hyperparameterDlg.get_selected_label_categories()
-        selected_training_model = hyperparameterDlg.get_selected_training_model()
         selected_segment_model = hyperparameterDlg.get_selected_segment_model()
 
         hyperparameterDlg.close()
