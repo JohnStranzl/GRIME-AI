@@ -178,7 +178,7 @@ import pandas as pd
 # ----------------------------------------------------------------------------------------------------------------------
 import GRIME_AI.sobelData
 
-from GRIME_AI.usgs.client import USGSClient
+from GRIME_AI.usgs.usgs_client import USGSClient
 
 # ----------------------------------------------------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         # INITIALIZE VARIABLES
         # ------------------------------------------------------------------------------------------------------------------
-        self.myNIMS = None
+        self.myHIVIS = None
         self.cameraDictionary = {}
         self.phenocam_site_dictionary = {}
 
@@ -539,11 +539,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # NIMS
         # ------------------------------------------------------------------------------------------------------------------
         try:
-            from GRIME_AI.usgs.shim import USGS_NIMS_Shim
+            from GRIME_AI.usgs.usgs_hivis import USGS_HIVIS
 
-            self.myNIMS = USGS_NIMS_Shim()
-            self.cameraDictionary = self.myNIMS.get_camera_dictionary()
-            self.cameraList = self.myNIMS.get_camera_list()
+            self.myHIVIS = USGS_HIVIS()
+            self.cameraDictionary = self.myHIVIS.get_camera_dictionary()
+            self.cameraList = self.myHIVIS.get_camera_list()
             self.USGS_listboxSites.clear()
             self.USGS_listboxSites.addItems(self.cameraList)
 
@@ -554,13 +554,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             strCamID = self.USGS_listboxSites.currentItem().text()
 
-            cameraInfo = self.myNIMS.get_camera_info(strCamID)
+            cameraInfo = self.myHIVIS.get_camera_info(strCamID)
             self.listboxUSGSSiteInfo.addItems(cameraInfo)
 
             self.USGS_updateSiteInfo(1)
 
-        except Exception:
-            msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS Database!')
+        except Exception as e:
+            msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS/HIVIS Database!')
             response = msgBox.displayMsgBox()
 
         #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIME-AI\\Downloads\\USGS_Test")
@@ -1149,7 +1149,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             m += 1
             dateTime = QDateTimeEdit()
             dateTime.setDisplayFormat("hh:mm")
-            #dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
             dateTime.setKeyboardTracking(False)
             dateTime.setFrame(False)
             tableProducts.setCellWidget(i, m, dateTime)
@@ -1157,7 +1157,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             m += 1
             dateTime = QDateTimeEdit()
             dateTime.setDisplayFormat("hh:mm")
-            #dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
+            dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
             dateTime.setKeyboardTracking(False)
             dateTime.setFrame(False)
             tableProducts.setCellWidget(i, m, dateTime)
@@ -1505,6 +1505,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ==================================================================================================================
     def USGS_get_image_count(self):
+
         currentRow = self.USGS_listboxSites.currentRow()
         if (currentRow > -1):
             site = self.USGS_listboxSites.currentItem().text()
@@ -1526,9 +1527,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
             endTime = datetime.time(nHour, nMinute, nSecond)
 
-            nwisID = self.myNIMS.get_nwisID()
+            nwisID = self.myHIVIS.get_nwisID()
 
-            imageCount = self.myNIMS.get_image_count(siteName=site, nwisID=nwisID, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
+            imageCount = self.myHIVIS.get_image_count(siteName=site, nwisID=nwisID, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
         except Exception:
             imageCount = 0
 
@@ -1589,7 +1590,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             nHour, nMinute, nSecond = self.separateTime(self.table_USGS_Sites.cellWidget(0, endTimeCol).dateTime().time())
             endTime = datetime.time(nHour, nMinute, nSecond)
 
-            nwisID = self.myNIMS.get_nwisID()
+            nwisID = self.myHIVIS.get_nwisID()
 
             #downloadsFilePath = os.path.join(self.edit_USGSSaveFilePath.text(), 'Images')
             downloadsFilePath = self.edit_USGSSaveFilePath.text()
@@ -1600,7 +1601,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
 
-            ###JES self.myNIMS.download_images(siteName=site, nwisID=nwisID, saveFolder=saveFolder, startDate=startDate, endDate=endDate, startTime=startTime, endTime=endTime)
             downloaded, missing = self.usgs.download_images(
                 site,
                 startDate,
@@ -1614,11 +1614,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             saveFolder = os.path.join(downloadsFilePath, "data")
             if not os.path.exists(saveFolder):
                 os.makedirs(saveFolder)
-            self.myNIMS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
+            self.myHIVIS.fetchStageAndDischarge(nwisID, site, startDate, endDate, startTime, endTime, saveFolder)
 
             self.force_close_progress()
 
-            #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
+        #fetchUSGSImages(self.table_USGS_Sites, self.edit_USGSSaveFilePath)
 
 
     # ==================================================================================================================
