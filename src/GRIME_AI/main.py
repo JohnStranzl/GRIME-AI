@@ -128,22 +128,22 @@ import argparse
 import shutil
 import getpass
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 import warnings
 warnings.filterwarnings("ignore", message="numpy.dtype size changed")
 warnings.filterwarnings("ignore", message="numpy.ufunc size changed")
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 def excepthook(exc_type, exc_value, exc_tb):
     print("Uncaught exception:")
     traceback.print_exception(exc_type, exc_value, exc_tb)
 
 sys.excepthook = excepthook
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 import datetime
 from datetime import date
 import time
@@ -160,8 +160,8 @@ from dataclasses import dataclass
 
 from GRIME_AI.utils.resource_utils import icon_path
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import QCoreApplication, QRect
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
@@ -174,15 +174,15 @@ from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 import pandas as pd
 
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 import GRIME_AI.sobelData
 
 from GRIME_AI.usgs.usgs_client import USGSClient
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
-# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
 from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
 from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
@@ -202,7 +202,6 @@ from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
 from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
-from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
 from GRIME_AI.GRIME_AI_ProductTable import GRIME_AI_ProductTable
 from GRIME_AI.GRIME_AI_QLabel import DrawingMode
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
@@ -215,10 +214,18 @@ from GRIME_AI.GRIME_AI_TimeStamp_Utils import GRIME_AI_TimeStamp_Utils
 from GRIME_AI.GRIME_AI_ImageTriage import GRIME_AI_ImageTriage
 from GRIME_AI.GRIME_AI_GreenImageGenerator import GreenImageGenerator
 from GRIME_AI.GRIME_AI_COCO_Utils import GRIME_AI_COCO_Utils
+
+# ----------------------------------------------------------------------------
+# PHENOCAM
+# ----------------------------------------------------------------------------
+from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam, dailyList
 from GRIME_AI.phenocam.GRIME_AI_Phenocam_API import GRIME_AI_Phenocam_API
 
 from GRIME_AI.colorSegmentationParams import colorSegmentationParamsClass
 
+# ----------------------------------------------------------------------------
+# DIGITAL MAPPING PLATFORMS
+# ----------------------------------------------------------------------------
 from GRIME_AI.geomaps.google_maps_viewer import GoogleMapWidget
 from GRIME_AI.geomaps.openstreetmap_viewer import OpenStreetMapWidget
 
