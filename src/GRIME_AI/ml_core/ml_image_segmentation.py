@@ -108,21 +108,11 @@ class MLImageSegmentation:
             # Pass INPUT_DIR and OUTPUT_DIR
             engine = SAM2InferenceEngine(
                 device=torch.device("cuda"),
-                model_cfg="sam2.1_hiera_l.yaml",
+                model_cfg="sam2.1_hiera_l.yaml",            # self.MODEL_CFG
                 trained_checkpoint_path=self.SAM2_MODEL,
                 input_dir=self.segmentation_images_path,
                 output_dir=self.predictions_output_path
             )
-            '''
-            engine = SAM2InferenceEngine(
-                device,
-                self.MODEL_CFG,
-                self.SAM2_CHECKPOINT,
-                self.SAM2_MODEL,
-                self.segmentation_images_path,
-                self.predictions_output_path
-            )
-            '''
 
             predictor = engine.run_sam2_inference(
                 copy_original_image, save_masks, selected_label_categories, progressBar

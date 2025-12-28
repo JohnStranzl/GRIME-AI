@@ -139,6 +139,7 @@ class SegmentImagesTab(QWidget):
         if model_file:
             self.lineEdit_segmentation_model_file.setText(model_file)
             self.populate_model_labels(model_file)
+            # Populate metadata will be done on showEvent to avoid loading on init
         else:
             self.lineEdit_segmentation_model_file.clear()
 
@@ -174,6 +175,20 @@ class SegmentImagesTab(QWidget):
                 item = self.listWidget_labels.item(idx)
                 if item and item.text().strip() in stored_categories:
                     item.setSelected(True)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def showEvent(self, event):
+        """Called when tab becomes visible - populate metadata if model path exists."""
+        super().showEvent(event)
+        
+        # Check if model path is populated
+        model_path = self.lineEdit_segmentation_model_file.text().strip()
+        if model_path and os.path.exists(model_path):
+            try:
+                self.populate_model_metadata(model_path)
+            except Exception as e:
+                print(f"Failed to populate metadata on tab show: {e}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -361,6 +376,12 @@ class SegmentImagesTab(QWidget):
                 self.populate_model_labels(model_file)
             except Exception as e:
                 print(f"populate_model_labels failed: {e}")
+
+            # Populate model metadata listbox
+            try:
+                self.populate_model_metadata(model_file)
+            except Exception as e:
+                print(f"populate_model_metadata failed: {e}")
 
             self.updateSegmentButtonState()
 
@@ -589,6 +610,43 @@ class SegmentImagesTab(QWidget):
             self.listWidget_labels.addItem(str(name))
 
         self.select_label(target_label)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def populate_model_metadata(self, model_path):
+        """Load and display ALL metadata from torch checkpoint."""
+        self.listWidget_modelMetadata.clear()
+        
+        try:
+            checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+            
+            # Skip model_state_dict (too large to display)
+            skip_keys = {'model_state_dict', 'state_dict', 'optimizer', 'optimizer_state_dict'}
+            
+            # Iterate through all keys in checkpoint
+            for key, value in checkpoint.items():
+                if key in skip_keys:
+                    continue
+                
+                # Format the value for display
+                if value is None:
+                    display_value = "None"
+                elif isinstance(value, (int, str)):
+                    display_value = str(value)
+                elif isinstance(value, float):
+                    display_value = f"{value:.4f}"
+                elif isinstance(value, (list, tuple)):
+                    display_value = f"[{len(value)} items]"
+                elif isinstance(value, dict):
+                    display_value = f"{{dict with {len(value)} keys}}"
+                else:
+                    display_value = f"{type(value).__name__}"
+                
+                # Add to listbox
+                self.listWidget_modelMetadata.addItem(f"{key}: {display_value}")
+                
+        except Exception as e:
+            self.listWidget_modelMetadata.addItem(f"Error: {e}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------

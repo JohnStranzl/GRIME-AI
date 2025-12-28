@@ -38,11 +38,30 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 print(sam2_base.__file__)
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====      INLINE FUNCTIONS      =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+def _normalize_centroid(cx: float, cy: float, w: int, h: int):
+    """
+    Normalize centroid coordinates to [0,1] range.
+    Args:
+        cx, cy: pixel coordinates of centroid
+        w, h: image width and height
+    Returns:
+        (cx_norm, cy_norm) as floats in [0,1]
+    """
+    if w <= 1 or h <= 1:
+        raise ValueError(f"Invalid image dimensions for normalization: w={w}, h={h}")
+    cx_norm = cx / float(w - 1)
+    cy_norm = cy / float(h - 1)
+    return (cx_norm, cy_norm)
+
+
+# =======================================================================
+# =======================================================================
+# = = =                     HELPER FUNCTIONS                        = = =
+# =======================================================================
+# =======================================================================
 def compute_mean_iou(y_true: list[int], y_pred: list[int]) -> float:
     arr_t = np.array(y_true, dtype=bool)
     arr_p = np.array(y_pred, dtype=bool)
@@ -56,8 +75,8 @@ class DiceLoss(nn.Module):
         super().__init__()
         self.eps = eps
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def forward(self, probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         # probs, targets: [B,1,H,W] in [0,1]
         probs_f = probs.view(probs.size(0), -1)
@@ -68,8 +87,8 @@ class DiceLoss(nn.Module):
         return 1.0 - dice.mean()
 
 
-# ------------------------------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 def dice_coeff_from_probs(probs: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6) -> float:
     preds = (probs > 0.5).float()
     inter = (preds * targets).sum().item()
@@ -77,8 +96,8 @@ def dice_coeff_from_probs(probs: torch.Tensor, targets: torch.Tensor, eps: float
     return float((2.0 * inter + eps) / (union + eps))
 
 
-# ------------------------------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 def iou_from_probs(probs: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6) -> float:
     preds = (probs > 0.5).float()
     inter = (preds * targets).sum().item()
@@ -86,18 +105,28 @@ def iou_from_probs(probs: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6
     return float((inter + eps) / (union + eps))
 
 
-# ======================================================================================================================
-# ======================================================================================================================
-# =====     =====     =====     =====     =====     class SAM2Trainer      =====     =====     =====     =====     =====
-# ======================================================================================================================
-# ======================================================================================================================
+# ============================================================================
+# ============================================================================
+# = = =                       class SAM2Trainer                          = = =
+# ============================================================================
+# ============================================================================
 class SAM2Trainer:
 
+
     def __init__(self, cfg: DictConfig = None):
+        # =========================================================================
+        # TEST MODE CONFIGURATION
+        # Set self.TEST_MODE = True to train on hardcoded water + sky for testing
+        # Set self.TEST_MODE = False to use normal configuration from site_config.json
+        # =========================================================================
+        self.TEST_MODE = False  # CHANGE THIS to True to enable test mode
+        self.TEST_CATEGORIES = ["water", "sky"]  # Categories to use in test mode
+        # =========================================================================
+
         self.sam2_model = None
         self._last_checkpoint_path = None
         self.selected_backend = None
-        self.progress_bar_closed = False  # ✅ ISSUE #8 FIX: Initialize progress bar state
+        self.progress_bar_closed = False
 
         # Track top N best validation checkpoints
         self.best_checkpoints = []  # List of (val_loss, path) tuples
@@ -121,6 +150,8 @@ class SAM2Trainer:
 
         self.train_dice_values = []
         self.train_iou_values = []
+
+        self.category_centroids = {}
 
         self.dataset_util = DatasetUtils()
 
@@ -147,7 +178,9 @@ class SAM2Trainer:
         self.save_model_frequency = self.site_config['save_model_frequency']
         self.early_stopping = self.site_config['early_stopping']
         self.patience = self.site_config['patience']
-        self.device = self.site_config.get('device', str(device))
+
+        # Validation overlay settings (default: 5 samples per epoch)
+        self.validation_overlay_samples = self.site_config.get('validation_overlay_samples', 5)
 
         self.dataset = {}
 
@@ -172,8 +205,8 @@ class SAM2Trainer:
             self.model_output_folder = None
             print(f"Error creating folders: {e}")
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def run_training_pipeline(self):
         # Collect folders and annotations (flatten lists)
         self.all_folders = []
@@ -188,10 +221,46 @@ class SAM2Trainer:
             self.all_folders.extend(folders)
             self.all_annotations.extend(annotations)
 
-        target_label = self.site_config["load_model"]["SEGMENTATION_CATEGORIES"][0]
-        self.dataset = self.dataset_util.load_images_and_annotations(self.all_folders, self.all_annotations, target_label)
-        self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
+        # Build categories first (needed for both modes)
         self.categories = self.build_unique_categories(self.all_annotations)
+        
+        if self.TEST_MODE:
+            # === TEST MODE: Train on multiple hardcoded categories ===
+            print("\n" + "=" * 70)
+            print("TEST MODE ENABLED: Training on", self.TEST_CATEGORIES)
+            print("=" * 70 + "\n")
+            
+            # Don't combine datasets here - we'll reload per-category during training
+            # This avoids the bug where second category's annotations get discarded
+            # Just load first category to initialize the dataset structure
+            first_category = self.TEST_CATEGORIES[0]
+            print(f"Loading initial dataset structure using: {first_category}")
+            self.dataset = self.dataset_util.load_images_and_annotations(
+                self.all_folders, self.all_annotations, first_category
+                )
+            self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
+            
+        else:
+            # === NORMAL MODE: Use TRAINING_CATEGORIES from train_model config ===
+            training_cats = self.site_config.get("train_model", {}).get("TRAINING_CATEGORIES", [])
+            configured_categories = [cat["label_name"] for cat in training_cats if "label_name" in cat]
+            
+            # Handle empty config
+            if not configured_categories:
+                print("\n" + "!" * 70)
+                print("ERROR: No categories configured in TRAINING_CATEGORIES!")
+                print("Please select categories in the UI")
+                print("!" * 70 + "\n")
+                raise ValueError("No training categories configured")
+            
+            # Load dataset once with first category (but keeps all annotations)
+            first_category = configured_categories[0]
+            print(f"Loading dataset with all annotations...")
+            self.dataset = self.dataset_util.load_images_and_annotations(
+                self.all_folders, self.all_annotations, first_category
+            )
+            self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
+
 
         # Split dataset
         train_images, val_images = self.dataset_util.split_dataset(self.dataset)
@@ -267,10 +336,72 @@ class SAM2Trainer:
 
         self.sam2_model = model.to(device).train()
 
-        for lr in self.learning_rates:
-            print(f"Training with learning rate: {lr}")
-            self.train_sam(lr, self.weight_decay, train_images, val_images, epochs=self.num_epochs)
-            self._plot_training_graphs(lr)
+        if self.TEST_MODE:
+            # === TEST MODE: Train on each test category separately ===
+            for category_name in self.TEST_CATEGORIES:
+                print("\n" + "=" * 70)
+                print(f"TRAINING ON: {category_name.upper()}")
+                print("=" * 70 + "\n")
+                
+                # RELOAD dataset for THIS specific category
+                # This ensures we have the correct annotations for this category
+                print(f"Loading dataset for {category_name}...")
+                self.dataset = self.dataset_util.load_images_and_annotations(
+                    self.all_folders, self.all_annotations, category_name
+                )
+                self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
+                
+                # DON'T re-split! Use the SAME train/val split from initial split
+                # This is crucial - random.shuffle() would give different split each time
+                print(f"  Using shared train/val split:")
+                print(f"  Training images: {len(train_images)}")
+                print(f"  Validation images: {len(val_images)}")
+                
+                # Get category ID
+                target_id = next((c["id"] for c in self.categories if c["name"] == category_name), None)
+                if target_id is None:
+                    print(f"Warning: Category '{category_name}' not found in categories, skipping")
+                    continue
+                
+                # Check if we have any annotations for this category
+                if not train_images:
+                    print(f"Warning: No training images for '{category_name}', skipping")
+                    continue
+                
+                # Train on this category
+                for lr in self.learning_rates:
+                    print(f"\nTraining {category_name} with learning rate: {lr}")
+                    self.train_sam(lr, self.weight_decay, train_images, val_images, 
+                                 epochs=self.num_epochs, target_label=category_name)
+                    self._plot_training_graphs(lr)
+        else:
+            # === NORMAL MODE: Train on ALL categories from TRAINING_CATEGORIES ===
+            training_cats = self.site_config.get("train_model", {}).get("TRAINING_CATEGORIES", [])
+            configured_categories = [cat["label_name"] for cat in training_cats if "label_name" in cat]
+            
+            print(f"\nWill train on {len(configured_categories)} category(ies): {configured_categories}")
+            
+            # Train on each configured category
+            for category_name in configured_categories:
+                print("\n" + "=" * 70)
+                print(f"TRAINING ON: {category_name.upper()}")
+                print("=" * 70 + "\n")
+                
+                # Verify category exists
+                target_id = next((c["id"] for c in self.categories if c["name"] == category_name), None)
+                if target_id is None:
+                    print(f"Warning: Category '{category_name}' not found, skipping")
+                    print(f"Available categories: {[c['name'] for c in self.categories]}")
+                    continue
+                
+                # Train on this category (dataset already has all annotations)
+                for lr in self.learning_rates:
+                    print(f"\nTraining {category_name} with learning rate: {lr}")
+                    self.train_sam(lr, self.weight_decay, train_images, val_images,
+                                     epochs=self.num_epochs, target_label=category_name)
+                    self._plot_training_graphs(lr)
+
+
 
         config_file = os.path.join(
             self.model_output_folder,
@@ -278,9 +409,9 @@ class SAM2Trainer:
         )
         self.save_config_to_text(config_file)
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-    def train_sam(self, learnrate, weight_decay, train_images, val_images, epochs=20):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def train_sam(self, learnrate, weight_decay, train_images, val_images, epochs=20, target_label=None):
 
         self.reset_metrics()
 
@@ -330,7 +461,11 @@ class SAM2Trainer:
         divergence_threshold = 1e3
         last_completed_epoch = 0
 
-        target_label = self.site_config["load_model"]["SEGMENTATION_CATEGORIES"][0]
+        # Get target_label - use parameter if provided (TEST_MODE), otherwise get from config
+        if target_label is None:
+            # Normal mode: get from config
+            target_label = self.site_config["load_model"]["SEGMENTATION_CATEGORIES"][0]
+        # else: use the provided target_label (TEST_MODE)
 
         try:
             for epoch in range(epochs):
@@ -374,9 +509,22 @@ class SAM2Trainer:
                       f"Dice: {train_dice:.4f} "
                       f"IoU: {train_iou:.4f}")
 
+                # Clear GPU cache after training to prevent memory accumulation
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
                 if math.isnan(avg_epoch_loss) or avg_epoch_loss > divergence_threshold:
                     print("Training diverged. Aborting early.")
                     break
+
+                # Deduplicate centroids after first epoch to prevent memory leak
+                if epoch == 0:
+                    print("\n=== Finalizing Centroid Collection ===")
+                    self._deduplicate_centroids()
+                    total_centroids = sum(len(v) for v in self.category_centroids.values())
+                    print(f"Total unique centroids collected: {total_centroids}")
+                    print("Centroid collection frozen - will not accumulate in future epochs\n")
+
 
                 # Skip validation during warmup period (first 10% of epochs)
                 validation_warmup_epochs = max(1, int(epochs * 0.1))
@@ -385,7 +533,8 @@ class SAM2Trainer:
                     avg_val_loss, val_accuracy, miou, avg_val_dice, avg_val_iou = self._validate_one_epoch(
                         val_images=val_images,
                         predictor=predictor,
-                        progressBar=progressBar
+                        progressBar=progressBar,
+                        target_label=target_label
                     )
 
                     if avg_val_loss is None:
@@ -410,7 +559,8 @@ class SAM2Trainer:
                         self._save_model_checkpoint(
                             predictor, learnrate, epoch + 1,
                             suffix=f"valbest_ep{epoch + 1:03d}",
-                            val_loss=avg_val_loss, val_accuracy=val_accuracy, miou=miou
+                            val_loss=avg_val_loss, val_accuracy=val_accuracy, miou=miou,
+                            target_category_name=target_label
                         )
                     else:
                         patience_counter += 1
@@ -424,8 +574,8 @@ class SAM2Trainer:
             if 'progressBar' in locals():
                 del progressBar
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def reset_metrics(self):
         self.epoch_list.clear()
         self.loss_values.clear()
@@ -439,8 +589,8 @@ class SAM2Trainer:
         self.train_dice_values.clear()
         self.train_iou_values.clear()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _select_best_sdpa_backend(self):
         """
         Selects the best available SDPA backend once, to be reused throughout training.
@@ -506,40 +656,132 @@ class SAM2Trainer:
         bce_loss_fn = nn.BCEWithLogitsLoss()
         dice_loss_fn = DiceLoss()
 
+        # --- FILTER MASK BY TARGET_LABEL ---
+        if target_label is None:
+            raise ValueError("target_label is required but was None.")
+
         for idx, image_file in enumerate(train_images):
             if self.progress_bar_closed:
                 self._terminate_training(progressBar)
                 return None, None, None, None
 
-            # --- Load ground truth mask ---
-            true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index)
-            if true_mask is None:
-                print(f"No annotation found for image {image_file}, skipping.")
+            # ----------------------------------------
+            # LOAD GROUND TRUTH MASK
+            # ----------------------------------------
+            # RESOLVE TARGET_ID
+            target_id = next((c["id"] for c in self.categories if c["name"] == target_label), None)
+            if target_id is None:
+                available = ", ".join(f'{c["name"]}:{c["id"]}' for c in self.categories)
+                raise ValueError(f"Unknown target_label '{target_label}'. Available: {available}")
+
+            # LOAD GROUND TRUTH MASK
+            true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index, mode="binary", target_id=target_id)
+
+            # SKIP IF NO USABLE MASK
+            if true_mask is None or true_mask.sum() == 0:
+                print(f"No usable mask for target_id={target_id} in {image_file}, skipping.")
                 continue
 
-            # --- Filter mask by target_label ---
-            if target_label is None:
-                raise ValueError("target_label is required but was None.")
-
-            # Find the ID for the target_label
-            target_id = next(
-                (cat['id'] for cat in self.categories if cat['name'] == target_label),
-                None  # default if not found
-            )
-
-            true_mask = (true_mask == target_id).astype(np.uint8)
+            if true_mask.ndim == 3:
+                true_mask = true_mask[..., 0]
+            true_mask = true_mask.astype(np.uint8)
 
             image = np.array(Image.open(image_file).convert("RGB"))
             predictor.set_image(image)
 
-            # Prompt embeddings
+            # ============================================================
+            # COMPUTE CENTROIDS FOR POSITIVE PROMPTS (selected category)
+            # ============================================================
+            h, w = true_mask.shape[:2]
+            num_labels, labels = cv2.connectedComponents(true_mask.astype(np.uint8))
+            positive_coords = []
+            
+            for lbl in range(1, num_labels):  # skip background
+                ys, xs = np.nonzero(labels == lbl)
+                if xs.size > 0:
+                    cx = float(xs.mean())
+                    cy = float(ys.mean())
+                    positive_coords.append([cx, cy])
+
+                    # Only collect centroids during first epoch to prevent memory leak
+                    if epoch == 0:
+                        # Store normalized centroid for this category
+                        centroid_px = (int(round(cx)), int(round(cy)))
+                        centroid_norm = _normalize_centroid(cx, cy, w, h)
+
+                        self.category_centroids.setdefault(int(target_id), []).append({
+                            "centroid_px": centroid_px,
+                            "centroid_norm": centroid_norm
+                        })
+
+            if not positive_coords:
+                print(f"Skipping {image_file} - no usable centroid for label {target_label}.")
+                continue
+
+            # ============================================================
+            # COMPUTE CENTROIDS FOR NEGATIVE PROMPTS (all other categories)
+            # ============================================================
+            negative_coords = []
+
+            # Get all categories except the target (dynamic - not hardcoded!)
+            negative_categories = [
+                c for c in self.categories 
+                if c["name"] != target_label
+            ]
+            
+            for neg_category in negative_categories:
+                neg_id = neg_category["id"]
+                
+                # Load mask for this negative category
+                neg_mask = self.dataset_util.load_true_mask(
+                    image_file, self.annotation_index, 
+                    mode="binary", target_id=neg_id
+                )
+                
+                # Skip if no annotation for this category in this image
+                if neg_mask is None or neg_mask.sum() == 0:
+                    continue
+                
+                if neg_mask.ndim == 3:
+                    neg_mask = neg_mask[..., 0]
+                
+                # Compute centroids for negative regions
+                num_labels_neg, labels_neg = cv2.connectedComponents(neg_mask.astype(np.uint8))
+                for lbl in range(1, num_labels_neg):
+                    ys, xs = np.nonzero(labels_neg == lbl)
+                    if xs.size > 0:
+                        cx, cy = float(xs.mean()), float(ys.mean())
+                        negative_coords.append([cx, cy])
+            
+            # Balance negatives to avoid overwhelming positive prompts
+            # (SAM2 works best with balanced prompt sets)
+            if len(negative_coords) > len(positive_coords) * 3:
+                negative_coords = random.sample(negative_coords, len(positive_coords) * 3)
+            
+            # ============================================================
+            # COMBINE POSITIVE AND NEGATIVE PROMPTS
+            # ============================================================
+            all_coords = positive_coords + negative_coords
+            all_labels = [1] * len(positive_coords) + [0] * len(negative_coords)
+            
+            # Log prompt counts for monitoring
+            if idx % 10 == 0:  # Log every 10th image
+                print(f"  Image {os.path.basename(image_file)}: "
+                      f"{len(positive_coords)} positive, {len(negative_coords)} negative prompts")
+
+            # --- Build tensors for all centroids (positive + negative) ---
+            point_coords = torch.tensor(all_coords, device=device, dtype=torch.float32)
+            point_labels = torch.tensor(all_labels, device=device, dtype=torch.int64)
+
+            # Prompt embeddings using multiple points (positive and negative)
             sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(
-                points=None, boxes=None, masks=None
+                points=(point_coords.unsqueeze(0), point_labels.unsqueeze(0)),
+                boxes=None,
+                masks=None,
             )
 
             batched_mode = True
-            high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in
-                                 predictor._features["high_res_feats"]]
+            high_res_features = [feat_level[-1].unsqueeze(0) for feat_level in predictor._features["high_res_feats"]]
 
             optimizer.zero_grad()
 
@@ -583,10 +825,6 @@ class SAM2Trainer:
 
                 prd_masks = predictor._transforms.postprocess_masks(low_res_masks, predictor._orig_hw[-1])
 
-                # Normalize gt to (H, W)
-                if len(true_mask.shape) == 3:
-                    true_mask = true_mask[..., 0]
-
                 gt_mask = torch.tensor(true_mask, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(1)
                 if gt_mask.sum() == 0:
                     print(f"Skipping {image_file} - ground-truth mask is empty for label {target_label}.")
@@ -610,16 +848,45 @@ class SAM2Trainer:
                 # USE BCEWithLogitsLoss on logits (more stable than manual BCE on probabilities)
                 seg_loss = bce_loss_fn(prd_mask_logits, gt_mask)
 
-                # For Dice loss, we need probabilities, so apply sigmoid
+                # FOR DICE LOSS, WE NEED PROBABILITIES, SO APPLY SIGMOID
                 prd_mask_probs = torch.sigmoid(prd_mask_logits)
+
                 dice_loss = dice_loss_fn(prd_mask_probs, gt_mask)
 
-                # Compute IoU for score prediction loss
+                # COMPUTE IOU FOR SCORE PREDICTION LOSS
                 prd_mask_binary = (prd_mask_probs > 0.5).float()
+
+                # FILTER OUT BLOBS NOT OVERLAPPING CENTROID PROMPTS
+                labels_np = prd_mask_binary.squeeze().cpu().numpy().astype(np.uint8)
+                num_labels, labels = cv2.connectedComponents(labels_np)
+                valid_mask = np.zeros_like(labels, dtype=np.uint8)
+
+                # ADAPTIVE RADIUS THRESHOLD BASED ON IMAGE SIZE (2.5% OF DIAGONAL).
+                # THIS WILL SCALE WITH IMAGE RESOLUTION
+                # BLOB FILTERING = 0.025
+                img_diagonal = math.sqrt(h * h + w * w)
+                radius_threshold = max(10, int(0.025 * img_diagonal))  # min 10px
+
+                for lbl in range(1, num_labels):  # skip background
+                    ys, xs = np.nonzero(labels == lbl)
+                    if xs.size == 0:
+                        continue
+                    cx_blob, cy_blob = xs.mean(), ys.mean()
+
+                    # KEEP ONLY IF BLOB CENTROID IS CLOSE TO ONE OF THE PROMPT CENTROIDS
+                    for cx, cy in positive_coords:
+                        if np.linalg.norm([cx - cx_blob, cy - cy_blob]) < radius_threshold:
+                            valid_mask[labels == lbl] = 1
+                            break
+
+                prd_mask_binary = torch.tensor(valid_mask, device=device).unsqueeze(0).unsqueeze(1).float()
+
                 inter = (gt_mask * prd_mask_binary).sum((1, 2, 3))
                 union = gt_mask.sum((1, 2, 3)) + prd_mask_binary.sum((1, 2, 3)) - inter
                 iou = inter / (union + 1e-6)
                 iou[union == 0] = 1.0
+
+                # Align decoder score with IoU
                 score_loss = torch.abs(prd_scores[:, 0] - iou).mean()
 
                 # Combined loss
@@ -628,13 +895,13 @@ class SAM2Trainer:
             # Backward
             if use_amp and scaler is not None:
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)  # ← Add this
-                torch.nn.utils.clip_grad_norm_(self.sam2_model.parameters(), max_norm=1.0)  # ← Add this
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(self.sam2_model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.sam2_model.parameters(), max_norm=1.0)  # ← Add this
+                torch.nn.utils.clip_grad_norm_(self.sam2_model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             # Metrics (use probabilities for evaluation)
@@ -661,9 +928,9 @@ class SAM2Trainer:
 
         return avg_epoch_loss, train_accuracy, avg_dice, avg_iou
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-    def _validate_one_epoch(self, val_images, predictor, progressBar):
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _validate_one_epoch(self, val_images, predictor, progressBar, target_label):
         """
         Runs one validation epoch. Returns (avg_val_loss, val_accuracy, miou, avg_val_dice, avg_val_iou).
 
@@ -688,6 +955,8 @@ class SAM2Trainer:
         bce_loss_fn = nn.BCEWithLogitsLoss()
         dice_loss_fn = DiceLoss()
 
+        # target_label is now passed as parameter (works for both normal and TEST_MODE)
+        target_id = next((c["id"] for c in self.categories if c["name"] == target_label), None)
         with torch.no_grad():
             for val_idx, val_image_file in enumerate(val_images):
                 if self.progress_bar_closed:
@@ -695,7 +964,8 @@ class SAM2Trainer:
                     return None, None, None, None, None
 
                 val_image = np.array(Image.open(val_image_file).convert("RGB"))
-                val_true_mask = self.dataset_util.load_true_mask(val_image_file, self.annotation_index)
+                val_true_mask = self.dataset_util.load_true_mask(val_image_file, self.annotation_index,
+                                                                 mode="binary", target_id=target_id)
 
                 if val_true_mask is None:
                     print(f"No annotation found for validation image {val_image_file}, skipping.")
@@ -812,7 +1082,7 @@ class SAM2Trainer:
                 self.val_score_list.extend(score_sampled.tolist())
 
                 # ===== SAVE OVERLAY IMAGES =====
-                if val_idx < 5:
+                if val_idx < self.validation_overlay_samples:
                     img_vis = val_image.copy()
                     overlay = (prob_upsampled.squeeze().cpu().numpy() * 255).astype(np.uint8)
                     overlay_color = cv2.applyColorMap(overlay, cv2.COLORMAP_JET)
@@ -833,9 +1103,14 @@ class SAM2Trainer:
         avg_val_iou = iou_sum / n_items if n_items > 0 else 0.0
         miou = compute_mean_iou(self.val_true_list, self.val_pred_list)
 
+        # Clear GPU cache after validation to prevent memory accumulation
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         return avg_val_loss, val_accuracy, miou, avg_val_dice, avg_val_iou
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _save_model_checkpoint(self, predictor, learnrate, epochs, suffix="final", val_loss=None, val_accuracy=None,
                                miou=None, target_category_name=None):
         """
@@ -864,7 +1139,8 @@ class SAM2Trainer:
             "val_accuracy": val_accuracy,
             "miou": miou,
             "target_category_name": target_category_name,
-            "base_model": "sam2"
+            "base_model": "sam2",
+            "category_centroids": self.category_centroids
         }
 
         # Only save best validation checkpoints (not "final")
@@ -877,7 +1153,7 @@ class SAM2Trainer:
             if len(temp_list) <= self.max_best_checkpoints or val_loss <= temp_list[self.max_best_checkpoints - 1][0]:
 
                 # Create temporary checkpoint name (will be renamed based on rank)
-                temp_filename = f"temp_{timestamp}_{self.site_name}_ep{epochs:03d}_lr{learnrate}.torch"
+                temp_filename = f"temp_{timestamp}_{self.site_name}_{target_category_name}_ep{epochs:03d}_lr{learnrate}.torch"
                 temp_path = os.path.join(self.model_output_folder, temp_filename)
 
                 # Save the checkpoint
@@ -908,8 +1184,8 @@ class SAM2Trainer:
                     # Extract epoch number from the checkpoint metadata or filename
                     epoch_num = epochs if old_path == temp_path else self._extract_epoch_from_path(old_path)
 
-                    # Create new meaningful name
-                    new_filename = f"best_{rank_suffix}_epoch{epoch_num:03d}_valloss{loss:.4f}_lr{learnrate}.torch"
+                    # Create new meaningful name with category
+                    new_filename = f"best_{rank_suffix}_{target_category_name}_epoch{epoch_num:03d}_valloss{loss:.4f}_lr{learnrate}.torch"
                     new_path = os.path.join(self.model_output_folder, new_filename)
 
                     # Rename if needed
@@ -934,8 +1210,8 @@ class SAM2Trainer:
 
         return None
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _extract_epoch_from_path(self, path):
         """Extract epoch number from checkpoint filename."""
         import re
@@ -944,16 +1220,16 @@ class SAM2Trainer:
             return int(match.group(1))
         return 0
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def get_best_checkpoint_path(self):
         """Returns the path to the best checkpoint (lowest validation loss)."""
         if self.best_checkpoints:
             return self.best_checkpoints[0][1]
         return None
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def build_unique_categories(self, annotation_files):
         merged = []
         id_to_name = {}
@@ -968,30 +1244,33 @@ class SAM2Trainer:
                 continue
 
             for cat in cats:
-                cid = cat.get('id'); cname = cat.get('name')
+                cid = cat.get('id')
+                cname = cat.get('name')
                 if cid is None or cname is None:
                     print(f"Warning: bad category entry in '{p}': {cat}")
                     continue
 
-                # check ID↔name consistency
+                # Check ID conflict BEFORE assignment
                 if cid in id_to_name and id_to_name[cid] != cname:
                     print(f"⚠️ ID conflict: {cid} is '{id_to_name[cid]}' and '{cname}'")
                     continue
-                id_to_name[cid] = cname
 
+                # Check name conflict BEFORE assignment
                 if cname in name_to_id and name_to_id[cname] != cid:
-                    print(f"⚠️ Name conflict: '{cname}' → {self.name_to_id[cname]} vs {cid}")
+                    print(f"⚠️ Name conflict: '{cname}' → {name_to_id[cname]} vs {cid}")
                     continue
-                name_to_id[cname] = cid
 
+                # Only assign if no conflicts
+                id_to_name[cid] = cname
+                name_to_id[cname] = cid
                 merged.append({"id": cid, "name": cname})
 
         # dedupe
         unique = {(c['id'], c['name']): c for c in merged}
         return list(unique.values())
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def save_config_to_text(self, output_text_file):
         with open(output_text_file, 'w') as text_file:
             # Write the details to the text file
@@ -1008,8 +1287,8 @@ class SAM2Trainer:
             text_file.write(f"Folders: {self.folders}\n")
             text_file.write(f"Annotations: {self.annotation_files}\n")
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _plot_training_graphs(self, lr: float):
         """
         Generate and save all training/validation plots for a given learning rate.
@@ -1129,16 +1408,26 @@ class SAM2Trainer:
 
         progressBar.close()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def summarize_mask_imbalance(self, images: list[str]) -> dict:
         """
         Computes mean/median/std of foreground ratio (water pixels / total) across given images.
         Uses dataset_util.load_true_mask and your annotation_index.
         """
         ratios = []
+        
+        # Get target label - handle TEST_MODE
+        if self.TEST_MODE:
+            # In TEST_MODE, use first test category
+            target_label = self.TEST_CATEGORIES[0]
+        else:
+            # In normal mode, use config
+            target_label = self.site_config["train_model"]["TRAINING_CATEGORIES"][0]
+        
+        target_id = next((c["id"] for c in self.categories if c["name"] == target_label), None)
         for img in images:
-            m = self.dataset_util.load_true_mask(img, self.annotation_index)
+            m = self.dataset_util.load_true_mask(img, self.annotation_index, mode="binary", target_id=target_id)
             if m is None:
                 continue
             if m.ndim == 3:
@@ -1157,47 +1446,8 @@ class SAM2Trainer:
                 "median": float(np.median(arr)),
                 "std": float(arr.std())}
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # PROVISIONAL CODE - i.e., NOT CURRENTLY USED BUT MIGHT BE
-    # ------------------------------------------------------------------------------------------------------------------
-    def find_best_water_points(self, image_path):
-        """
-        Finds a water point by computing the centroid of the annotated water mask (true mask).
-        If no water region is found (or an error occurs), defaults to returning the center of the image.
-
-        Args:
-            image_path (str): Path to the input image.
-
-        Returns:
-            np.ndarray: A numpy array of shape (1, 2) containing the coordinate [x, y] of the water point.
-        """
-        try:
-            true_mask = self.dataset_util.load_true_mask(image_path, self.annotation_index)
-        except Exception as e:
-            print(f"Error loading true mask for {image_path}: {e}")
-            true_mask = None
-
-        if true_mask is not None and true_mask.sum() > 0:
-            # Compute the centroid of the water region using nonzero indices
-            indices = np.argwhere(true_mask > 0)
-            centroid = indices.mean(axis=0)  # [row, col]
-            # Return in (x, y) order
-            return np.array([[int(centroid[1]), int(centroid[0])]])
-        else:
-            # Fallback: return the center of the image if no valid water region is found,
-            # using the cached dimensions if available.
-            if image_path in self.image_shape_cache:
-                h, w = self.image_shape_cache[image_path]
-            else:
-                image = cv2.imread(image_path)
-                if image is None:
-                    raise FileNotFoundError(f"Image file {image_path} not found.")
-                h, w = image.shape[:2]
-                self.image_shape_cache[image_path] = (h, w)
-            return np.array([[w // 2, h // 2]])
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _terminate_training(self, progressBar):
         msg = "You have cancelled the model training currently in-progress. A model has not been generated."
         msgBox = GRIME_AI_QMessageBox('Model Training Terminated', msg, GRIME_AI_QMessageBox.Close)
@@ -1205,3 +1455,47 @@ class SAM2Trainer:
 
         if progressBar and progressBar.isVisible():
             progressBar.close()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _terminate_validation(self, progressBar):
+        msg = "You have cancelled the validation currently in-progress."
+        msgBox = GRIME_AI_QMessageBox('Validation Terminated', msg, GRIME_AI_QMessageBox.Close)
+        msgBox.displayMsgBox()
+
+        if progressBar and progressBar.isVisible():
+            progressBar.close()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _deduplicate_centroids(self, tolerance_px=5):
+        """
+        Deduplicate centroids within each category to prevent memory leak.
+        Keeps only unique centroids within tolerance_px distance.
+        Call after first epoch to establish representative centroid set.
+        """
+        for cat_id, centroids in self.category_centroids.items():
+            if not centroids:
+                continue
+
+            unique_centroids = []
+            for new_centroid in centroids:
+                cx_new, cy_new = new_centroid["centroid_px"]
+                is_unique = True
+
+                for existing in unique_centroids:
+                    cx_exist, cy_exist = existing["centroid_px"]
+                    dist = ((cx_new - cx_exist) ** 2 + (cy_new - cy_exist) ** 2) ** 0.5
+                    if dist < tolerance_px:
+                        is_unique = False
+                        break
+
+                if is_unique:
+                    unique_centroids.append(new_centroid)
+
+            before_count = len(centroids)
+            after_count = len(unique_centroids)
+            self.category_centroids[cat_id] = unique_centroids
+
+            if before_count > after_count:
+                print(f"  Category {cat_id}: Deduplicated {before_count} → {after_count} centroids")

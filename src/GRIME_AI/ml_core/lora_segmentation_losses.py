@@ -31,7 +31,6 @@ class BinaryDiceLoss(nn.Module):
         inter = (probs_f * targets_f).sum(dim=1)
         union = probs_f.sum(dim=1) + targets_f.sum(dim=1)
         dice = (2.0 * inter + self.eps) / (union + self.eps)
-
         return 1.0 - dice.mean()
 
 

@@ -333,7 +333,7 @@ class TrainingTab(QtWidgets.QWidget):
         # Default selection
         self.selected_training_model = self.get_selected_model()
 
-    #self.buttonBox_close.rejected.connect(self.reject)
+        #self.buttonBox_close.rejected.connect(self.reject)
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -1097,7 +1097,7 @@ class TrainingTab(QtWidgets.QWidget):
         # Radio buttons (mutually exclusive group: require at least one checked)
         if not (
                 self.radioButton_train_model_SAM2.isChecked()
-                or self.radioButton_train_model_LoRA.isChecked()
+                or self.radioButton_train_model_segformer.isChecked()
                 or self.radioButton_train_model_MaskRCNN.isChecked()
         ):
             missing.append("Training model selection")

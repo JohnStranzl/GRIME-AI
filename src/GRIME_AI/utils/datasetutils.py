@@ -71,24 +71,22 @@ class DatasetUtils:
             with open(annotation_file, "r", encoding="utf-8") as f:
                 annotations = json.load(f)
 
-            # find category id for "water" or "Vegetation"
+            # Validate that target_label exists (but keep ALL annotations!)
             category_id = get_category_id(annotations, target_label)
 
             if category_id is None:
-                raise ValueError(f"The 'water' or 'Vegetation' category was not found in {annotation_file}.")
+                raise ValueError(f"Category '{target_label}' not found in {annotation_file}.")
 
-            # filter annotations for that category
-            water_annotations = [
-                ann for ann in annotations.get("annotations", [])
-                if ann.get("category_id") == category_id
-            ]
+            # KEEP ALL ANNOTATIONS - don't filter by category!
+            # This allows negative prompting to work during training
+            all_annotations = annotations.get("annotations", [])
 
-            # store in dataset
+            # store in dataset with ALL annotations
             dataset[folder] = {
                 "images": [os.path.join(folder, img) for img in images],
                 "annotations": {
                     "images": annotations.get("images", []),
-                    "annotations": water_annotations,
+                    "annotations": all_annotations,  # ALL categories!
                 },
             }
 
@@ -109,43 +107,71 @@ class DatasetUtils:
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
-    def load_true_mask(self, image_file,annotation_index):
+    def load_true_mask(self, image_file, annotation_index, mode="binary", target_id=None):
         """
-        Efficiently loads the true mask for an image by using the precomputed annotation_index.
+        Loads a mask for an image using COCO-style annotations.
+
+        mode:
+          - "binary": returns a 0/1 mask. If target_id is provided, only masks of that category are included.
+                      If target_id is None, all categories are merged into foreground (1).
+          - "categorical": returns a mask with category_id per pixel (background=0). target_id is ignored.
+
+        Returns:
+          - If mode == "binary": (mask: np.ndarray[np.uint8], found_target: bool)
+          - If mode == "categorical": mask: np.ndarray[np.uint8]
         """
         base_name = os.path.basename(image_file)
         if base_name not in annotation_index:
             raise ValueError(f"Image file {image_file} not found in the annotation index.")
 
         annotation_data = annotation_index[base_name]
-
-        # Find image metadata
-        image_info = next((img for img in annotation_data['images'] if img['file_name'] == base_name), None)
+        image_info = next((img for img in annotation_data["images"] if img["file_name"] == base_name), None)
         if image_info is None:
             raise ValueError(f"Image file {image_file} not found in annotations.")
 
-        image_id, height, width = image_info['id'], image_info['height'], image_info['width']
+        image_id, height, width = image_info["id"], image_info["height"], image_info["width"]
+        anns = [ann for ann in annotation_data["annotations"] if ann["image_id"] == image_id]
 
-        # Get all annotations for the image
-        annotations_for_image = [ann for ann in annotation_data['annotations'] if ann['image_id'] == image_id]
-        if not annotations_for_image:
+        if not anns:
+            if mode == "binary":
+                return np.zeros((height, width), dtype=np.uint8), False
             return np.zeros((height, width), dtype=np.uint8)
 
-        # Initialize an empty mask
-        combined_mask = np.zeros((height, width), dtype=np.uint8)
+        if mode == "binary":
+            combined = np.zeros((height, width), dtype=np.uint8)
+            found_target = False
 
-        # Iterate over each annotation and decode RLE mask
-        for ann in annotations_for_image:
-            rle = coco_mask.frPyObjects(ann['segmentation'], height, width)
-            mask = coco_mask.decode(rle)
+            for ann in anns:
+                if target_id is not None and ann["category_id"] != target_id:
+                    continue
 
-            # Merge multiple segmentation parts if necessary
-            if len(mask.shape) == 3:
-                mask = np.any(mask, axis=2)
+                rle = coco_mask.frPyObjects(ann["segmentation"], height, width)
+                mask = coco_mask.decode(rle)
+                if mask.ndim == 3:
+                    mask = np.any(mask, axis=2)
 
-            combined_mask = np.logical_or(combined_mask, mask).astype(np.uint8)
+                combined = np.logical_or(combined, mask).astype(np.uint8)
+                if target_id is not None and ann["category_id"] == target_id:
+                    found_target = True
 
-        return combined_mask.astype(np.float32)
+            return combined
+
+        elif mode == "categorical":
+            categorical = np.zeros((height, width), dtype=np.uint8)
+
+            for ann in anns:
+                rle = coco_mask.frPyObjects(ann["segmentation"], height, width)
+                mask = coco_mask.decode(rle)
+                if mask.ndim == 3:
+                    mask = np.any(mask, axis=2)
+
+                # Write category_id into pixels covered by this annotation
+                categorical[mask.astype(bool)] = ann["category_id"]
+
+            return categorical
+
+        else:
+            raise ValueError(f"Unsupported mode: {mode}. Use 'binary' or 'categorical'.")
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------

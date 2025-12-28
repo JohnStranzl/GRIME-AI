@@ -316,4 +316,3 @@ class MLModelTraining:
         # dedupe
         unique = {(c['id'], c['name']): c for c in merged}
         return list(unique.values())
-

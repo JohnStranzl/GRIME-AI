@@ -65,6 +65,7 @@ class ModelConfigManager:
             "save_model_masks": True,
             "copy_original_model_image": True,
             "num_clusters": 3,
+            "validation_overlay_samples": 5,
             "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
             "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml"
         }
@@ -130,6 +131,7 @@ class ModelConfigManager:
             "copy_original_model_image": True,
             "save_probability_maps": True,
             "num_clusters": 3,
+            "validation_overlay_samples": 5,
             "load_model": {
                 "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
                 "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
@@ -142,7 +144,7 @@ class ModelConfigManager:
                 "SEGMENTATION_CATEGORIES": []
             },
             "train_model": {
-                "TRAINING_CATEGORIES": [],
+                "TRAINING_CATEGORIES": []
             },
             "Path": [
                 {

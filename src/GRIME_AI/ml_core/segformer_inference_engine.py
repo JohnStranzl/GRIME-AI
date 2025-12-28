@@ -41,7 +41,7 @@ class SegFormerInferenceEngine:
         self.device = device
         self.SEGFORMER_MODEL = segformer_model
         self.segmentation_images_path = input_dir
-        self.predictions_output_path = output_dir
+        self.predictions_output_path = output_dir + " (segformer)"
 
         # Parameters
         self.image_size = image_size
@@ -112,16 +112,16 @@ class SegFormerInferenceEngine:
         class_prob_resized = probs[0, self.class_index].cpu().numpy()   # model size probability map
         pred_resized = (class_prob_resized > self.threshold).astype(np.uint8)
 
-        # --- MAP PREDICTIONS BACK TO ORIGINAL IMAGE SIZE ---
+        # --- Map predictions back to original image size ---
         pred = cv2.resize(pred_resized, (w, h), interpolation=cv2.INTER_NEAREST)
         class_prob = cv2.resize(class_prob_resized, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # --- PREPARE OUTPUT PATHS ---
+        # --- Prepare output paths ---
         base = os.path.splitext(os.path.basename(image_path))[0]
         out_dir = os.path.dirname(out_path)
         os.makedirs(out_dir, exist_ok=True)
 
-        # --- SAVE OUTPUTS ALIGNED TO ORIGINAL IMAGE ---
+        # --- Save outputs aligned to original image ---
         self._save_overlay(img, pred, out_path)
         self._save_mask(pred, out_dir, base)
         self._save_heatmaps(torch.tensor(class_prob), out_dir, base)

@@ -95,7 +95,6 @@ class SegFormerTrainer:
         """
         Build base SegFormer (no LoRA). If you want LoRA, wrap the returned model externally.
         """
-
         model = SegformerForSemanticSegmentation.from_pretrained(
             "nvidia/segformer-b0-finetuned-cityscapes-1024-1024",
             ignore_mismatched_sizes=True
@@ -106,8 +105,8 @@ class SegFormerTrainer:
         model.decode_head.classifier = nn.Conv2d(
             model.decode_head.classifier.in_channels, num_labels, kernel_size=1
         )
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return model.to(device).train()
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -322,7 +321,6 @@ class SegFormerTrainer:
 
                 for imgs, masks in train_loader:
                     imgs = imgs.to(self.cfg.device, non_blocking=True)
-
                     masks = masks.to(self.cfg.device, non_blocking=True)
                     masks = masks.round().long()
                     masks[(masks < 0) | (masks > num_labels - 1)] = 255

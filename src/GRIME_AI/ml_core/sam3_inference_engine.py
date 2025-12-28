@@ -36,7 +36,7 @@ class SAM3InferenceEngine:
         self.SAM3_CHECKPOINT = checkpoint
         self.SAM2_MODEL = model_path
         self.segmentation_images_path = input_dir
-        self.predictions_output_path = output_dir
+        self.predictions_output_path = output_dir + " (sam2)"
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
