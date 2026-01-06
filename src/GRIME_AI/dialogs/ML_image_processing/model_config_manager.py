@@ -133,8 +133,8 @@ class ModelConfigManager:
             "num_clusters": 3,
             "validation_overlay_samples": 5,
             "load_model": {
-                "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
-                "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml",
+                "SAM2_CHECKPOINT": "checkpoints/sam2.1_hiera_large.pt",
+                "MODEL_CFG": "configs/sam2.1/sam2.1_hiera_l.yaml",
                 "segmentation_images_path": "",
                 "predictions_output_path": "",
                 "SAM2_MODEL": "",
