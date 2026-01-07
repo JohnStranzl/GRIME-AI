@@ -15,9 +15,6 @@ build:
   noarch: python
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
-    - cp -v ${RECIPE_DIR}/download-sam2-checkpoints.py ${PREFIX}/bin/download-sam2-checkpoints.py
-    - cp -v ${RECIPE_DIR}/download-sam2-checkpoints.bat ${PREFIX}/bin
-    - cp -v ${RECIPE_DIR}/download-sam2-checkpoints.py ${PREFIX}/bin/download-sam2-checkpoints
   run_exports:
     - {{ pin_subpackage(name|lower, max_pin="x") }}
   entry_points:
