@@ -1,19 +1,6 @@
 .idea/
-000 - ML_Backups/
+.venv/
 Documentation/
-GRIME-AI Logo.jpg
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 14) Setup.zip
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 15) Setup.zip
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup-1.bin
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup-2.bin
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup-3.bin
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup.exe
-src/GRIME_AI/Installer/GRIME-AI 0_0_6_0 (Beta 16) Setup.zip
-R-4.4.1-win.exe
-src/GRIME_AI/SplashScreen Images/GRIME-AI Logo - Backup.jpg
-src/GRIME_AI/SplashScreen Images/GRIME-AI Logo - Copy.jpg
-src/GRIME_AI/SplashScreen Images/New Bitmap image.bmp
-Splash_007.jpg
 __pycache__/
 venv/
 build/
@@ -21,15 +8,13 @@ data/
 dist/
 hooks/
 outputs/
-pytorch/
-sam2/
 sam2_transforms.pt
-train/
 src/GRIME_AI/utils/__pycache__/
-validation/
-/pytorch/
-/pytorch/third_party/
-/pytorch/third_party/fbgemm/
-/pytorch/third_party/fbgemm/external/
-/pytorch/third_party/flash-attention/
-/pytorch/third_party/flash-attention/csrc/
+# Ignore everything in the Installer folder
+Installer/*
+# But keep the installer script
+!Installer/*.iss
+src/GRIME_AI/sam2/
+src/GRIME_AI/neon/site_summary.xlsx
+src/GRIME_AI/neon/test_snippets.py
+/src/SAGE/sage_settings.json

@@ -166,24 +166,23 @@ class CocoViewerTab(QtWidgets.QWidget):
         """
         Open a file dialog to select a JSON file and load its dataset.
         """
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+        annotation_file, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Select instances_default.json", "", "JSON Files (*.json)"
         )
-        if path:
-            self.file_edit.setText(path)
-            folder = os.path.dirname(path)
-            self.load_json_and_images(folder)
+        if annotation_file:
+            self.file_edit.setText(annotation_file)
+            self.load_json_and_images(annotation_file)
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
-    def load_json_and_images(self, folder):
+    def load_json_and_images(self, annotation_file):
         """
         Load JSON data and initialize images, annotations, categories, and stats.
 
         Args:
-            folder (str): Folder containing instances_default.json and images.
+            annotation_file (str): annotation filename with its folder path.
         """
-        json_path = os.path.join(folder, "instances_default.json")
+        json_path = annotation_file
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -191,7 +190,7 @@ class CocoViewerTab(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load JSON: {e}")
             return
 
-        self.folder = folder
+        self.folder = os.path.dirname(annotation_file)
         self.images = {img["id"]: img for img in data.get("images", [])}
 
         self.annotations = {}

@@ -179,6 +179,12 @@ class MLModelTraining:
             cfg = SegFormerConfig(
                 images_dir="",
                 ann_path="",
+                num_epochs=self.num_epochs,
+                batch_size=self.site_config.get('batch_size', 8),
+                lr=self.learning_rates[0] if self.learning_rates else 0.0003,
+                weight_decay=self.weight_decay,
+                early_stopping=self.early_stopping,
+                patience=self.patience,
                 categories=self.categories,
                 target_category_name=self.site_config["train_model"]["TRAINING_CATEGORIES"][0]["label_name"],
                 output_dir=self.model_output_folder,
@@ -248,7 +254,14 @@ class MLModelTraining:
         - Trains using SegFormerTrainer with the correct optimizer.
         """
         trainer = SegFormerTrainer(cfg)
-        base_model = trainer.build_model(num_labels=2)
+        
+        # Calculate num_labels from categories
+        # Background (class 0) + all annotated categories
+        num_labels = len(cfg.categories) + 1  # +1 for background class
+        print(f"Building SegFormer with {num_labels} classes (background + {len(cfg.categories)} categories)")
+
+        num_labels = 2  ###JES - DIAGNOSTIC - BACK TO ORIGINAL 2 CLASS CODE
+        base_model = trainer.build_model(num_labels=num_labels)
 
         if use_lora:
             lora = GeneralLoRAWrapper(
