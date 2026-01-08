@@ -66,8 +66,8 @@ class ModelConfigManager:
             "copy_original_model_image": True,
             "num_clusters": 3,
             "validation_overlay_samples": 5,
-            "SAM2_CHECKPOINT": "sam2/checkpoints/sam2.1_hiera_large.pt",
-            "MODEL_CFG": "sam2/sam2/configs/sam2.1/sam2.1_hiera_l.yaml"
+            "SAM2_CHECKPOINT": "checkpoints/sam2.1_hiera_large.pt",
+            "MODEL_CFG": "configs/sam2.1/sam2.1_hiera_l.yaml"
         }
         for key, value in defaults.items():
             if overwrite or key not in config or config[key] in (None, "", []):
