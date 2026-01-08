@@ -25,9 +25,6 @@ classifiers = [
   "Programming Language :: Python",
 ]
 
-[tool.setuptools]
-include-package-data = false
-
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
@@ -38,10 +35,9 @@ dev = [
 ]
 
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["GRIME_AI*"]
-exclude = ["GRIME_AI.sam2*"]
+
+#[tool.setuptools.packages.find]
+#where = ["src"] 
 
 #[project.optional-dependencies]
 #gui = ["PyQt5"]
@@ -57,7 +53,4 @@ grime-ai = "GRIME_AI.main:my_main"
 grime-ai = "GRIME_AI.main:my_main"
 
 [tool.setuptools.package-data]
-GRIME_AI = ["dialogs/**/*","neon/*","resources/**/*","SplashScreen Images/*"]
-
-[tool.setuptools.exclude-package-data]
-"*" = ["sam2", "**/sam2/**/*.*", "*sam2*", "*sam2/**"]
+GRIME_AI = ["icons/*","splash/*","ui/*"]

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grime-ai"
+version = "1.0.0"
+requires-python = ">=3.8"
+
+authors = [
+  {name = "Troy Gilmore", email = "gilmore@unl.edu"},
+  {name = "John Stranzl", email = "jstranzl2@huskers.unl.edu"},
+]
+
+description = "GRIME-AI is a tool that facilitates the entire data science workflow for ground-based time-lapse imagery."
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["geoinformatics", "image-analysis"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+  "PyQt5",
+  "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller",
+]
+
+[project.urls]
+Homepage = "https://gaugecam.org/grime-ai-details/"
+Repository = "https://github.com/JohnStranzl/GRIME-AI/"
+
+[project.scripts]
+grime-ai = "grime_ai.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["grime_ai*"]
+
+[tool.setuptools.package-data]
+grime_ai = ["ui/*", "icons/*", "splash/*"]

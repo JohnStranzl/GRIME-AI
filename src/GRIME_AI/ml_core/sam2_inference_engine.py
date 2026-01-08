@@ -15,6 +15,7 @@ import cv2
 import shutil
 import torch
 import numpy as np
+import importlib.util
 
 from PIL import Image
 
@@ -85,8 +86,8 @@ class SAM2InferenceEngine:
         """Load SAM2 model architecture and trained weights from .torch checkpoint."""
 
         # 1. Setup paths
-        main_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        config_file = os.path.join(main_dir, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l.yaml")
+        main_dir = os.path.dirname(importlib.util.find_spec('sam2').origin)
+        config_file = os.path.join(main_dir, "configs", "sam2.1", "sam2.1_hiera_l.yaml")
 
         print(f"Model config: {config_file}")
         print(f"Trained checkpoint: {self.TRAINED_CHECKPOINT}")

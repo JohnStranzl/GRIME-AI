@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import shutil
+import importlib.util
 
 import numpy as np
 import torch
@@ -52,7 +53,7 @@ class MLImageSegmentation:
         else:
             self.config = OmegaConf.to_container(cfg.load_model, resolve=True)
 
-        main_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        main_dir = os.path.dirname(importlib.util.find_spec('sam2').origin)
         self.SAM2_CHECKPOINT = os.path.normpath(os.path.join(main_dir, self.config.get("SAM2_CHECKPOINT", "")))
         self.MODEL_CFG = os.path.normpath(self.config.get("MODEL_CFG", ""))
 
