@@ -160,8 +160,8 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_intensity.setText(f"{analyzer.roi_intensity:.2f}")
         self.lineEdit_entropy.setText(f"{analyzer.roi_entropy:.4f}")
         self.lineEdit_Texture.setText(f"{analyzer.roi_texture:.4f}")
-        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.2f}")
-        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.2f}")
+        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
+        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
 
         # Display composite+metrics plot
         composite_pix = analyzer.get_results_pixmap()
@@ -329,8 +329,8 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_intensity.setText(f"{analyzer.roi_intensity:.2f}")
         self.lineEdit_entropy.setText(f"{analyzer.roi_entropy:.4f}")
         self.lineEdit_Texture.setText(f"{analyzer.roi_texture:.4f}")
-        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.2f}")
-        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.2f}")
+        self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
+        self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
 
         # 4) overlay the top-3 swatches
         n_clusters = self.spinBox_numClusters.value()
