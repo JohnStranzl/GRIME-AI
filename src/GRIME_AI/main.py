@@ -3899,9 +3899,9 @@ myconfig_name=os.path.normpath(os.path.join(dirname, "sam2\\sam2\\configs\\sam2.
 print(myconfig_name)
 '''
 
-# Resolve config path relative to this script
-dirname = os.path.dirname(os.path.abspath(__file__))
-myconfig_path = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1")
+import importlib.util
+dirname = os.path.dirname(importlib.util.find_spec('sam2').origin)
+myconfig_path = os.path.join(dirname, "configs", "sam2.1")
 myconfig_name = "sam2.1_hiera_l"
 ###JES myconfig_name = os.path.join(dirname, "sam2", "sam2", "configs", "sam2.1", "sam2.1_hiera_l")
 
