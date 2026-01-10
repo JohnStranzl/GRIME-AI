@@ -105,6 +105,23 @@ def iou_from_probs(probs: torch.Tensor, targets: torch.Tensor, eps: float = 1e-6
     union = preds.sum().item() + targets.sum().item() - inter
     return float((inter + eps) / (union + eps))
 
+def unwrap_mask(m):
+    # If SAM2 returned a list of masks, take the first
+    if isinstance(m, list):
+        # find the first ndarray inside the list
+        for item in m:
+            if hasattr(item, "ndim"):
+                return item
+        raise ValueError(f"List contains no ndarray: {m}")
+
+    # If SAM2 returned (mask, score) or (mask, logits)
+    if isinstance(m, tuple):
+        for item in m:
+            if hasattr(item, "ndim"):
+                return item
+        raise ValueError(f"Tuple contains no ndarray: {m}")
+
+    return m
 
 # ============================================================================
 # ============================================================================
@@ -676,7 +693,8 @@ class SAM2Trainer:
                 raise ValueError(f"Unknown target_label '{target_label}'. Available: {available}")
 
             # LOAD GROUND TRUTH MASK
-            true_mask = self.dataset_util.load_true_mask(image_file, self.annotation_index, mode="binary", target_id=target_id)
+            result = self.dataset_util.load_true_mask(image_file, self.annotation_index, mode="binary", target_id=target_id)
+            true_mask = result[0] if isinstance(result, tuple) else result
 
             # SKIP IF NO USABLE MASK
             if true_mask is None or true_mask.sum() == 0:
@@ -965,8 +983,11 @@ class SAM2Trainer:
                     return None, None, None, None, None
 
                 val_image = np.array(Image.open(val_image_file).convert("RGB"))
-                val_true_mask = self.dataset_util.load_true_mask(val_image_file, self.annotation_index,
-                                                                 mode="binary", target_id=target_id)
+
+                result = self.dataset_util.load_true_mask(
+                    val_image_file, self.annotation_index, mode="binary", target_id=target_id
+                )
+                val_true_mask = result[0] if isinstance(result, tuple) else result
 
                 if val_true_mask is None:
                     print(f"No annotation found for validation image {val_image_file}, skipping.")
@@ -1431,6 +1452,8 @@ class SAM2Trainer:
             m = self.dataset_util.load_true_mask(img, self.annotation_index, mode="binary", target_id=target_id)
             if m is None:
                 continue
+
+            m = unwrap_mask(m)
             if m.ndim == 3:
                 m = m[..., 0]
             total = m.size
