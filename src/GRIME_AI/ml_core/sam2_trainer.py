@@ -27,6 +27,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../sam2'))
 from sam2.modeling import sam2_base
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI.ml_core.model_training_visualization import ModelTrainingVisualization
@@ -352,6 +354,9 @@ class SAM2Trainer:
         model.load_state_dict(ckpt["model"] if "model" in ckpt else ckpt, strict=False)
         # --- END HYDRA PATCH
 
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"Full fine-tuning: {total_params:,} trainable parameters")
+
         self.sam2_model = model.to(device).train()
 
         if self.TEST_MODE:
@@ -461,6 +466,22 @@ class SAM2Trainer:
         predictor = SAM2ImagePredictor(self.sam2_model)
 
         optimizer = torch.optim.AdamW(self.sam2_model.parameters(), lr=learnrate, weight_decay=weight_decay)
+
+        # ============================================================================
+        # LEARNING RATE SCHEDULER: REDUCE ON PLATEAU
+        # THIS SCHEDULER AUTOMATICALLY REDUCES THE LEARNING RATE WHEN VALIDATION LOSS
+        # STOPS IMPROVING. IT MONITORS VALIDATION LOSS AND REDUCES LR BY FACTOR=0.5
+        # AFTER PATIENCE=3 EPOCHS WITHOUT IMPROVEMENT. MIN_LR=1e-7 PREVENTS LR FROM
+        # BECOMING TOO SMALL. VERBOSE=TRUE PRINTS WHEN LR CHANGES.
+        # ============================================================================
+        scheduler = ReduceLROnPlateau(
+            optimizer,
+            mode='min',  # minimize validation loss
+            factor=0.5,  # multiply LR by 0.5 when plateau detected
+            patience=3,  # wait 3 epochs before reducing
+            min_lr=1e-7  # don't reduce below this value
+        )
+
         # Note: loss_fn defined here but not passed to validation anymore
         use_amp = True
         if use_amp and device.type == "cuda":
@@ -586,6 +607,12 @@ class SAM2Trainer:
                             print(f"Early stopping triggered at epoch {epoch + 1}.")
                             break
 
+                    # ============================================================================
+                    # UPDATE LEARNING RATE SCHEDULER BASED ON VALIDATION LOSS
+                    # THIS STEP ALLOWS THE SCHEDULER TO MONITOR VALIDATION LOSS AND REDUCE
+                    # LEARNING RATE IF NO IMPROVEMENT IS DETECTED FOR PATIENCE=3 EPOCHS
+                    # ============================================================================
+                    scheduler.step(avg_val_loss)
         finally:
             if not self.progress_bar_closed and 'progressBar' in locals():
                 progressBar.close()
