@@ -6,6 +6,7 @@ import requests
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from datetime import date, time, datetime, timedelta
+import socket
 
 from .usgs_types import CameraInfo, LatestImage
 
@@ -53,14 +54,13 @@ def _to_time(t):
 
 
 def build_hivis_urls_and_count(
-    endpoint: str,
-    cam_id: str,
-    start_date: Union[str, date, datetime],
-    end_date: Union[str, date, datetime],
-    start_time: Union[str, time, datetime],
-    end_time: Union[str, time, datetime],
+        endpoint: str,
+        cam_id: str,
+        start_date: Union[str, date, datetime],
+        end_date: Union[str, date, datetime],
+        start_time: Union[str, time, datetime],
+        end_time: Union[str, time, datetime],
 ) -> Tuple[int, List[str] | int]:
-
     def format_timestamp(this_day, start_time_for_day, end_time_for_day):
 
         if start_time_for_day == time(0, 0, 0) and end_time_for_day == time(0, 0, 0):
@@ -96,7 +96,7 @@ def build_hivis_urls_and_count(
     # ------------------------------------------------------------------------
     day = start_d
     while day <= end_d:
-        after_val, before_val = format_timestamp(day, t_start, t_end )
+        after_val, before_val = format_timestamp(day, t_start, t_end)
 
         url = f"{endpoint}?camId={cam_q}&after={after_val}&before={before_val}"
         urls.append(url)
@@ -119,12 +119,18 @@ class USGSService:
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
-    def __init__(self):
+    def __init__(self, hivis_instance=None):
         self._camera_dict: Dict[str, dict] = {}
         self._site_count: int = 0
         self._nwis_id: Optional[str] = None
         self._cam_id: Optional[str] = None
         self._cam_name: Optional[str] = None
+
+        # ============================================================================
+        # REFERENCE TO USGS_HIVIS FOR CACHE ACCESS
+        # This allows us to use cached filenames from get_image_count
+        # ============================================================================
+        self.hivis = hivis_instance
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
@@ -202,8 +208,35 @@ class USGSService:
     def download_images(self, site_name: str, start_date: date, end_date: date,
                         start_time: time, end_time: time, save_folder: str,
                         progress: Optional[callable] = None) -> Tuple[int, int]:
+        """
+        Download images. Now optimized to use cached filenames from get_image_count.
+        Falls back to old method if cache unavailable.
+        """
         os.makedirs(save_folder, exist_ok=True)
-        names = self._collect_image_names(site_name, start_date, end_date, start_time, end_time, progress)
+
+        # ============================================================================
+        # TRY TO USE CACHED FILENAMES FIRST (AVOIDS DUPLICATE API CALL)
+        # ============================================================================
+        names = None
+        if self.hivis is not None:
+            try:
+                names = self.hivis.get_cached_filenames(site_name, start_date, end_date, start_time, end_time)
+                if names:
+                    print(f"✓ Using {len(names)} cached filenames for download")
+            except Exception as e:
+                print(f"Could not access cache: {e}")
+                names = None
+
+        # ============================================================================
+        # CACHE MISS - FETCH FILENAMES THE OLD WAY
+        # ============================================================================
+        if names is None:
+            print("✗ Cache miss - fetching image list...")
+            names = self._collect_image_names(site_name, start_date, end_date, start_time, end_time, progress)
+
+        # ============================================================================
+        # DOWNLOAD IMAGES USING THE LIST
+        # ============================================================================
         downloaded, missing = 0, 0
         total = len(names)
         for idx, image in enumerate(names):
@@ -254,6 +287,10 @@ class USGSService:
     def _collect_image_names(self, site_name: str, start_date: date, end_date: date,
                              start_time: time, end_time: time,
                              progress: Optional[callable]) -> List[str]:
+        """
+        Collects image names using per-day API calls.
+        Now includes retry logic with DNS error handling.
+        """
         names: List[str] = []
         days = (end_date - start_date).days + 1
         for i in range(days):
@@ -298,10 +335,74 @@ class USGSService:
     # ------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------
     def _fetch_list_of_images(self, site_name: str, after: str, before: str) -> str:
+        """
+        Fetch list of images with retry logic and DNS error handling.
+        """
+        import time as time_module
+
         url = f"{ENDPOINT}/prod/listFiles?camId={site_name}{after}{before}"
-        resp = requests.get(url)
-        resp.raise_for_status()
-        return resp.text
+
+        # ============================================================================
+        # RETRY LOGIC FOR NETWORK ISSUES
+        # ============================================================================
+        max_retries = 3
+        retry_delay = 2  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                resp = requests.get(url, timeout=30)
+                resp.raise_for_status()
+                return resp.text
+
+            except requests.exceptions.ConnectionError as e:
+                # Check if it's a DNS error specifically
+                if "getaddrinfo failed" in str(e) or "Failed to resolve" in str(e):
+                    print(f"DNS resolution failed (attempt {attempt + 1}/{max_retries}): {url}")
+
+                    if attempt < max_retries - 1:
+                        print(f"Retrying in {retry_delay} seconds...")
+                        time_module.sleep(retry_delay)
+                        continue
+                    else:
+                        print(f"All retries exhausted. DNS resolution failed for: {url}")
+                        print("Please check:")
+                        print("  1. Internet connection is active")
+                        print("  2. Firewall/VPN is not blocking AWS domains")
+                        print("  3. DNS server is working")
+                        raise  # Re-raise to let caller handle
+                else:
+                    # Other connection error (not DNS)
+                    print(f"Connection error (attempt {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        time_module.sleep(retry_delay)
+                        continue
+                    else:
+                        raise
+
+            except requests.exceptions.Timeout as e:
+                print(f"Timeout (attempt {attempt + 1}/{max_retries}): {url}")
+                if attempt < max_retries - 1:
+                    time_module.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+
+            except requests.exceptions.HTTPError as e:
+                # Don't retry HTTP errors (404, 500, etc.)
+                print(f"HTTP error: {e}")
+                raise
+
+            except Exception as e:
+                # Unexpected error
+                print(f"Unexpected error fetching {url}: {e}")
+                if attempt < max_retries - 1:
+                    time_module.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+
+        # Should never reach here, but just in case
+        return "[]"
 
     # ------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------
@@ -309,7 +410,6 @@ class USGSService:
         df = pd.read_csv(input_txt, delimiter="\t", comment="#")
         df = df[~df["agency_cd"].astype(str).str.contains("5s")]
         df.to_csv(output_csv, index=False)
-
 
     def build_hivis_command(self, endpoint, cam_id, start_date, end_date, start_time, end_time):
         """
