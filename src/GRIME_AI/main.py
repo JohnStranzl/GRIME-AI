@@ -163,7 +163,7 @@ from GRIME_AI.utils.resource_utils import icon_path
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import QCoreApplication, QRect
+from PyQt5.QtCore import QCoreApplication, QRect, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
     QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
@@ -501,6 +501,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_USGS_BrowseImageFolder.clicked.connect(self.pushButton_USGS_BrowseImageFolder_Clicked)
         self.pushButton_NEON_BrowseImageFolder.clicked.connect(self.pushButton_NEON_BrowseImageFolder_Clicked)
 
+        # Connect Check Availability button (will be added to UI)
+        try:
+            self.pushButton_USGSCheckAvailability.clicked.connect(self.pushButton_USGSCheckAvailability_Clicked)
+        except AttributeError:
+            pass  # Button doesn't exist yet in UI file
+
         # INITIALIZE WIDGETS
         maxRows = self.tableWidget_ROIList.rowCount()
         for i in range(0, maxRows):
@@ -542,6 +548,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.USGS_listboxSites.itemClicked.connect(self.USGS_SiteClicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
+        # ============================================================================
+        # DEBOUNCE TIMER FOR IMAGE COUNT CHECKING
+        # AUTOMATICALLY CHECKS AVAILABILITY 2 SECONDS AFTER USER STOPS CHANGING DATES
+        # ============================================================================
+        self.usgs_check_timer = QTimer()
+        self.usgs_check_timer.setSingleShot(True)
+        self.usgs_check_timer.timeout.connect(self.USGS_check_availability)
+        self.usgs_checking = False  # Track if currently checking
+
         # ------------------------------------------------------------------------------------------------------------------
         # NIMS
         # ------------------------------------------------------------------------------------------------------------------
@@ -551,6 +566,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.myHIVIS = USGS_HIVIS()
             self.cameraDictionary = self.myHIVIS.get_camera_dictionary()
             self.cameraList = self.myHIVIS.get_camera_list()
+            
+            # ========================================================================
+            # CONNECT USGS SERVICE TO HIVIS FOR CACHE ACCESS
+            # This allows download_images() to use cached filenames from get_image_count()
+            # ========================================================================
+            self.usgs._svc.hivis = self.myHIVIS
+            print("Connected USGS service to HIVIS for cache access")
+            
             self.USGS_listboxSites.clear()
             self.USGS_listboxSites.addItems(self.cameraList)
 
@@ -1081,25 +1104,37 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.table_USGS_Sites.setCellWidget(0, 4, date_widget)
         self.table_USGS_Sites.setCellWidget(0, 5, date_widget)
 
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-        date_widget.setKeyboardTracking(False)
-        self.table_USGS_Sites.setCellWidget(0, 6, date_widget)
+        # START TIME - defaults to 00:00:00
+        time_widget = QDateTimeEdit()
+        time_widget.setDisplayFormat("hh:mm:ss")
+        time_widget.setTime(QtCore.QTime(0, 0, 0))  # 00:00:00
+        time_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(time_widget, self.table_USGS_Sites))
+        time_widget.setKeyboardTracking(False)
+        time_widget.setFrame(False)
+        self.table_USGS_Sites.setCellWidget(0, 6, time_widget)
 
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        date_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
-        date_widget.setKeyboardTracking(False)
-        self.table_USGS_Sites.setCellWidget(0, 7, date_widget)
+        # END TIME - defaults to 23:59:59 (full day)
+        time_widget = QDateTimeEdit()
+        time_widget.setDisplayFormat("hh:mm:ss")
+        time_widget.setTime(QtCore.QTime(23, 59, 59))  # 23:59:59
+        time_widget.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(time_widget, self.table_USGS_Sites))
+        time_widget.setKeyboardTracking(False)
+        time_widget.setFrame(False)
+        self.table_USGS_Sites.setCellWidget(0, 7, time_widget)
 
     # ======================================================================================================================
     #
     # ======================================================================================================================
     def USGS_dateChangeMethod(self, date_widget, tableWidget):
-        imageCount = self.USGS_get_image_count()
+        # ============================================================================
+        # DEBOUNCE: RESTART TIMER ON EACH DATE/TIME CHANGE
+        # THIS PREVENTS API SPAM WHILE USER IS STILL TYPING/SELECTING DATES
+        # ============================================================================
+        self.usgs_check_timer.stop()  # Cancel any pending check
+        self.usgs_check_timer.start(2000)  # Wait 2 seconds after last change
 
-        tableWidget.setItem(0, 1, QTableWidgetItem(imageCount.__str__()))
+        # Show visual feedback that check is pending
+        tableWidget.setItem(0, 1, QTableWidgetItem("Checking..."))
 
     # ======================================================================================================================
     # THIS FUNCTION WILL UPDATE THE PRODUCT TABLE IN THE GUI WITH THE PRODUCTS THAT ARE AVAILABLE FOR A SPECIFIC SITE.
@@ -1154,16 +1189,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.table_USGS_Sites.setCellWidget(i, m, date_widget)
 
             m += 1
+            # START TIME - defaults to 00:00:00
             dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
+            dateTime.setDisplayFormat("hh:mm:ss")  # Show seconds for clarity
+            dateTime.setTime(QtCore.QTime(0, 0, 0))  # 00:00:00
             dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
             dateTime.setKeyboardTracking(False)
             dateTime.setFrame(False)
             tableProducts.setCellWidget(i, m, dateTime)
 
             m += 1
+            # END TIME - defaults to 23:59:59 (full day)
             dateTime = QDateTimeEdit()
-            dateTime.setDisplayFormat("hh:mm")
+            dateTime.setDisplayFormat("hh:mm:ss")  # Show seconds for clarity
+            dateTime.setTime(QtCore.QTime(23, 59, 59))  # 23:59:59
             dateTime.dateTimeChanged.connect(lambda: self.USGS_dateChangeMethod(date_widget, self.table_USGS_Sites))
             dateTime.setKeyboardTracking(False)
             dateTime.setFrame(False)
@@ -1541,6 +1580,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             imageCount = 0
 
         return imageCount
+
+    # ============================================================================
+    # CHECK AVAILABILITY - CALLED BY DEBOUNCE TIMER OR MANUAL BUTTON
+    # ============================================================================
+    def USGS_check_availability(self):
+        """
+        Fetch image count and update table. Called by:
+        1. Debounce timer (2 seconds after date/time changes)
+        2. Manual "Check Availability" button click
+        """
+        if self.usgs_checking:
+            return  # Already checking, avoid duplicate calls
+        
+        self.usgs_checking = True
+        
+        try:
+            # Show loading indicator
+            self.table_USGS_Sites.setItem(0, 1, QTableWidgetItem("⟳ Checking..."))
+            QApplication.processEvents()  # Force UI update
+            
+            # Fetch image count (this may take time)
+            imageCount = self.USGS_get_image_count()
+            
+            # Update table with result
+            self.table_USGS_Sites.setItem(0, 1, QTableWidgetItem(str(imageCount)))
+            
+        except Exception as e:
+            self.table_USGS_Sites.setItem(0, 1, QTableWidgetItem("Error"))
+            print(f"Error checking availability: {e}")
+        finally:
+            self.usgs_checking = False
+
+    # ============================================================================
+    # MANUAL CHECK AVAILABILITY BUTTON HANDLER
+    # ============================================================================
+    def pushButton_USGSCheckAvailability_Clicked(self):
+        """
+        Manual trigger for checking image availability.
+        Cancels any pending auto-check and immediately checks.
+        """
+        self.usgs_check_timer.stop()  # Cancel pending auto-check
+        self.USGS_check_availability()  # Check immediately
 
     # ==================================================================================================================
     #
