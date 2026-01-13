@@ -196,30 +196,6 @@ class DatasetUtils:
 
         return train_images, val_images
 
-    '''
-    def save_split_dataset(self, train_images, val_images):
-        output_dir = os.getcwd()
-        train_dir = os.path.join(output_dir, "train")
-        val_dir = os.path.join(output_dir, "validation")
-        os.makedirs(train_dir, exist_ok=True)
-        os.makedirs(val_dir, exist_ok=True)
-
-        for image_path in train_images:
-            file_name = os.path.basename(image_path)
-            dest_path = os.path.join(train_dir, file_name)
-            shutil.copy2(image_path, dest_path)
-            print(f"Copied train image: {image_path} -> {dest_path}")
-
-        for image_path in val_images:
-            file_name = os.path.basename(image_path)
-            dest_path = os.path.join(val_dir, file_name)
-            shutil.copy2(image_path, dest_path)
-            print(f"Copied validation image: {image_path} -> {dest_path}")
-
-        if len(train_images) == 0 or len(val_images) == 0:
-            print("Empty split — cannot train/validate properly.")
-    '''
-
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def save_split_dataset(self, train_images, val_images, output_file):

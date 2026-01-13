@@ -12,6 +12,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QFileDialog, QListWidgetItem, QMessageBox
 from PyQt5.uic import loadUi
 
+from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.utils.resource_utils import ui_path
 from GRIME_AI.GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
 
@@ -354,7 +355,7 @@ class AnnotationTab(QWidget):
         folder = QFileDialog.getExistingDirectory(
             self,
             "Select Annotation Folder",
-            os.getcwd()
+            str(PROJECT_ROOT)
         )
         if not folder:
             return
