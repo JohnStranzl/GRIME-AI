@@ -362,7 +362,6 @@ class  NEON_API:
         print("  strStartDate:", strStartDate)
         print("  strEndDate:", strEndDate)
         print("  downloadsFilePath:", downloadsFilePath)
-        print("  CWD:", os.getcwd())
 
         if not os.path.exists(downloadsFilePath):
             print("Creating downloadsFilePath:", downloadsFilePath)

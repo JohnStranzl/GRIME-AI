@@ -7,6 +7,7 @@ import json
 from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox
 
+from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
@@ -548,7 +549,7 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     def browse_model_training_images_folder(self):
         """Open a dialog to choose a folder and update the folder path field."""
-        folder = QFileDialog.getExistingDirectory(self, "Select training images folder", os.getcwd())
+        folder = QFileDialog.getExistingDirectory(self, "Select training images folder", str(PROJECT_ROOT))
         folder = os.path.normpath(folder)
 
         if folder:

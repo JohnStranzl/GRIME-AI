@@ -15,11 +15,11 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 from pathlib import Path
-from PyQt5 import QtCore
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QWidget, QFileDialog, QListWidgetItem, QMessageBox
 from PyQt5.QtGui import QPixmap, QIcon, QImage, QPainter, QColor
 
+from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE
@@ -240,7 +240,7 @@ class ROIAnalyzerTab(QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def browse_ROI_images_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Folder", os.getcwd())
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder", str(PROJECT_ROOT))
         if not folder:
             return
         self.lineEdit_ROI_images_folder.setText(folder)

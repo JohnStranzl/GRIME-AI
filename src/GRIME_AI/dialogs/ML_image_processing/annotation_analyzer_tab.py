@@ -7,6 +7,7 @@ from openpyxl import Workbook
 from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
 
+from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 
 
@@ -74,7 +75,7 @@ class AnnotationAnalyzerTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def browse_root_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Root Folder", os.getcwd())
+        folder = QFileDialog.getExistingDirectory(self, "Select Root Folder", str(PROJECT_ROOT))
         if folder:
             self.lineEdit_annotation_root_path.setText(folder)
             self.populate_available_jsons(Path(folder))
