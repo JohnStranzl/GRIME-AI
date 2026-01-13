@@ -1,0 +1,81 @@
+# SAGE/main.py
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import time
+
+import argparse
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import QApplication, QSplashScreen
+from PyQt5.QtGui import QPixmap
+from SAGE.ui.main_window import MainWindow
+from SAGE.core.model_manager import ModelManager
+from SAGE.backends.sam2_backend import SAM2Backend
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Segmentation & Annotation for Geospatial Ecohydrology (SAGE)")
+    parser.add_argument(
+        "--checkpoint",
+        default=r"C:\Users\johns\pycharmprojects\GRIME-AI-X\src\GRIME_AI\sam2\checkpoints\sam2.1_hiera_large.pt",
+        help="Path to SAM2.1 checkpoint",
+    )
+    parser.add_argument(
+        "--config_dir",
+        default=r"C:\Users\johns\pycharmprojects\GRIME-AI-X\src\GRIME_AI\sam2\sam2\configs\sam2.1",
+        help="Directory containing SAM2.1 configs",
+    )
+    parser.add_argument(
+        "--config_name",
+        default="sam2.1_hiera_l.yaml",
+        help="Config filename inside config_dir",
+    )
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        help="Device string (e.g. 'cuda', 'cuda:0', 'cpu')",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    app = QApplication(sys.argv)
+
+    #app = QApplication([])
+
+    # Load splash image
+    full_pixmap = QPixmap("resources/sage_logo.png")
+    scaled_pixmap = full_pixmap.scaled(full_pixmap.width() // 2, full_pixmap.height() // 2, Qt.KeepAspectRatio,
+                                       Qt.SmoothTransformation)
+    splash = QSplashScreen(scaled_pixmap, Qt.WindowStaysOnTopHint)
+    splash.setMask(scaled_pixmap.mask())
+    splash.show()
+
+    # Optional: delay for visual effect
+    app.processEvents()
+    time.sleep(1.5)  # adjust duration as needed
+
+    model_manager = ModelManager(
+        backend_cls=SAM2Backend,
+        checkpoint_path=args.checkpoint,
+        config_dir=args.config_dir,
+        config_name=args.config_name,
+        device=args.device,
+    )
+
+    def launch_main():
+        window = MainWindow(model_manager=model_manager)
+        window.show()
+        splash.finish(window)
+
+    QTimer.singleShot(1500, launch_main)  # auto-close after 1.5 seconds
+
+    sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main()
