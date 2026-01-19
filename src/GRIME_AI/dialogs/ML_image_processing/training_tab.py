@@ -77,10 +77,18 @@ def _check_folder(folder: Path) -> Tuple[bool, List[str]]:
 
     return True, []
 
-def _iter_dirs(root: Path) -> List[Path]:
+def _iter_dirs(root: Path):
     """
     Recursively yield every subdirectory under root using os.scandir.
     """
+    # Skip system/Conda directories
+    bad = ["anaconda3", "miniconda3", "ProgramData", "Windows"]
+    if any(b in str(root).lower() for b in bad):
+        return
+
+    if not root.exists():
+        return
+
     for entry in os.scandir(root):
         if entry.is_dir():
             sub = Path(entry.path)
@@ -187,7 +195,9 @@ class TrainingTab(QtWidgets.QWidget):
         self.setup_connections()
 
         self.reset_selection()
-        self.populate_available_folders()
+
+        #JES FIX CONDA SCANNING ISSUE
+        #JES self.populate_available_folders()
 
         self.updateTrainButtonState()
 
@@ -890,24 +900,47 @@ class TrainingTab(QtWidgets.QWidget):
     # Folder population and annotation aggregation
     # ------------------------------------------------------------------------
     def populate_available_folders(self):
-        root = Path(self.lineEdit_model_training_images_path.text().strip()).resolve()
+        """
+        Safely populate the available training folders list.
+        Prevents accidental scanning of system/Conda directories
+        when the path field is empty or invalid.
+        """
+
+        raw = self.lineEdit_model_training_images_path.text().strip()
+
+        # HARD STOP: EMPTY OR WHITESPACE PATH
+        if not raw:
+            print("Training images path is empty; skipping folder scan.")
+            return
+
+        root = Path(raw).resolve()
         self.listWidget_availableFolders.clear()
 
+        # HARD STOP: REFUSE TO SCAN SUSPICIOUS/SYSTEM ROOTS
+        forbidden = ["anaconda3", "miniconda3", "programdata", "windows"]
+        if any(f in str(root).lower() for f in forbidden):
+            print(f"Refusing to scan suspicious root: {root}")
+            return
+
         if not root.is_dir():
-            QMessageBox.warning(self, "Invalid Folder", f"The selected path is not a directory:\n{root}")
+            QMessageBox.warning(
+                self,
+                "Invalid Folder",
+                f"The selected path is not a directory:\n{root}"
+            )
             return
 
         valid: List[Path] = []
         incomplete: Dict[str, List[str]] = {}
 
-        # Check the root itself
+        # CHECK THE ROOT ITSELF
         ok, missing = _check_folder(root)
         if ok:
             valid.append(root)
         elif missing:
             incomplete[str(root)] = missing
 
-        # Recurse into subfolders
+        # RECURSE INTO SUBFOLDERS (SAFE BECAUSE ROOT IS VALIDATED)
         for folder in _iter_dirs(root):
             ok, missing = _check_folder(folder)
             if ok:
@@ -915,7 +948,7 @@ class TrainingTab(QtWidgets.QWidget):
             elif missing:
                 incomplete[str(folder)] = missing
 
-        # Populate or alert “no valid”
+        # POPULATE OR ALERT “NO VALID”
         if valid:
             for vf in sorted(set(valid)):
                 rel = vf.relative_to(root)
@@ -928,13 +961,17 @@ class TrainingTab(QtWidgets.QWidget):
                 "No folders were found containing a COCO JSON and all its images."
             )
 
-        # Incomplete sets popup
+        # INCOMPLETE SETS POPUP
         if incomplete:
             lines = ["Folders missing files:"]
             for fld, miss in incomplete.items():
                 lines.append(f"\n{fld}\n  Missing:")
                 lines += [f"    • {m}" for m in miss]
-            QMessageBox.information(self, "Incomplete Training Sets", "\n".join(lines))
+            QMessageBox.information(
+                self,
+                "Incomplete Training Sets",
+                "\n".join(lines)
+            )
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
