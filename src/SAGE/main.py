@@ -53,14 +53,11 @@ def main():
     app.processEvents()
 
     # Load splash image
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    RESOURCE_PATH = os.path.join(BASE_DIR, "..", "resources", "sage_logo.png")
-    RESOURCE_PATH = os.path.abspath(RESOURCE_PATH)
-    print("BASE_DIR:", BASE_DIR)
-    print("RESOURCE_PATH:", RESOURCE_PATH)
-    print("Exists:", os.path.exists(RESOURCE_PATH))
+    base_path = Path(__file__).resolve().parent
+    logo_dir = base_path / "resources"
+    RESOURCE_PATH = os.path.join(logo_dir, "sage_logo.png")
+
     full_pixmap = QPixmap(RESOURCE_PATH)
-    print("Pixmap is null:", full_pixmap.isNull())
 
     scaled_pixmap = full_pixmap.scaled(full_pixmap.width() // 2, full_pixmap.height() // 2, Qt.KeepAspectRatio,
                                        Qt.SmoothTransformation)
