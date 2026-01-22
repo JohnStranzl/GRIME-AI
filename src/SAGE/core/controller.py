@@ -1,8 +1,8 @@
 # sam2_gui/core/controller.py
 import itertools
 import numpy as np
-from utils.mask_ops import compute_mask_stats
-from utils.colors import get_color_for_index
+from SAGE.utils.mask_ops import compute_mask_stats
+from SAGE.utils.colors import get_color_for_index
 
 
 class SegmentationController:
@@ -35,6 +35,18 @@ class SegmentationController:
             self.fg_points.pop()
         elif self.bg_points:
             self.bg_points.pop()
+
+    # ---- point removal ----
+    def remove_points_in_circle(self, cx, cy, radius):
+        r2 = float(radius) * float(radius)
+
+        def keep(p):
+            dx = float(p[0]) - float(cx)
+            dy = float(p[1]) - float(cy)
+            return (dx * dx + dy * dy) > r2
+
+        self.fg_points = [p for p in self.fg_points if keep(p)]
+        self.bg_points = [p for p in self.bg_points if keep(p)]
 
     # ---- segmentation ----
     def run_segmentation(self, label=None):

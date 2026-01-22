@@ -54,6 +54,13 @@ class MainWindow(QMainWindow):
         self.renderer = None
         self.image_np = None
 
+        # Seed mask (global / site-level)
+        self.seed_mask_path = None  # path to .tif/.tiff mask
+        self.seed_mask_bool = None  # cached boolean mask resized to current image
+        self.auto_seed_enabled = True  # auto-apply when each image loads
+        self.skip_seed_for_images = set()  # stores full image paths where seeding is skipped
+        self.eraser_radius = 18
+
         central = QWidget()
 
         # ---------------------------------------------------------
@@ -62,11 +69,20 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central)
 
         # Folder row ABOVE the image
+        ROW_HEIGHT = 28
         folder_row = QHBoxLayout()
+        folder_row.setContentsMargins(4, 4, 4, 4)
+        folder_row.setSpacing(6)
         self.folder_edit = QLineEdit()
+        self.folder_edit.setFixedHeight(ROW_HEIGHT)
+        self.folder_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.folder_browse_btn = QPushButton("Browse")
+        self.folder_browse_btn.setFixedHeight(ROW_HEIGHT)
         self.folder_browse_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.folder_browse_btn.clicked.connect(self._browse_folder)
+        # h = self.folder_browse_btn.sizeHint().height()
+        # self.folder_edit.setFixedHeight(h)
+        # self.folder_browse_btn.setFixedHeight(h)
         folder_row.addWidget(self.folder_edit, stretch=1)
         folder_row.addWidget(self.folder_browse_btn)
         main_layout.addLayout(folder_row)
@@ -81,6 +97,7 @@ class MainWindow(QMainWindow):
             on_right_click=self._on_right_click_handler,
             parent=self
         )
+        self.canvas.eraser_move.connect(self._erase_seeds_at)
         layout.addWidget(self.canvas, stretch=4)
 
         self.sidebar = Sidebar(
@@ -97,6 +114,13 @@ class MainWindow(QMainWindow):
 
         # Sidebar requests COCO save → MainWindow handles it
         self.sidebar.save_all_coco_requested.connect(self.save_all_coco)
+
+        # New Sidebar
+        self.sidebar.load_seed_mask_requested.connect(self._browse_seed_mask)
+        self.sidebar.seed_points_now_requested.connect(self._seed_points_from_mask_current_image)
+        self.sidebar.auto_seed_toggled.connect(self._on_auto_seed_toggled)
+        self.sidebar.skip_seed_this_image_toggled.connect(self._on_skip_seed_toggled)
+        self.sidebar.eraser_toggled.connect(self._on_eraser_toggled)
 
         # New: segmentation mode + sampling mode signals
         self.sidebar.segmentation_mode_changed.connect(self._on_segmentation_mode_changed)
@@ -116,6 +140,30 @@ class MainWindow(QMainWindow):
         if saved_folder and os.path.isdir(saved_folder):
             self.folder_edit.setText(saved_folder)
             self._populate_image_list(saved_folder)
+
+    # ------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------
+    def _on_auto_seed_toggled(self, on: bool):
+        self.auto_seed_enabled = on
+
+    # ------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------
+    def _on_skip_seed_toggled(self, on: bool):
+        # store per-image skip flag
+        if not hasattr(self, "skip_seed_for_image"):
+            self.skip_seed_for_image = {}
+        if self.current_image_path:
+            self.skip_seed_for_image[self.current_image_path] = on
+
+    # ------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------
+    def _on_eraser_toggled(self, on: bool):
+        self.canvas.set_eraser_enabled(on)
+        # optional: change cursor
+        self.canvas.setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
 
     # ------------------------------------------------------------------------
     #
@@ -192,6 +240,280 @@ class MainWindow(QMainWindow):
             self._populate_image_list(folder)
 
     # ---------------------------------------------------------
+    # Seed mask browsing
+    # ---------------------------------------------------------
+    def _browse_seed_mask(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Seed Mask",
+            "",
+            "Mask Files (*.tif *.tiff *.png *.jpg *.jpeg *.npy)"
+        )
+        if not path:
+            return
+
+        self.seed_mask_path = path
+        # self.seed_mask_edit.setText(path)
+
+        # Load once (resized when image is loaded)
+        self.seed_mask_bool = None  # reset cache
+        QMessageBox.information(self, "Seed Mask Loaded", f"Loaded:\n{path}")
+
+    def _load_seed_mask_bool(self, target_shape):
+        """
+        Returns boolean mask (H,W) resized to target_shape using nearest-neighbor.
+        Caches result per-image-size to avoid re-reading on every image.
+        """
+        if self.seed_mask_path is None:
+            return None
+
+        # If cached and already correct size, reuse
+        if self.seed_mask_bool is not None and self.seed_mask_bool.shape == target_shape:
+            return self.seed_mask_bool
+
+        path = self.seed_mask_path
+        ext = os.path.splitext(path)[1].lower()
+
+        try:
+            if ext in [".tif", ".tiff"]:
+                from PIL import Image
+                m = np.array(Image.open(path))
+            elif ext == ".npy":
+                m = np.load(path)
+            else:
+                import cv2
+                m = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+                if m is None:
+                    return None
+                if m.ndim == 3:
+                    m = cv2.cvtColor(m, cv2.COLOR_BGR2GRAY)
+
+            mask = self._normalize_seed_mask(m)
+            print("Seed mask foreground fraction:", mask.mean())
+
+            # Resize if needed
+            if mask.shape != target_shape:
+                import cv2
+                mask = cv2.resize(
+                    mask.astype(np.uint8),
+                    (target_shape[1], target_shape[0]),
+                    interpolation=cv2.INTER_NEAREST
+                ).astype(bool)
+
+            import cv2
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            mask_u8 = mask.astype(np.uint8) * 255
+            mask_u8 = cv2.morphologyEx(mask_u8, cv2.MORPH_OPEN, kernel, iterations=1)
+            mask_u8 = cv2.morphologyEx(mask_u8, cv2.MORPH_CLOSE, kernel, iterations=1)
+            mask = (mask_u8 > 0)
+
+            self.seed_mask_bool = mask
+            return mask
+
+        except Exception as e:
+            print("Seed mask load error:", e)
+            return None
+
+    def _normalize_seed_mask(self, mask):
+        """
+        Returns boolean mask where True = ROI (foreground).
+
+        Handles common cases:
+        - binary 0/255 masks
+        - 0/1 masks
+        - float masks
+        - masks with huge white background (auto-invert)
+        """
+        mask = np.asarray(mask)
+        if mask.ndim == 3:
+            mask = mask[..., 0]
+
+        m = mask.astype(np.float32)
+        m = np.nan_to_num(m, nan=0.0)
+
+        # If it looks binary-ish, threshold at >0
+        uniq = np.unique(m)
+        if uniq.size <= 10:
+            roi = m > 0
+        else:
+            # otherwise use Otsu (robust for grayscale)
+            import cv2
+            mm = cv2.normalize(m, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            _, thr = cv2.threshold(mm, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            roi = thr > 0
+
+        # Auto-invert if ROI covers most of the image (common when background is white)
+        # If > 50% is True, it's probably inverted.
+        if roi.mean() > 0.5:
+            roi = ~roi
+
+        return roi
+
+    def _toggle_auto_seed(self):
+        self.auto_seed_enabled = self.seed_auto_checkbox.isChecked()
+        self.seed_auto_checkbox.setText("Auto-Seed: ON" if self.auto_seed_enabled else "Auto-Seed: OFF")
+
+    def _toggle_skip_seed_for_current_image(self):
+        if not self.current_image_path:
+            return
+
+        if self.current_image_path in self.skip_seed_for_images:
+            self.skip_seed_for_images.remove(self.current_image_path)
+            QMessageBox.information(self, "Seed Enabled", "Seed mask WILL be used for this image.")
+        else:
+            self.skip_seed_for_images.add(self.current_image_path)
+            QMessageBox.information(self, "Seed Skipped", "Seed mask will NOT be used for this image.")
+
+        # Update button text so it's obvious
+        self._update_seed_skip_button_text()
+
+    def _update_seed_skip_button_text(self):
+        if not self.current_image_path:
+            self.seed_skip_btn.setText("Skip Seed (This Image)")
+            return
+
+        if self.current_image_path in self.skip_seed_for_images:
+            self.seed_skip_btn.setText("Use Seed (This Image)")
+        else:
+            self.seed_skip_btn.setText("Skip Seed (This Image)")
+
+    # ---------------------------------------------------------
+    # Seed points from input mask
+    # ---------------------------------------------------------
+    def _seed_points_from_mask_current_image(self):
+        # If user manually requests seeding, ensure this image is not skipped
+        if self.current_image_path in self.skip_seed_for_images:
+            self.skip_seed_for_images.remove(self.current_image_path)
+            self._update_seed_skip_button_text()
+
+        if self.controller is None or self.image_np is None:
+            return
+        if not self.seed_mask_path:
+            QMessageBox.warning(self, "No Seed Mask", "Please load a seed mask (.tif) first.")
+            return
+
+        # Load / resize seed mask to match current image
+        mask_bool = self._load_seed_mask_bool(target_shape=self.image_np.shape[:2])
+        if mask_bool is None or mask_bool.sum() == 0:
+            QMessageBox.warning(self, "Invalid Seed Mask", "Seed mask is empty or could not be loaded.")
+            return
+
+        seed = abs(hash(self.current_image_path)) % (2 ** 32)
+        fg_points, bg_points = self._sample_points_from_mask(mask_bool, n_fg=30, n_bg=0, seed=seed)
+
+        # Put points into the existing controller path (supported)
+        self.controller.clear_points()
+        for x, y in fg_points:
+            self.controller.add_point(x, y, is_fg=True)
+        for x, y in bg_points:
+            self.controller.add_point(x, y, is_fg=False)
+
+        print("Seed mask stats:", mask_bool.shape, "fg_frac=", float(mask_bool.mean()))
+        self._update_canvas()
+
+    def _sample_points_from_mask(self, mask_bool, n_fg=30, n_bg=30, seed=0):
+        rng = np.random.default_rng(seed)
+        h, w = mask_bool.shape
+
+        ys, xs = np.where(mask_bool)
+        if len(xs) == 0:
+            return [], []
+
+        # FG points inside ROI
+        k_fg = min(n_fg, len(xs))
+        idx_fg = rng.choice(len(xs), size=k_fg, replace=False)
+        fg_points = [(int(xs[i]), int(ys[i])) for i in idx_fg]
+
+        if n_bg <= 0:
+            return fg_points, []
+
+        # BG candidates: outside ROI
+        outside = ~mask_bool
+
+        # Build "safe BG zones"
+        safe = np.zeros_like(mask_bool, dtype=bool)
+
+        # sky strip
+        safe[: int(0.15 * h), :] = True
+        # bottom strip
+        safe[int(0.90 * h):, :] = True
+        # left/right margins
+        safe[:, : int(0.05 * w)] = True
+        safe[:, int(0.95 * w):] = True
+
+        bg_candidate = outside & safe
+        bys, bxs = np.where(bg_candidate)
+
+        # fallback: if safe zones empty, use any outside
+        if len(bxs) == 0:
+            bys, bxs = np.where(outside)
+
+        if len(bxs) == 0:
+            return fg_points, []
+
+        k_bg = min(n_bg, len(bxs))
+        idx_bg = rng.choice(len(bxs), size=k_bg, replace=False)
+        bg_points = [(int(bxs[i]), int(bys[i])) for i in idx_bg]
+
+        return fg_points, bg_points
+
+    # ---------------------------------------------------------
+    # Populate mask name
+    # ---------------------------------------------------------
+    def _default_label_from_seed_mask(self):
+        """
+        Extract class name from seed mask filename.
+
+        Expected pattern:
+          site_CLASS_otherinfo.tif
+          e.g. ninemileprairie_GR_2000_03.tif
+
+        Returns:
+          "GR"
+        """
+        if not self.seed_mask_path:
+            return None
+
+        name = os.path.basename(self.seed_mask_path)
+        stem = os.path.splitext(name)[0]
+
+        parts = stem.split("_")
+        if len(parts) < 2:
+            return None
+
+        class_name = parts[1]  # <-- CLASS POSITION (fixed)
+        return class_name
+
+    # ---------------------------------------------------------
+    # Erase seed points
+    # ---------------------------------------------------------
+    def _erase_seeds_at(self, x, y):
+        if self.controller is None:
+            return
+
+        # 1) remove SAM points + manual points from controller
+        self.controller.remove_points_in_circle(x, y, radius=self.eraser_radius)
+
+        # 2) also remove paint stroke points (works for (x,y) or (x,y,is_fg))
+        if hasattr(self.canvas, "_paint_points") and self.canvas._paint_points:
+            r2 = float(self.eraser_radius) ** 2
+            new_pts = []
+            for p in self.canvas._paint_points:
+                px, py = p[0], p[1]  # <-- only take first two always
+                dx = px - x
+                dy = py - y
+                if (dx * dx + dy * dy) > r2:
+                    new_pts.append(p)  # keep original tuple as-is (2 or 3 items)
+            self.canvas._paint_points = new_pts
+
+        self._update_canvas()
+
+    def _toggle_seed_eraser(self):
+        self.eraser_enabled = self.seed_eraser_btn.isChecked()
+        self.seed_eraser_btn.setText("Eraser: ON" if self.eraser_enabled else "Eraser: OFF")
+        self.canvas.set_eraser_enabled(self.eraser_enabled)
+
+    # ---------------------------------------------------------
     # Populate image list
     # ---------------------------------------------------------
     def _populate_image_list(self, folder):
@@ -260,7 +582,9 @@ class MainWindow(QMainWindow):
         if self.controller is None:
             return
 
-        default_label = f"Region {len(self.controller.masks) + 1}"
+        seed_label = self._default_label_from_seed_mask()
+        fallback = f"Region {len(self.controller.masks) + 1}"
+        default_label = seed_label or fallback
         label = ask_for_label(self, default_label)
         mask_entry = self.controller.run_segmentation(label=label)
 
@@ -335,7 +659,9 @@ class MainWindow(QMainWindow):
             self.controller.add_point(x, y, is_fg=True)
 
         # Run segmentation with polygon constraint
-        default_label = f"Region {len(self.controller.masks) + 1}"
+        seed_label = self._default_label_from_seed_mask()
+        fallback = f"Region {len(self.controller.masks) + 1}"
+        default_label = seed_label or fallback
         label = ask_for_label(self, default_label)
         mask_entry = self.controller.run_segmentation(label=label)
 
@@ -740,6 +1066,21 @@ class MainWindow(QMainWindow):
         # Restore masks if they exist
         if full_path in self.mask_store:
             self.controller.masks = copy.deepcopy(self.mask_store[full_path])
+
+        # Auto-seed points from seed mask if available
+        skip = False
+        if hasattr(self, "skip_seed_for_image") and self.current_image_path:
+            skip = self.skip_seed_for_image.get(self.current_image_path, False)
+
+        if self.seed_mask_path and self.auto_seed_enabled and not skip:
+            self._seed_points_from_mask_current_image()
+
+        # update sidebar checkbox state to reflect this image
+        self.sidebar.set_seed_controls_state(
+            auto_on=self.auto_seed_enabled,
+            skip_on=skip,
+            eraser_on=self.canvas._eraser_enabled
+        )
 
         # Update sidebar controller reference
         self.sidebar.controller = self.controller

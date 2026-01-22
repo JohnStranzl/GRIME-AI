@@ -1,5 +1,11 @@
 # SAGE/main.py
 
+print(">>> RUNNING SAGE.main FROM:", __file__)
+
+import sam2
+print("SAM2 is being imported from:", sam2.__file__)
+
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -44,11 +50,18 @@ def main():
     args = parse_args()
 
     app = QApplication(sys.argv)
-
-    #app = QApplication([])
+    app.processEvents()
 
     # Load splash image
-    full_pixmap = QPixmap("resources/sage_logo.png")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RESOURCE_PATH = os.path.join(BASE_DIR, "..", "resources", "sage_logo.png")
+    RESOURCE_PATH = os.path.abspath(RESOURCE_PATH)
+    print("BASE_DIR:", BASE_DIR)
+    print("RESOURCE_PATH:", RESOURCE_PATH)
+    print("Exists:", os.path.exists(RESOURCE_PATH))
+    full_pixmap = QPixmap(RESOURCE_PATH)
+    print("Pixmap is null:", full_pixmap.isNull())
+
     scaled_pixmap = full_pixmap.scaled(full_pixmap.width() // 2, full_pixmap.height() // 2, Qt.KeepAspectRatio,
                                        Qt.SmoothTransformation)
     splash = QSplashScreen(scaled_pixmap, Qt.WindowStaysOnTopHint)
@@ -56,7 +69,6 @@ def main():
     splash.show()
 
     # Optional: delay for visual effect
-    app.processEvents()
     time.sleep(1.5)  # adjust duration as needed
 
     model_manager = ModelManager(

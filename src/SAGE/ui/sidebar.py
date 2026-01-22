@@ -11,6 +11,9 @@ from PyQt5.QtWidgets import (
     QButtonGroup,
     QGroupBox,
     QGridLayout,
+    QCheckBox,
+    QRadioButton,
+    QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -18,6 +21,12 @@ from PyQt5.QtCore import Qt, pyqtSignal
 class Sidebar(QWidget):
     image_selected = pyqtSignal(str)
     save_all_coco_requested = pyqtSignal()
+    # NEW
+    load_seed_mask_requested = pyqtSignal()
+    seed_points_now_requested = pyqtSignal()
+    auto_seed_toggled = pyqtSignal(bool)
+    skip_seed_this_image_toggled = pyqtSignal(bool)
+    eraser_toggled = pyqtSignal(bool)
     segmentation_mode_changed = pyqtSignal(str)  # "points", "polygon", "paint", or "manual_polygon"
     polygon_sampling_changed = pyqtSignal(str)  # "dense", "random", "poisson"
 
@@ -48,6 +57,50 @@ class Sidebar(QWidget):
         layout.addWidget(self.image_list)
 
         # ----------------------------------------------------
+        # Seed/Prompt Controls
+        # ----------------------------------------------------
+        seed_groupbox = QGroupBox("Seed/Prompt Controls")
+        seed_layout = QVBoxLayout(seed_groupbox)
+        seed_layout.setContentsMargins(8, 10, 8, 8)
+        seed_layout.setSpacing(6)
+
+        self.load_seed_btn = QPushButton("Load Seed Mask")
+        self.load_seed_btn.clicked.connect(self.load_seed_mask_requested.emit)
+
+        self.seed_now_btn = QPushButton("Seed Points Now")
+        self.seed_now_btn.clicked.connect(self.seed_points_now_requested.emit)
+
+        # Make buttons fully visible + consistent height
+        for b in (self.load_seed_btn, self.seed_now_btn):
+            b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            b.setMinimumHeight(28)  # tweak 26–32 if you want
+            b.setMinimumWidth(0)
+            b.setContentsMargins(6, 4, 6, 4)
+
+        seed_layout.addWidget(self.load_seed_btn)
+        seed_layout.addWidget(self.seed_now_btn)
+
+        self.auto_seed_checkbox = QCheckBox("Auto-Seed: ON")
+        self.auto_seed_checkbox.setChecked(True)
+        self.auto_seed_checkbox.toggled.connect(self._on_auto_seed_changed)
+        seed_layout.addWidget(self.auto_seed_checkbox)
+
+        self.skip_seed_checkbox = QCheckBox("Skip Seed (This Image)")
+        self.skip_seed_checkbox.setChecked(False)
+        self.skip_seed_checkbox.toggled.connect(self.skip_seed_this_image_toggled.emit)
+        seed_layout.addWidget(self.skip_seed_checkbox)
+
+        self.eraser_checkbox = QCheckBox("Eraser: OFF")
+        self.eraser_checkbox.setChecked(False)
+        self.eraser_checkbox.toggled.connect(self._on_eraser_changed)
+        seed_layout.addWidget(self.eraser_checkbox)
+
+        # Prevent this groupbox from being squashed too much
+        seed_groupbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+
+        layout.addWidget(seed_groupbox)
+
+        # ----------------------------------------------------
         # Mask list (bottom)
         # ----------------------------------------------------
         layout.addWidget(QLabel("Masks / Labels:"))
@@ -58,26 +111,42 @@ class Sidebar(QWidget):
         # ----------------------------------------------------
         # Segment button + Clear Points button
         # ----------------------------------------------------
-        btn_layout = QHBoxLayout()
-        self.run_btn = QPushButton("Segment (Enter)")
-        self.run_btn.clicked.connect(self.on_run_segmentation)
-        btn_layout.addWidget(self.run_btn)
+        seg_groupbox = QGroupBox("Segment")
+        seg_layout = QVBoxLayout(seg_groupbox)
+        seg_layout.setContentsMargins(8, 10, 8, 8)
+        seg_layout.setSpacing(6)
+
+        # Row 1: Erase toggle button + Clear Points
+        top_row = QHBoxLayout()
+
+        self.erase_btn = QPushButton("Erase")
+        # Make it toggle the checkbox, so UI stays consistent
+        self.erase_btn.clicked.connect(lambda: self.eraser_checkbox.setChecked(not self.eraser_checkbox.isChecked()))
+        top_row.addWidget(self.erase_btn)
 
         self.clear_points_btn = QPushButton("Clear Points")
         self.clear_points_btn.clicked.connect(self.on_clear_points)
-        btn_layout.addWidget(self.clear_points_btn)
+        top_row.addWidget(self.clear_points_btn)
 
-        layout.addLayout(btn_layout)
+        seg_layout.addLayout(top_row)
 
-        # ----------------------------------------------------
-        # Opacity slider
-        # ----------------------------------------------------
-        layout.addWidget(QLabel("Mask Opacity:"))
+        # Row 2: Segment button centered / full width
+        self.run_btn = QPushButton("Segment (Enter)")
+        self.run_btn.clicked.connect(self.on_run_segmentation)
+        seg_layout.addWidget(self.run_btn)
+
+        opacity_row = QVBoxLayout()
+        opacity_row.addWidget(QLabel("Mask Opacity:"))
         self.opacity_slider = QSlider(Qt.Horizontal)
         self.opacity_slider.setRange(0, 255)
         self.opacity_slider.setValue(120)
+        self.opacity_slider.setMinimumHeight(18)
         self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
-        layout.addWidget(self.opacity_slider)
+        opacity_row.addWidget(self.opacity_slider)
+
+        seg_layout.addLayout(opacity_row)
+
+        layout.addWidget(seg_groupbox)
 
         # ----------------------------------------------------
         # Segmentation mode (2x2 grid in groupbox)
@@ -155,6 +224,11 @@ class Sidebar(QWidget):
         self.save_all_btn = QPushButton("Save COCO 1.0 (All Images)")
         self.save_all_btn.clicked.connect(self.save_all_coco_requested.emit)
         layout.addWidget(self.save_all_btn)
+        self.save_all_btn.setMinimumHeight(42)
+        self.save_all_btn.setStyleSheet(
+            "QPushButton { background-color: #5cb85c; color: white; font-weight: bold; border-radius: 6px; }"
+            "QPushButton:hover { background-color: #4cae4c; }"
+        )
 
         self.setLayout(layout)
 
@@ -245,3 +319,30 @@ class Sidebar(QWidget):
         self.controller.set_mask_visibility(mask_id, visible)
 
         self.on_visibility_changed()
+
+    # ---------------- Seed/eraser UI helpers ----------------
+    def _on_auto_seed_changed(self, on: bool):
+        self.auto_seed_checkbox.setText("Auto-Seed: ON" if on else "Auto-Seed: OFF")
+        self.auto_seed_toggled.emit(on)
+
+    def _on_eraser_changed(self, on: bool):
+        self.eraser_checkbox.setText("Eraser: ON" if on else "Eraser: OFF")
+        self.eraser_toggled.emit(on)
+
+    def set_seed_controls_state(self, auto_on: bool, skip_on: bool, eraser_on: bool):
+        """Called by MainWindow when an image changes."""
+        self.auto_seed_checkbox.blockSignals(True)
+        self.skip_seed_checkbox.blockSignals(True)
+        self.eraser_checkbox.blockSignals(True)
+
+        self.auto_seed_checkbox.setChecked(auto_on)
+        self.auto_seed_checkbox.setText("Auto-Seed: ON" if auto_on else "Auto-Seed: OFF")
+
+        self.skip_seed_checkbox.setChecked(skip_on)
+
+        self.eraser_checkbox.setChecked(eraser_on)
+        self.eraser_checkbox.setText("Eraser: ON" if eraser_on else "Eraser: OFF")
+
+        self.auto_seed_checkbox.blockSignals(False)
+        self.skip_seed_checkbox.blockSignals(False)
+        self.eraser_checkbox.blockSignals(False)

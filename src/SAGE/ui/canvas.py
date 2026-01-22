@@ -1,12 +1,13 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem
 from PyQt5.QtCore import Qt, QPointF, pyqtSignal, QRectF
-from PyQt5.QtGui import QPixmap, QPen, QPainterPath, QColor
+from PyQt5.QtGui import QPixmap, QPen, QPainterPath, QColor, QBrush
 
 from SAGE.ui.mask_item import MaskItem
 
 
 class Canvas(QGraphicsView):
     polygon_drawn = pyqtSignal(list)  # list of (x, y) tuples
+    eraser_move = pyqtSignal(float, float)  # x,y in image coords
 
     def __init__(self, on_left_click, on_right_click, parent=None):
         super().__init__(parent)
@@ -39,6 +40,26 @@ class Canvas(QGraphicsView):
         self._brush_size = 15  # pixels between paint points
         self._paint_is_negative = False  # track if current stroke is negative
 
+        # Eraser mode variables
+        self._eraser_enabled = False
+        self._eraser_radius = 18  # tweakable
+        self._is_erasing = False
+
+        # Eraser preview circle (cursor)
+        self._eraser_preview = QGraphicsEllipseItem()
+        self._eraser_preview.setZValue(10_000)  # always on top
+        self._eraser_preview.setVisible(False)
+
+        pen = QPen(QColor(0, 255, 255, 180))  # cyan-ish
+        fill = QColor(0, 255, 255, 60)  # cyan, low alpha
+        self._eraser_preview.setBrush(QBrush(fill))
+        pen.setWidth(2)
+        pen.setCosmetic(True)  # IMPORTANT: thickness stays same while zooming
+        self._eraser_preview.setPen(pen)
+
+        self._eraser_preview.setBrush(QBrush(Qt.NoBrush))
+        self._scene.addItem(self._eraser_preview)
+
     def set_segmentation_mode(self, mode: str):
         if mode in ("points", "polygon", "paint", "manual_polygon"):
             self._segmentation_mode = mode
@@ -49,6 +70,16 @@ class Canvas(QGraphicsView):
         self._orig_height = pixmap.height()
         self._scene.setSceneRect(QRectF(pixmap.rect()))
         self.fitInView(self._pixmap_item, Qt.KeepAspectRatio)
+
+    def set_eraser_enabled(self, enabled: bool):
+        self._eraser_enabled = enabled
+        if not enabled:
+            self._is_erasing = False
+        self._eraser_preview.setVisible(enabled)
+
+    def _update_eraser_preview(self, x, y):
+        r = float(self._eraser_radius)
+        self._eraser_preview.setRect(x - r, y - r, 2 * r, 2 * r)
 
     def wheelEvent(self, event):
         factor = 1.25 if event.angleDelta().y() > 0 else 0.8
@@ -135,34 +166,50 @@ class Canvas(QGraphicsView):
             return
 
         # ----------------------------------------------------
-        # Left-click: Add positive point, draw polygon, or paint
+        # Left-click: Eraser or Add positive point, draw polygon, or paint
         # ----------------------------------------------------
         if event.button() == Qt.LeftButton:
-            pos = self.mapToScene(event.pos())
-            x = pos.x()
-            y = pos.y()
+            # If eraser is enabled, DO NOT do polygon/paint/point behavior
+            if self._eraser_enabled:
+                self._is_erasing = True
+                x, y = self._map_to_image_coords(event.pos())
 
-            if (
-                    self._orig_width is not None
-                    and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
-            ):
-                super().mousePressEvent(event)
+                if self._is_in_bounds(x, y):
+                    self._update_eraser_preview(x, y)  # optional but nice
+                    self.eraser_move.emit(x, y)
+
+                event.accept()
                 return
 
-            if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
-                self._drawing_polygon = True
-                self._polygon_points = [(x, y)]
-                self._init_polygon_path_item()
-                self._update_polygon_path()
-            elif self._segmentation_mode == "paint":
-                self._painting = True
-                self._paint_is_negative = False  # Left-click = positive
-                self._paint_points = [(x, y)]
-                self._on_left_click(x, y)  # Add as foreground point
-                self._init_paint_path_item()
-                self._update_paint_path()
+            # Normal behavior
             else:
-                self._handle_click(QPointF(x, y), is_left=True)
+                pos = self.mapToScene(event.pos())
+                x = pos.x()
+                y = pos.y()
+
+                if (
+                        self._orig_width is not None
+                        and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+                ):
+                    super().mousePressEvent(event)
+                    return
+
+                else:
+                    if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
+                        self._drawing_polygon = True
+                        self._polygon_points = [(x, y)]
+                        self._init_polygon_path_item()
+                        self._update_polygon_path()
+
+                    elif self._segmentation_mode == "paint":
+                        self._painting = True
+                        self._paint_is_negative = False  # Left-click = positive
+                        self._paint_points = [(x, y)]
+                        self._on_left_click(x, y)  # Add as foreground point
+                        self._init_paint_path_item()
+                        self._update_paint_path()
+                    else:
+                        self._handle_click(QPointF(x, y), is_left=True)
 
         # ----------------------------------------------------
         # Middle-click: Pan
@@ -179,6 +226,14 @@ class Canvas(QGraphicsView):
         if self._orig_width is None:
             return True
         return not (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+
+    def _map_to_image_coords(self, view_pos):
+        """
+        Convert a QWidget mouse position (event.pos()) into *image pixel coords*.
+        Uses the scene coords since your pixmap is drawn into the scene 1:1.
+        """
+        scene_pos = self.mapToScene(view_pos)
+        return float(scene_pos.x()), float(scene_pos.y())
 
     def mouseMoveEvent(self, event):
         if self._panning and self._pan_start is not None:
@@ -237,6 +292,20 @@ class Canvas(QGraphicsView):
 
             self._update_paint_path()
 
+        # Show eraser preview following mouse
+        if self._eraser_enabled:
+            x, y = self._map_to_image_coords(event.pos())
+            if self._is_in_bounds(x, y):
+                self._update_eraser_preview(x, y)
+
+        # Erase points when it is enabled
+        if self._is_erasing and self._eraser_enabled:
+            x, y = self._map_to_image_coords(event.pos())
+            if self._is_in_bounds(x, y):
+                self.eraser_move.emit(x, y)
+            event.accept()
+            return
+
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -272,7 +341,24 @@ class Canvas(QGraphicsView):
             # Keep paint_points for bounding box calculation
             # They'll be cleared when segmentation runs
 
+        # Releasing erasing
+        if self._is_erasing and event.button() == Qt.LeftButton:
+            self._is_erasing = False
+            return
+
         super().mouseReleaseEvent(event)
+
+    def enterEvent(self, event):
+        """Show eraser preview when mouse enters canvas"""
+        if self._eraser_enabled and self._eraser_preview is not None:
+            self._eraser_preview.setVisible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Hide eraser preview when mouse leaves canvas"""
+        if self._eraser_preview is not None:
+            self._eraser_preview.setVisible(False)
+        super().leaveEvent(event)
 
     def _handle_click(self, scene_pos: QPointF, is_left: bool):
         x, y = scene_pos.x(), scene_pos.y()
