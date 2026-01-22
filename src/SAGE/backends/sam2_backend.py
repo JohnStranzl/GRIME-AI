@@ -6,18 +6,7 @@ import hydra
 from hydra.core.global_hydra import GlobalHydra
 from hydra import initialize_config_module
 
-# Get path relative to this file
-# Structure: GRIME-AI-X/src/SAGE/backends/sam2_backend.py
-# Target:    GRIME-AI-X/src/GRIME_AI/sam2
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-sam2_path = os.path.join(backend_dir, "..", "..", "GRIME_AI", "sam2")
-sam2_path = os.path.abspath(sam2_path)
-
-if os.path.exists(sam2_path):
-    sys.path.insert(0, sam2_path)
-else:
-    raise FileNotFoundError(f"SAM2 source not found at {sam2_path}")
-
+import sam2
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from SAGE.core.segmentation_backend import SegmentationBackend
@@ -67,11 +56,9 @@ class SAM2Backend(SegmentationBackend):
             ckpt = os.path.basename(ckpt)
 
         # If it's just a filename, assume it's in GRIME_AI/sam2/checkpoints/
-        if ckpt and not os.path.isabs(ckpt):
-            backend_dir = os.path.dirname(os.path.abspath(__file__))
-            repo_root = os.path.abspath(os.path.join(backend_dir, "..", ".."))  # .../src
-            default_ckpt_dir = os.path.join(repo_root, "GRIME_AI", "sam2", "checkpoints")
-            ckpt = os.path.join(default_ckpt_dir, ckpt)
+        package_dir = os.path.dirname(sam2.__file__)
+        default_ckpt_dir = os.path.join(package_dir, "checkpoints")
+        ckpt = os.path.join(default_ckpt_dir, os.path.basename(ckpt))
 
         self.checkpoint_path = ckpt
         print("Using SAM2 checkpoint:", self.checkpoint_path)
