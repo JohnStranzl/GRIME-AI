@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schemas.conda.org/menuinst/menuinst-1-1-0.schema.json",
+  "menu_name": "GRIME-AI (__PKG_VERSION__)",
+  "menu_items": [
+    {
+      "name": "Launch GRIME-AI",
+      "description": "GRIME AI: Setting the stage in hydrology",
+      "command": ["grime-ai"],
+      "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": false,
+      "platforms": {
+        "linux": {},
+        "osx": {},
+        "win": {
+            "desktop": false
+            }
+      }
+    },
+    {
+      "name": "Launch GRIME-AI (with debugging)",
+      "description": "GRIME AI: Setting the stage in hydrology",
+      "command": ["grime-ai"],
+      "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": true,
+      "platforms": {
+        "linux": {},
+        "osx": {},
+        "win": {
+            "desktop": true
+            }
+      }
+    },
+    {
+      "name": "Launch SAGE",
+      "description": "Segmentation & Annotation for Geospatial Ecohydrology (SAGE)",
+      "command": ["sage"],
+      "icon": "{{ MENU_DIR }}/sage.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": false,
+      "platforms": {
+        "linux": {},
+        "osx": {},
+        "win": {
+            "desktop": true
+            }
+      }
+    }
+
+
+
+  ]
+}
