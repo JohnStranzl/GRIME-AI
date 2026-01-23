@@ -11,14 +11,20 @@ source:
   #git_rev: main
 
 build:
-  number: 5
+  number: 11
   noarch: python
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+    - mkdir -p "{{ PREFIX }}/Menu"
+    - sed "s/__PKG_VERSION__/${PKG_VERSION}/g" "${RECIPE_DIR}/grimeai-menu.json" > "${PREFIX}/Menu/${PKG_NAME}_menu.json"
+    - cp -v "src/GRIME_AI/resources/app_icons/GRIME-AI Logo.ico" ${PREFIX}/Menu/grimeai.ico
+    - cp -v "src/SAGE/resources/sage_logo.ico" ${PREFIX}/Menu/sage.ico
+
   run_exports:
     - {{ pin_subpackage(name|lower, max_pin="x") }}
   entry_points:
     - grime-ai = GRIME_AI.main:my_main
+    - sage = SAGE.main:main
 
 requirements:
   host:
@@ -65,18 +71,19 @@ requirements:
     - webdriver-manager 4.0.*
     - r-base 4.4.*
     - r-neonutilities 3.*
-    - grime-ai-post 1.0.0
+    - grime-ai-post 1.0.0.*
 
 test:
   commands:
     - grime-ai --help
+    - sage --help
 
 app:
   entry: grime-ai
   name: GRIME-AI
   display_name: "GRIME-AI"
   summary: "GRIME-AI is a tool that facilitates the entire data science workflow for ground-based time-lapse imagery, from data acquisition to model deployment."
-  icon: "../../src/GRIME_AI/SplashScreen Images/GRIME-AI Logo.jpg"
+  icon: "../../src/GRIME_AI/resources/splash_screens/GRIME-AI Logo.jpg"
   type: desk
   own_environment: True
 
