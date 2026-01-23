@@ -7,15 +7,13 @@ package:
 
 source:
     path: .
-  #git_url: https://github.com/acaprez/GRIME-AI.git
-  #git_rev: packaging/pip
 
 build:
-  number: 0
+  number: 2
   script:
     - copy %RECIPE_DIR%\download-sam2-checkpoints.bat %PREFIX%  # [win]
     - copy %RECIPE_DIR%\download-sam2-checkpoints.py %PREFIX%  # [win]
-    - cp -v ${RECIPE_DIR}/download-sam2-checkpoints.py ${PREFIX}/bin/download-sam2-checkpoints # [linux]
+    - cp -v ${RECIPE_DIR}/download-sam2-checkpoints.py ${PREFIX}/bin/download-sam2-checkpoints # [unix]
   run_exports:
     - {{ pin_subpackage(name|lower, max_pin="x") }}
 
@@ -28,7 +26,7 @@ requirements:
 test:
   commands:
     - if not exist %PREFIX%\download-sam2-checkpoints.bat exit 1 # [win]
-    - test -f ${PREFIX}/bin/download-sam2-checkpoints # [linux]
+    - test -f ${PREFIX}/bin/download-sam2-checkpoints # [unix]
 
 about:
   home: https://gaugecam.org/grime-ai-details/
