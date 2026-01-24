@@ -9,7 +9,7 @@ source:
     path: .
 
 build:
-  number: 2
+  number: 0
   script:
     - copy %RECIPE_DIR%\download-sam2-checkpoints.bat %PREFIX%  # [win]
     - copy %RECIPE_DIR%\download-sam2-checkpoints.py %PREFIX%  # [win]
