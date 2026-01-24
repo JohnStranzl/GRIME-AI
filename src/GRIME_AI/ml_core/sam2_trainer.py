@@ -1504,8 +1504,14 @@ class SAM2Trainer:
         msgBox = GRIME_AI_QMessageBox('Model Training Terminated', msg, GRIME_AI_QMessageBox.Close)
         msgBox.displayMsgBox()
 
-        if progressBar and progressBar.isVisible():
-            progressBar.close()
+        """Clean up progress bar."""
+        try:
+            if progressBar is not None and progressBar.isVisible():
+                progressBar.stop()
+                progressBar.hide()
+        except RuntimeError:
+            # Progress bar already deleted by Qt
+            pass
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
