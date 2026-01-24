@@ -36,8 +36,19 @@
       "activate": true,
       "terminal": false,
       "platforms": {
-        "linux": {},
-        "osx": {},
+        "win": {
+            "desktop": true
+            }
+      }
+    },
+    {
+      "name": "Download SAM2 checkpoint files",
+      "description": "Checkpoint files must be downloaded before using GRIME-AI",
+      "command": ["download-sam2-checkpoints","1"],
+      "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": true,
+      "platforms": {
         "win": {
             "desktop": true
             }

@@ -11,7 +11,7 @@ source:
   #git_rev: main
 
 build:
-  number: 11
+  number: 12
   noarch: python
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
@@ -71,7 +71,7 @@ requirements:
     - webdriver-manager 4.0.*
     - r-base 4.4.*
     - r-neonutilities 3.*
-    - grime-ai-post 1.0.0.*
+    - grime-ai-post 1.0.1.*
 
 test:
   commands:
