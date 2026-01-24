@@ -4,6 +4,7 @@
 
 
 IF "%~1"=="1" (
+    ECHO.
     ECHO This window will close automatically in a few seconds...
     TIMEOUT /T 10
     EXIT
