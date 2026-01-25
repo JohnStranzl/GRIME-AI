@@ -138,7 +138,8 @@ class GRIME_AI_CompositeSlices:
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def check_image_width(self, width, strip_width, option=1):
-        MAX_WIDTH = 65535
+        MAX_JPG_WIDTH = 65500
+        MAX_WIDTH = MAX_JPG_WIDTH - strip_width
 
         if width > MAX_WIDTH:
             num_images = width // MAX_WIDTH
