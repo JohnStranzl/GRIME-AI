@@ -42,8 +42,13 @@ class Canvas(QGraphicsView):
 
         # Eraser mode variables
         self._eraser_enabled = False
-        self._eraser_radius = 18  # tweakable
+        self._resize_anchor = None
+        self._min_eraser_radius = 5
+        self._max_eraser_radius = 150
         self._is_erasing = False
+        self._eraser_radius = 18
+        self._resizing_eraser = False
+        self.setFocusPolicy(Qt.StrongFocus)
 
         # Eraser preview circle (cursor)
         self._eraser_preview = QGraphicsEllipseItem()
@@ -92,6 +97,9 @@ class Canvas(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event):
         """Handle double-click events - MUST come before mousePressEvent logic"""
+        if self._eraser_enabled:
+            event.accept()
+            return
         # ----------------------------------------------------
         # Right-double-click: Delete mask (same as Ctrl+Right-click)
         # ----------------------------------------------------
@@ -107,6 +115,30 @@ class Canvas(QGraphicsView):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
+
+        # =========================================================
+        # ERASER MODE OWNS THE MOUSE (blocks ALL other behaviors)
+        # =========================================================
+        if self._eraser_enabled:
+            # If holding R (resizing mode), start anchor on left press
+            if self._resizing_eraser and event.button() == Qt.LeftButton:
+                self._is_erasing = False
+                self._resize_anchor = event.pos()
+                event.accept()
+                return
+
+            # Normal erase: left-click begins erasing
+            if event.button() == Qt.LeftButton:
+                self._is_erasing = True
+                x, y = self._map_to_image_coords(event.pos())
+                if self._is_in_bounds(x, y):
+                    self._update_eraser_preview(x, y)
+                    self.eraser_move.emit(x, y)
+
+            # IMPORTANT: swallow everything (blocks right-click negative points, mask delete, etc.)
+            event.accept()
+            return
+
         # ----------------------------------------------------
         # Ctrl+Right-click: Delete mask
         # ----------------------------------------------------
@@ -169,55 +201,44 @@ class Canvas(QGraphicsView):
         # Left-click: Eraser or Add positive point, draw polygon, or paint
         # ----------------------------------------------------
         if event.button() == Qt.LeftButton:
-            # If eraser is enabled, DO NOT do polygon/paint/point behavior
-            if self._eraser_enabled:
-                self._is_erasing = True
-                x, y = self._map_to_image_coords(event.pos())
+            pos = self.mapToScene(event.pos())
+            x = pos.x()
+            y = pos.y()
 
-                if self._is_in_bounds(x, y):
-                    self._update_eraser_preview(x, y)  # optional but nice
-                    self.eraser_move.emit(x, y)
-
-                event.accept()
+            if (
+                    self._orig_width is not None
+                    and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+            ):
+                super().mousePressEvent(event)
                 return
 
-            # Normal behavior
+            if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
+                self._drawing_polygon = True
+                self._polygon_points = [(x, y)]
+                self._init_polygon_path_item()
+                self._update_polygon_path()
+
+            elif self._segmentation_mode == "paint":
+                self._painting = True
+                self._paint_is_negative = False  # Left-click = positive
+                self._paint_points = [(x, y)]
+                self._on_left_click(x, y)  # Add as foreground point
+                self._init_paint_path_item()
+                self._update_paint_path()
             else:
-                pos = self.mapToScene(event.pos())
-                x = pos.x()
-                y = pos.y()
+                self._handle_click(QPointF(x, y), is_left=True)
 
-                if (
-                        self._orig_width is not None
-                        and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
-                ):
-                    super().mousePressEvent(event)
-                    return
-
-                else:
-                    if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
-                        self._drawing_polygon = True
-                        self._polygon_points = [(x, y)]
-                        self._init_polygon_path_item()
-                        self._update_polygon_path()
-
-                    elif self._segmentation_mode == "paint":
-                        self._painting = True
-                        self._paint_is_negative = False  # Left-click = positive
-                        self._paint_points = [(x, y)]
-                        self._on_left_click(x, y)  # Add as foreground point
-                        self._init_paint_path_item()
-                        self._update_paint_path()
-                    else:
-                        self._handle_click(QPointF(x, y), is_left=True)
+            return
 
         # ----------------------------------------------------
         # Middle-click: Pan
         # ----------------------------------------------------
-        elif event.button() == Qt.MiddleButton:
+        if event.button() == Qt.MiddleButton:
             self._panning = True
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+            return
 
         super().mousePressEvent(event)
 
@@ -292,23 +313,50 @@ class Canvas(QGraphicsView):
 
             self._update_paint_path()
 
-        # Show eraser preview following mouse
+        if self._eraser_enabled and self._resizing_eraser and self._resize_anchor:
+            dy = event.pos().y() - self._resize_anchor.y()
+            new_radius = self._eraser_radius + dy * 0.3
+
+            self._eraser_radius = int(
+                max(self._min_eraser_radius, min(self._max_eraser_radius, new_radius))
+            )
+            self._resize_anchor = event.pos()
+
+            # update preview
+            x, y = self._map_to_image_coords(event.pos())
+            if self._is_in_bounds(x, y):
+                self._update_eraser_preview(x, y)
+
+            event.accept()
+            return
+
+        # Eraser enabled: always show preview; erase only if dragging
         if self._eraser_enabled:
             x, y = self._map_to_image_coords(event.pos())
             if self._is_in_bounds(x, y):
                 self._update_eraser_preview(x, y)
 
-        # Erase points when it is enabled
-        if self._is_erasing and self._eraser_enabled:
-            x, y = self._map_to_image_coords(event.pos())
-            if self._is_in_bounds(x, y):
-                self.eraser_move.emit(x, y)
+                if self._is_erasing:  # <-- ONLY erase while mouse is held
+                    self.eraser_move.emit(x, y)
+
             event.accept()
             return
 
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        # Stop erasing on left release
+        if self._eraser_enabled and event.button() == Qt.LeftButton:
+            self._is_erasing = False
+            event.accept()
+            return
+
+        # If resizing (R held), stop "drag anchor" on release too
+        if self._eraser_enabled and self._resizing_eraser and event.button() == Qt.LeftButton:
+            self._resize_anchor = None
+            event.accept()
+            return
+
         if event.button() == Qt.MiddleButton:
             self._panning = False
             self._pan_start = None
@@ -340,11 +388,6 @@ class Canvas(QGraphicsView):
 
             # Keep paint_points for bounding box calculation
             # They'll be cleared when segmentation runs
-
-        # Releasing erasing
-        if self._is_erasing and event.button() == Qt.LeftButton:
-            self._is_erasing = False
-            return
 
         super().mouseReleaseEvent(event)
 
@@ -408,3 +451,23 @@ class Canvas(QGraphicsView):
             path.lineTo(x, y)
 
         self._paint_path_item.setPath(path)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_R and self._eraser_enabled:
+            self._resizing_eraser = True
+            self._resize_anchor = None
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_R:
+            self._resizing_eraser = False
+            self._resize_anchor = None
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def _emit_erase(self, event):
+        pos = self.mapToScene(event.pos())
+        self.eraser_move.emit(int(pos.x()), int(pos.y()))
