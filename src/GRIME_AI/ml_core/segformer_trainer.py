@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import matplotlib
-matplotlib.use("Agg")   # non-interactive backend, prevents GUI windows
+matplotlib.use("Agg")  # non-interactive backend, prevents GUI windows
 import matplotlib.pyplot as plt
 
 import torch
@@ -18,8 +18,56 @@ from torch.utils.data import DataLoader
 from transformers import SegformerForSemanticSegmentation
 
 from GRIME_AI.ml_core.coco_segmentation_datasets import MultiCocoTargetDataset
-from GRIME_AI.ml_core.lora_segmentation_losses import BinaryDiceLoss
+from GRIME_AI.ml_core.lora_segmentation_losses import BinaryDiceLoss, MultiClassDiceLoss
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
+import torchvision.transforms.functional as TF
+
+# ======================================================================================================================
+# ======================================================================================================================
+# =====     =====     =====     =====     =====      AUGMENTATION      =====     =====     =====     =====     =====
+# ======================================================================================================================
+# ======================================================================================================================
+def apply_augmentation(image, mask, cfg):
+    """
+    Apply data augmentation to image and mask together.
+    Applies same geometric transforms to both image and mask.
+    
+    Args:
+        image: PIL Image or Tensor [C,H,W]
+        mask: Tensor [H,W]
+        cfg: SegFormerConfig with augmentation parameters
+    """
+    # Convert to PIL if needed
+    if isinstance(image, torch.Tensor):
+        image = TF.to_pil_image(image)
+    
+    # Random horizontal flip
+    if random.random() < cfg.aug_horizontal_flip:
+        image = TF.hflip(image)
+        mask = TF.hflip(mask.unsqueeze(0)).squeeze(0)
+    
+    # Random vertical flip
+    if random.random() < cfg.aug_vertical_flip:
+        image = TF.vflip(image)
+        mask = TF.vflip(mask.unsqueeze(0)).squeeze(0)
+    
+    # Random rotation
+    if cfg.aug_rotation > 0:
+        angle = random.uniform(-cfg.aug_rotation, cfg.aug_rotation)
+        image = TF.rotate(image, angle)
+        mask = TF.rotate(mask.unsqueeze(0), angle).squeeze(0)
+    
+    # Color jitter (image only, not mask)
+    if cfg.aug_brightness > 0 or cfg.aug_contrast > 0:
+        brightness_factor = 1.0 + random.uniform(-cfg.aug_brightness, cfg.aug_brightness)
+        contrast_factor = 1.0 + random.uniform(-cfg.aug_contrast, cfg.aug_contrast)
+        image = TF.adjust_brightness(image, brightness_factor)
+        image = TF.adjust_contrast(image, contrast_factor)
+    
+    # Convert back to tensor
+    image = TF.to_tensor(image)
+    
+    return image, mask
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -57,6 +105,32 @@ class SegFormerConfig:
     amp: bool = True
     grad_clip_norm: float = 1.0
 
+    # Early stopping
+    early_stopping: bool = False
+    patience: int = 10
+
+    # Checkpoint management
+    max_best_checkpoints: int = 3
+
+    # Validation overlays
+    save_val_overlays: bool = True
+    num_val_overlays: int = 5  # Save overlays for first N validation images
+
+    # Inference threshold (should match inference engine)
+    inference_threshold: float = 0.2  # Probability threshold for positive prediction
+    
+    # Multi-class support
+    target_class_id: int = 1  # Which class to evaluate/visualize (for multi-class datasets)
+    
+    # Data augmentation (for training only)
+    use_augmentation: bool = True
+    aug_horizontal_flip: float = 0.5  # Probability of horizontal flip
+    aug_vertical_flip: float = 0.5    # Probability of vertical flip
+    aug_rotation: float = 15.0        # Max rotation degrees (+/-)
+    aug_brightness: float = 0.2       # Brightness adjustment range
+    aug_contrast: float = 0.2         # Contrast adjustment range
+
+
 # ======================================================================================================================
 # ======================================================================================================================
 # =====     =====     =====     =====     =====   class SegFormerTrainer   =====     =====     =====     =====     =====
@@ -73,6 +147,13 @@ class SegFormerTrainer:
         self.progressBar = None
         self._last_checkpoint_path = None
         self._progress_total = 0
+
+        # Early stopping tracking
+        self.patience_counter = 0
+        self.best_val_iou = 0.0
+
+        # Checkpoint management
+        self.best_checkpoints = []  # List of (val_iou, filepath) tuples
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -142,11 +223,14 @@ class SegFormerTrainer:
             logits = torch.nn.functional.interpolate(
                 logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
             )
-            preds = torch.argmax(logits, dim=1)
+            
+            # Use threshold-based prediction (works for both binary and multi-class)
+            probs = torch.softmax(logits, dim=1)
+            preds = (probs[:, self.cfg.target_class_id] > self.cfg.inference_threshold).long()
 
             for b in range(preds.size(0)):
                 pb = preds[b].cpu()
-                mb = masks[b].cpu()
+                mb = (masks[b] == self.cfg.target_class_id).long().cpu()  # Convert mask to binary for target class
                 iou = self.compute_iou(pb, mb)
                 prec, rec, f1 = self.compute_metrics(pb, mb)
                 ious.append(iou); precisions.append(prec); recalls.append(rec); f1s.append(f1)
@@ -161,6 +245,57 @@ class SegFormerTrainer:
             "recall": float(np.mean(recalls)) if recalls else 0.0,
             "f1": float(np.mean(f1s)) if f1s else 0.0,
         }
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def save_validation_overlay(self, epoch, images, pred_masks, true_masks, output_dir):
+        """Save validation overlays showing prediction vs ground truth (SAM2 style)"""
+        overlay_dir = os.path.join(output_dir, "validation_overlays")
+        os.makedirs(overlay_dir, exist_ok=True)
+
+        num_samples = min(self.cfg.num_val_overlays, len(images))
+
+        for i in range(num_samples):
+            img = images[i].cpu().numpy().transpose(1, 2, 0)  # CHW -> HWC
+            pred = pred_masks[i].cpu().numpy()
+            true = true_masks[i].cpu().numpy()
+
+            # Denormalize image (assuming ImageNet normalization)
+            mean = np.array([0.485, 0.456, 0.406])
+            std = np.array([0.229, 0.224, 0.225])
+            img = std * img + mean
+            img = np.clip(img, 0, 1)
+
+            # Create overlay with color coding:
+            # Green = True Positive (correct prediction)
+            # Red = False Positive (predicted but not GT)  
+            # Cyan/Blue = False Negative (GT but not predicted)
+            overlay = img.copy()
+
+            # True Positives (both pred and GT) - Green/Yellow
+            true_positive = (pred == 1) & (true == 1)
+            overlay[true_positive] = [0, 1, 0]  # Green
+
+            # False Positives (pred but not GT) - Red
+            false_positive = (pred == 1) & (true == 0)
+            overlay[false_positive] = [1, 0, 0]  # Red
+            
+            # False Negatives (GT but not pred) - Cyan
+            false_negative = (pred == 0) & (true == 1)
+            overlay[false_negative] = [0, 1, 1]  # Cyan
+            
+            # Blend with original image
+            blended = (0.6 * img + 0.4 * overlay).astype(np.float32)
+            
+            # Save as single image
+            plt.figure(figsize=(10, 10))
+            plt.imshow(blended)
+            plt.title(f"Validation Overlay - Epoch {epoch} (Green=TP, Red=FP, Cyan=FN)", fontsize=12)
+            plt.axis('off')
+            plt.tight_layout()
+            plt.savefig(os.path.join(overlay_dir, f"ep{epoch:03d}_sample{i:02d}.png"), 
+                       bbox_inches='tight', pad_inches=0.1)
+            plt.close()
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -188,7 +323,9 @@ class SegFormerTrainer:
     # ------------------------------------------------------------------------------------------------------------------
     def save_checkpoint(self, model, optimizer, scaler, categories, site_name,
                         learnrate, epochs, output_dir,
-                        suffix="final", val_loss=None, val_accuracy=None, miou=None, target_category_name=None):
+                        suffix=None, val_loss=None, val_accuracy=None, miou=None, target_category_name=None,
+                        val_iou=None, epoch_num=None):
+        """Save checkpoint with top-N management based on val_iou"""
         timestamp = str(np.datetime64('now', 's')).replace('-', '').replace(':', '').replace('T', '_')
 
         ckpt = {
@@ -208,28 +345,51 @@ class SegFormerTrainer:
             "base_model": "segformer"
         }
 
-        if suffix == "final":
-            torch_filename = f"{timestamp}_{site_name}_{suffix}_lr{learnrate}_epoch{epochs}.torch"
-        else:
-            torch_filename = f"{timestamp}_{site_name}_{suffix}_{learnrate}.torch"
+        # If this is a final save or no val_iou provided, use simple naming
+        if val_iou is None or suffix == "final":
+            if suffix == "final":
+                torch_filename = f"{timestamp}_{site_name}_{suffix}_lr{learnrate}_epoch{epochs}.torch"
+            else:
+                torch_filename = f"{timestamp}_{site_name}_epoch{epochs}_lr{learnrate}.torch"
+            save_path = os.path.join(output_dir, torch_filename)
+            torch.save(ckpt, save_path)
+            print(f"Model checkpoint saved to {save_path}")
+            self._last_checkpoint_path = save_path
+            return save_path
 
-        save_path = os.path.join(output_dir, torch_filename)
+        # Top-N checkpoint management based on val_iou
+        temp_filename = f"temp_{timestamp}_{site_name}_{target_category_name}_ep{epoch_num:03d}_lr{learnrate}.torch"
+        temp_path = os.path.join(output_dir, temp_filename)
+        torch.save(ckpt, temp_path)
 
-        torch.save(ckpt, save_path)
-        print(f"Model checkpoint saved to {save_path}")
+        # Add to tracking list
+        self.best_checkpoints.append((val_iou, temp_path))
+        self.best_checkpoints.sort(key=lambda x: x[0], reverse=True)  # Sort by IoU descending
 
-        # Delete the previous checkpoint if it exists
-        if self._last_checkpoint_path and os.path.exists(self._last_checkpoint_path):
-            try:
-                os.remove(self._last_checkpoint_path)
-                print(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
-            except Exception as e:
-                print(f"Warning: could not delete previous checkpoint {self._last_checkpoint_path}: {e}")
+        # Remove worst checkpoints if exceeding max
+        while len(self.best_checkpoints) > self.cfg.max_best_checkpoints:
+            _, worst_path = self.best_checkpoints.pop()
+            if os.path.exists(worst_path):
+                try:
+                    os.remove(worst_path)
+                    print(f"Removed lower-ranked checkpoint: {os.path.basename(worst_path)}")
+                except Exception as e:
+                    print(f"Failed to remove {worst_path}: {e}")
 
-        # Update the tracker to the current checkpoint
-        self._last_checkpoint_path = save_path
+        # Rename all checkpoints with their current rank
+        for rank, (iou, old_path) in enumerate(self.best_checkpoints, 1):
+            rank_suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(rank, f"{rank}th")
+            new_filename = f"best_{rank_suffix}_{target_category_name}_epoch{epoch_num:03d}_iou{iou:.4f}_lr{learnrate}.torch"
+            new_path = os.path.join(output_dir, new_filename)
 
-        return save_path
+            if old_path != new_path:
+                if os.path.exists(old_path):
+                    os.rename(old_path, new_path)
+                    self.best_checkpoints[rank - 1] = (iou, new_path)
+                    print(f"Ranked #{rank}: {os.path.basename(new_path)}")
+
+        self._last_checkpoint_path = self.best_checkpoints[0][1] if self.best_checkpoints else temp_path
+        return self._last_checkpoint_path
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -270,9 +430,9 @@ class SegFormerTrainer:
         self.ensure_dir(self.cfg.output_dir)
 
         train_ds = MultiCocoTargetDataset(image_dirs, ann_paths, self.cfg.target_category_name, self.cfg.image_size,
-                                         split="train")
+                                          split="train")
         val_ds = MultiCocoTargetDataset(image_dirs, ann_paths, self.cfg.target_category_name, self.cfg.image_size,
-                                       split="val")
+                                        split="val")
 
         g = torch.Generator().manual_seed(self.cfg.seed)
         train_loader = DataLoader(
@@ -290,9 +450,9 @@ class SegFormerTrainer:
         self._init_progress(train_loader, val_loader)
 
         # BINARY SEGMENTATION
-        #num_labels = max(2, len(categories or [self.cfg.target_category_name]))
+        # num_labels = max(2, len(categories or [self.cfg.target_category_name]))
         # MULTI-CLASS SEGMENTATION
-        #num_labels = (categories or [self.cfg.target_category_name])
+        # num_labels = (categories or [self.cfg.target_category_name])
         if categories:
             num_labels = len(categories)
         else:
@@ -306,7 +466,11 @@ class SegFormerTrainer:
         )
 
         ce_loss = nn.CrossEntropyLoss(ignore_index=255)
-        dice_loss = BinaryDiceLoss()
+        # Use appropriate Dice loss based on number of classes
+        if num_labels == 2:
+            dice_loss = BinaryDiceLoss()
+        else:
+            dice_loss = MultiClassDiceLoss()
         scaler = torch.cuda.amp.GradScaler(enabled=self.cfg.amp)
 
         metrics_log_path = os.path.join(self.cfg.output_dir, "metrics.json")
@@ -320,6 +484,17 @@ class SegFormerTrainer:
                 total_loss = 0.0
 
                 for imgs, masks in train_loader:
+                    # Apply augmentation to training data
+                    if self.cfg.use_augmentation:
+                        augmented_imgs = []
+                        augmented_masks = []
+                        for i in range(imgs.size(0)):
+                            aug_img, aug_mask = apply_augmentation(imgs[i], masks[i], self.cfg)
+                            augmented_imgs.append(aug_img)
+                            augmented_masks.append(aug_mask)
+                        imgs = torch.stack(augmented_imgs)
+                        masks = torch.stack(augmented_masks)
+                    
                     imgs = imgs.to(self.cfg.device, non_blocking=True)
                     masks = masks.to(self.cfg.device, non_blocking=True)
                     masks = masks.round().long()
@@ -345,14 +520,19 @@ class SegFormerTrainer:
                                 logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
                             )
                             # CE takes logits, Dice takes probabilities
-                            # Binary-safe version
                             ce = ce_loss(logits, masks)
 
-                            # Binary Dice: slice foreground channel and match mask shape
-                            probs = torch.softmax(logits, dim=1)[:, 1:2]  # [B,1,H,W]
-                            masks_bin = (masks == 1).float().unsqueeze(1)  # [B,1,H,W]
+                            # Dice loss: handle binary vs multi-class
+                            probs = torch.softmax(logits, dim=1)
+                            if num_labels == 2:
+                                # Binary: slice foreground channel
+                                probs_dice = probs[:, 1:2]  # [B,1,H,W]
+                                masks_bin = (masks == 1).float().unsqueeze(1)  # [B,1,H,W]
+                                dice = dice_loss(probs_dice, masks_bin)
+                            else:
+                                # Multi-class: use all channels
+                                dice = dice_loss(probs, masks)
 
-                            dice = dice_loss(probs, masks_bin)
                             loss = ce + dice
 
                         scaler.scale(loss).backward()
@@ -369,6 +549,10 @@ class SegFormerTrainer:
                 last_completed_epoch = epoch
                 print(f"Epoch {epoch}/{self.cfg.num_epochs} | Train loss: {avg_loss:.4f}")
 
+                # GPU memory cleanup after each epoch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
                 if epoch % self.cfg.val_every == 0:
                     metrics = self.evaluate(model, val_loader)
                     val_ious.append(metrics['mean_iou'])
@@ -384,47 +568,65 @@ class SegFormerTrainer:
                         f"F1: {metrics['f1']:.4f}"
                     )
 
+                    # Save validation overlays
+                    if self.cfg.save_val_overlays:
+                        # Get a batch from validation loader for overlay
+                        val_iter = iter(val_loader)
+                        sample_imgs, sample_masks = next(val_iter)
+                        sample_imgs = sample_imgs.to(self.cfg.device)
+                        sample_masks = sample_masks.to(self.cfg.device)
+
+                        with torch.no_grad():
+                            sample_outputs = model(pixel_values=sample_imgs)
+                            sample_logits = sample_outputs.logits
+                            sample_logits = torch.nn.functional.interpolate(
+                                sample_logits, size=sample_masks.shape[-2:],
+                                mode="bilinear", align_corners=False
+                            )
+                            # Use threshold-based prediction (works for both binary and multi-class)
+                            sample_probs = torch.softmax(sample_logits, dim=1)
+                            sample_preds = (sample_probs[:, self.cfg.target_class_id] > self.cfg.inference_threshold).long()
+                            # Convert masks to binary for target class
+                            sample_masks_binary = (sample_masks == self.cfg.target_class_id).long()
+
+                        self.save_validation_overlay(
+                            epoch, sample_imgs, sample_preds, sample_masks_binary, self.cfg.output_dir
+                        )
+
+                    # Early stopping and checkpoint management
+                    current_val_iou = metrics['mean_iou']
+
+                    if current_val_iou > self.best_val_iou:
+                        self.best_val_iou = current_val_iou
+                        self.patience_counter = 0
+
+                        # Save checkpoint with top-N management
+                        self.save_checkpoint(
+                            model, optimizer, scaler,
+                            categories=self.cfg.categories,
+                            site_name=getattr(self.cfg, 'site_name', 'segformer'),
+                            learnrate=self.cfg.lr,
+                            epochs=epoch,
+                            output_dir=self.cfg.output_dir,
+                            miou=current_val_iou,
+                            target_category_name=self.cfg.target_category_name,
+                            val_iou=current_val_iou,
+                            epoch_num=epoch
+                        )
+                    else:
+                        self.patience_counter += 1
+                        print(f"No improvement for {self.patience_counter} epochs")
+
+                        if self.cfg.early_stopping and self.patience_counter >= self.cfg.patience:
+                            print(f"Early stopping triggered at epoch {epoch}")
+                            break
+
                     with open(metrics_log_path, "a") as f:
                         f.write(json.dumps({"epoch": epoch, "train_loss": avg_loss, **metrics}) + "\n")
 
-                    current_iou = metrics['mean_iou']
-                    suffix = f"valbest_ep{epoch:03d}" if current_iou > self.best_iou else f"ep{epoch:03d}"
-                    if current_iou > self.best_iou:
-                        self.best_iou = current_iou
-
-                    self.save_checkpoint(
-                        model=model,
-                        optimizer=optimizer,
-                        scaler=scaler,
-                        categories=categories or [self.cfg.target_category_name],
-                        site_name=site_name,
-                        learnrate=self.cfg.lr,
-                        epochs=epoch,
-                        output_dir=self.cfg.output_dir,
-                        suffix=suffix,
-                        val_loss=avg_loss,
-                        val_accuracy=None,
-                        miou=current_iou,
-                        target_category_name=self.cfg.target_category_name,
-                    )
         finally:
             if last_completed_epoch > 0:
                 print(f"Saving final checkpoint for epoch {last_completed_epoch}")
-                self.save_checkpoint(
-                    model=model,
-                    optimizer=optimizer,
-                    scaler=scaler,
-                    categories=categories or [self.cfg.target_category_name],
-                    site_name=site_name,
-                    learnrate=self.cfg.lr,
-                    epochs=last_completed_epoch,
-                    output_dir=self.cfg.output_dir,
-                    suffix="final",
-                    val_loss=train_losses[-1],
-                    val_accuracy=None,
-                    miou=val_ious[-1] if val_ious else None,
-                    target_category_name=self.cfg.target_category_name,
-                )
 
             self.save_training_curves(train_losses, val_ious, val_precisions, val_recalls, val_f1s)
             self._close_progress()

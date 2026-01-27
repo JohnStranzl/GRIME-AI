@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>SegmentImagesTab</class>
+ <class>tabSegmentImages</class>
  <widget class="QWidget" name="tabSegmentImages">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>661</width>
+    <height>483</height>
+   </rect>
+  </property>
   <property name="windowTitle">
    <string>Segment Images</string>
   </property>
@@ -40,6 +48,9 @@
              </item>
              <item>
               <widget class="QRadioButton" name="radioButton_segment_model_segformer">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
                <property name="text">
                 <string>Segformer</string>
                </property>
@@ -102,7 +113,6 @@
        </layout>
       </widget>
      </item>
-
      <item>
       <widget class="QGroupBox" name="groupBox_SelectModel">
        <property name="title">
@@ -126,7 +136,6 @@
        </layout>
       </widget>
      </item>
-
      <item>
       <widget class="QGroupBox" name="groupBox_Select_Images_Folder">
        <property name="title">
@@ -150,7 +159,6 @@
        </layout>
       </widget>
      </item>
-
      <item>
       <layout class="QHBoxLayout" name="horizontalLayoutSegmentButton">
        <item>
@@ -202,7 +210,6 @@
      </item>
     </layout>
    </item>
-
    <item>
     <widget class="QGroupBox" name="groupBox_labels">
      <property name="title">
@@ -224,14 +231,14 @@
       </item>
       <item>
        <widget class="QLabel" name="label_modelMetadata">
-        <property name="text">
-         <string>Model Metadata</string>
-        </property>
         <property name="font">
          <font>
           <weight>75</weight>
           <bold>true</bold>
          </font>
+        </property>
+        <property name="text">
+         <string>Model Metadata</string>
         </property>
        </widget>
       </item>
@@ -243,11 +250,11 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="selectionMode">
-         <enum>QAbstractItemView::NoSelection</enum>
-        </property>
         <property name="alternatingRowColors">
          <bool>true</bool>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::NoSelection</enum>
         </property>
        </widget>
       </item>
