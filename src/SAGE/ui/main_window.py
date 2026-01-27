@@ -58,7 +58,6 @@ class MainWindow(QMainWindow):
         self.seed_mask_path = None  # path to .tif/.tiff mask
         self.seed_mask_bool = None  # cached boolean mask resized to current image
         self.auto_seed_enabled = True  # auto-apply when each image loads
-        self.skip_seed_for_images = set()  # stores full image paths where seeding is skipped
         self.eraser_radius = 18
 
         central = QWidget()
@@ -80,9 +79,6 @@ class MainWindow(QMainWindow):
         self.folder_browse_btn.setFixedHeight(ROW_HEIGHT)
         self.folder_browse_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.folder_browse_btn.clicked.connect(self._browse_folder)
-        # h = self.folder_browse_btn.sizeHint().height()
-        # self.folder_edit.setFixedHeight(h)
-        # self.folder_browse_btn.setFixedHeight(h)
         folder_row.addWidget(self.folder_edit, stretch=1)
         folder_row.addWidget(self.folder_browse_btn)
         main_layout.addLayout(folder_row)
@@ -115,11 +111,11 @@ class MainWindow(QMainWindow):
         # Sidebar requests COCO save → MainWindow handles it
         self.sidebar.save_all_coco_requested.connect(self.save_all_coco)
 
-        # New Sidebar
+        # Sidebar seed/prompt control
         self.sidebar.load_seed_mask_requested.connect(self._browse_seed_mask)
+        self.sidebar.clear_seed_mask_requested.connect(self._clear_seed_mask)
         self.sidebar.seed_points_now_requested.connect(self._seed_points_from_mask_current_image)
         self.sidebar.auto_seed_toggled.connect(self._on_auto_seed_toggled)
-        self.sidebar.skip_seed_this_image_toggled.connect(self._on_skip_seed_toggled)
         self.sidebar.eraser_toggled.connect(self._on_eraser_toggled)
 
         # New: segmentation mode + sampling mode signals
@@ -146,16 +142,6 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _on_auto_seed_toggled(self, on: bool):
         self.auto_seed_enabled = on
-
-    # ------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------
-    def _on_skip_seed_toggled(self, on: bool):
-        # store per-image skip flag
-        if not hasattr(self, "skip_seed_for_image"):
-            self.skip_seed_for_image = {}
-        if self.current_image_path:
-            self.skip_seed_for_image[self.current_image_path] = on
 
     # ------------------------------------------------------------------------
     #
@@ -253,7 +239,7 @@ class MainWindow(QMainWindow):
             return
 
         self.seed_mask_path = path
-        # self.seed_mask_edit.setText(path)
+        self.sidebar.set_seed_mask_status(self.seed_mask_path)
 
         # Load once (resized when image is loaded)
         self.seed_mask_bool = None  # reset cache
@@ -349,42 +335,26 @@ class MainWindow(QMainWindow):
 
         return roi
 
-    def _toggle_auto_seed(self):
-        self.auto_seed_enabled = self.seed_auto_checkbox.isChecked()
-        self.seed_auto_checkbox.setText("Auto-Seed: ON" if self.auto_seed_enabled else "Auto-Seed: OFF")
+    def _clear_seed_mask(self):
+        # Reset seed mask state
+        self.seed_mask_path = None
+        self.seed_mask_bool = None
 
-    def _toggle_skip_seed_for_current_image(self):
-        if not self.current_image_path:
-            return
+        # Clear any UI text field if you still have it (safe even if removed)
+        if hasattr(self, "seed_mask_edit"):
+            self.seed_mask_edit.setText("")
 
-        if self.current_image_path in self.skip_seed_for_images:
-            self.skip_seed_for_images.remove(self.current_image_path)
-            QMessageBox.information(self, "Seed Enabled", "Seed mask WILL be used for this image.")
-        else:
-            self.skip_seed_for_images.add(self.current_image_path)
-            QMessageBox.information(self, "Seed Skipped", "Seed mask will NOT be used for this image.")
-
-        # Update button text so it's obvious
-        self._update_seed_skip_button_text()
-
-    def _update_seed_skip_button_text(self):
-        if not self.current_image_path:
-            self.seed_skip_btn.setText("Skip Seed (This Image)")
-            return
-
-        if self.current_image_path in self.skip_seed_for_images:
-            self.seed_skip_btn.setText("Use Seed (This Image)")
-        else:
-            self.seed_skip_btn.setText("Skip Seed (This Image)")
+        # Update sidebar status line
+        self.sidebar.set_seed_mask_status(None)
 
     # ---------------------------------------------------------
     # Seed points from input mask
     # ---------------------------------------------------------
     def _seed_points_from_mask_current_image(self):
         # If user manually requests seeding, ensure this image is not skipped
-        if self.current_image_path in self.skip_seed_for_images:
-            self.skip_seed_for_images.remove(self.current_image_path)
-            self._update_seed_skip_button_text()
+        # if self.current_image_path in self.skip_seed_for_images:
+        #     self.skip_seed_for_images.remove(self.current_image_path)
+            # self._update_seed_skip_button_text()
 
         if self.controller is None or self.image_np is None:
             return
@@ -1068,18 +1038,13 @@ class MainWindow(QMainWindow):
             self.controller.masks = copy.deepcopy(self.mask_store[full_path])
 
         # Auto-seed points from seed mask if available
-        skip = False
-        if hasattr(self, "skip_seed_for_image") and self.current_image_path:
-            skip = self.skip_seed_for_image.get(self.current_image_path, False)
-
-        if self.seed_mask_path and self.auto_seed_enabled and not skip:
+        if self.seed_mask_path and self.auto_seed_enabled:
             self._seed_points_from_mask_current_image()
 
         # update sidebar checkbox state to reflect this image
         self.sidebar.set_seed_controls_state(
             auto_on=self.auto_seed_enabled,
-            skip_on=skip,
-            eraser_on=self.canvas._eraser_enabled
+            # eraser_on=self.canvas._eraser_enabled
         )
 
         # Update sidebar controller reference

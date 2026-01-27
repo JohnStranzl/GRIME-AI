@@ -21,11 +21,10 @@ from PyQt5.QtCore import Qt, pyqtSignal
 class Sidebar(QWidget):
     image_selected = pyqtSignal(str)
     save_all_coco_requested = pyqtSignal()
-    # NEW
     load_seed_mask_requested = pyqtSignal()
+    clear_seed_mask_requested = pyqtSignal()
     seed_points_now_requested = pyqtSignal()
     auto_seed_toggled = pyqtSignal(bool)
-    skip_seed_this_image_toggled = pyqtSignal(bool)
     eraser_toggled = pyqtSignal(bool)
     segmentation_mode_changed = pyqtSignal(str)  # "points", "polygon", "paint", or "manual_polygon"
     polygon_sampling_changed = pyqtSignal(str)  # "dense", "random", "poisson"
@@ -64,10 +63,27 @@ class Sidebar(QWidget):
         seed_layout.setContentsMargins(8, 10, 8, 8)
         seed_layout.setSpacing(6)
 
+        # Row: Load + Clear
+        row = QHBoxLayout()
+
         self.load_seed_btn = QPushButton("Load Seed Mask")
         self.load_seed_btn.clicked.connect(self.load_seed_mask_requested.emit)
+        row.addWidget(self.load_seed_btn)
 
-        self.seed_now_btn = QPushButton("Seed Points Now")
+        self.clear_seed_btn = QPushButton("Unload")
+        self.clear_seed_btn.setEnabled(False)  # disabled until something is loaded
+        self.clear_seed_btn.clicked.connect(self.clear_seed_mask_requested.emit)
+        row.addWidget(self.clear_seed_btn)
+
+        seed_layout.addLayout(row)
+
+        # status line (the label you added earlier)
+        self.seed_mask_status = QLabel("")
+        self.seed_mask_status.setStyleSheet("color: gray; font-size: 24px;")
+        self.seed_mask_status.setVisible(False)
+        seed_layout.addWidget(self.seed_mask_status)
+
+        self.seed_now_btn = QPushButton("Apply Seeds")
         self.seed_now_btn.clicked.connect(self.seed_points_now_requested.emit)
 
         # Make buttons fully visible + consistent height
@@ -77,23 +93,13 @@ class Sidebar(QWidget):
             b.setMinimumWidth(0)
             b.setContentsMargins(6, 4, 6, 4)
 
-        seed_layout.addWidget(self.load_seed_btn)
         seed_layout.addWidget(self.seed_now_btn)
 
         self.auto_seed_checkbox = QCheckBox("Auto-Seed: ON")
         self.auto_seed_checkbox.setChecked(True)
+        self.seed_now_btn.setEnabled(False)
         self.auto_seed_checkbox.toggled.connect(self._on_auto_seed_changed)
         seed_layout.addWidget(self.auto_seed_checkbox)
-
-        self.skip_seed_checkbox = QCheckBox("Skip Seed (This Image)")
-        self.skip_seed_checkbox.setChecked(False)
-        self.skip_seed_checkbox.toggled.connect(self.skip_seed_this_image_toggled.emit)
-        seed_layout.addWidget(self.skip_seed_checkbox)
-
-        self.eraser_checkbox = QCheckBox("Eraser: OFF")
-        self.eraser_checkbox.setChecked(False)
-        self.eraser_checkbox.toggled.connect(self._on_eraser_changed)
-        seed_layout.addWidget(self.eraser_checkbox)
 
         # Prevent this groupbox from being squashed too much
         seed_groupbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
@@ -120,8 +126,8 @@ class Sidebar(QWidget):
         top_row = QHBoxLayout()
 
         self.erase_btn = QPushButton("Erase")
-        # Make it toggle the checkbox, so UI stays consistent
-        self.erase_btn.clicked.connect(lambda: self.eraser_checkbox.setChecked(not self.eraser_checkbox.isChecked()))
+        self.erase_btn.setCheckable(True)
+        self.erase_btn.clicked.connect(self._on_erase_clicked)
         top_row.addWidget(self.erase_btn)
 
         self.clear_points_btn = QPushButton("Clear Points")
@@ -232,6 +238,8 @@ class Sidebar(QWidget):
 
         self.setLayout(layout)
 
+    def _on_erase_clicked(self, checked: bool):
+        self.eraser_toggled.emit(checked)
     # ----------------------------------------------------
     def update_segment_button_state(self):
         """Enable/disable segment button based on whether points exist"""
@@ -323,26 +331,27 @@ class Sidebar(QWidget):
     # ---------------- Seed/eraser UI helpers ----------------
     def _on_auto_seed_changed(self, on: bool):
         self.auto_seed_checkbox.setText("Auto-Seed: ON" if on else "Auto-Seed: OFF")
+        self.seed_now_btn.setEnabled(not on)
         self.auto_seed_toggled.emit(on)
 
-    def _on_eraser_changed(self, on: bool):
-        self.eraser_checkbox.setText("Eraser: ON" if on else "Eraser: OFF")
-        self.eraser_toggled.emit(on)
-
-    def set_seed_controls_state(self, auto_on: bool, skip_on: bool, eraser_on: bool):
+    def set_seed_controls_state(self, auto_on: bool):
         """Called by MainWindow when an image changes."""
         self.auto_seed_checkbox.blockSignals(True)
-        self.skip_seed_checkbox.blockSignals(True)
-        self.eraser_checkbox.blockSignals(True)
 
         self.auto_seed_checkbox.setChecked(auto_on)
         self.auto_seed_checkbox.setText("Auto-Seed: ON" if auto_on else "Auto-Seed: OFF")
 
-        self.skip_seed_checkbox.setChecked(skip_on)
-
-        self.eraser_checkbox.setChecked(eraser_on)
-        self.eraser_checkbox.setText("Eraser: ON" if eraser_on else "Eraser: OFF")
-
         self.auto_seed_checkbox.blockSignals(False)
-        self.skip_seed_checkbox.blockSignals(False)
-        self.eraser_checkbox.blockSignals(False)
+
+    # ------------- Mask path showing UI helpers -------------
+    def set_seed_mask_status(self, mask_path):
+        if mask_path:
+            import os
+            name = os.path.basename(mask_path)
+            self.seed_mask_status.setText(f"Loaded: {name}")
+            self.seed_mask_status.setVisible(True)
+            self.clear_seed_btn.setEnabled(True)
+        else:
+            self.seed_mask_status.setText("")
+            self.seed_mask_status.setVisible(False)
+            self.clear_seed_btn.setEnabled(False)
