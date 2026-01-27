@@ -62,15 +62,36 @@ class SegFormerInferenceEngine:
         if not self.SEGFORMER_MODEL or not os.path.exists(self.SEGFORMER_MODEL):
             raise FileNotFoundError(f"SegFormer model checkpoint not found: {self.SEGFORMER_MODEL}")
 
+        # Load checkpoint first to get num_classes
+        ckpt = torch.load(self.SEGFORMER_MODEL, map_location="cpu", weights_only=False)
+
+        # Get num_classes - explicit None checks
+        num_classes = ckpt.get("num_classes")
+        if num_classes is None:
+            num_classes = ckpt.get("num_labels")
+        if num_classes is None:
+            num_classes = 2
+        
+        print(f"=== Inference Engine Debug ===")
+        print(f"Checkpoint path: {self.SEGFORMER_MODEL}")
+        print(f"num_classes from ckpt: {ckpt.get('num_classes')} (type: {type(ckpt.get('num_classes'))})")
+        print(f"num_labels from ckpt: {ckpt.get('num_labels')}")
+        print(f"FINAL num_classes: {num_classes} (type: {type(num_classes)})")
+        print(f"=============================")
+
+        # Build base model with correct num_classes
         base = SegformerForSemanticSegmentation.from_pretrained(
             "nvidia/segformer-b0-finetuned-cityscapes-1024-1024",
             ignore_mismatched_sizes=True
         )
-        base.config.num_labels = 2
+        base.config.num_labels = int(num_classes)  # Ensure it's an integer
         base.decode_head.classifier = torch.nn.Conv2d(
-            base.decode_head.classifier.in_channels, 2, kernel_size=1
+            base.decode_head.classifier.in_channels, int(num_classes), kernel_size=1
         )
 
+        print(f"Built classifier with {base.decode_head.classifier.out_channels} output channels")
+
+        # Apply LoRA wrapper
         lora_cfg = LoraConfig(
             r=16,
             lora_alpha=32,
@@ -81,8 +102,12 @@ class SegFormerInferenceEngine:
         )
         model = get_peft_model(base, lora_cfg)
 
-        ckpt = torch.load(self.SEGFORMER_MODEL, map_location="cpu", weights_only=False)
+        print(f"Applied LoRA wrapper")
+
+        # Load state dict
         model.load_state_dict(ckpt["model_state_dict"], strict=False)
+        print(f"Successfully loaded checkpoint")
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return model.to(device).eval()
 
@@ -109,8 +134,13 @@ class SegFormerInferenceEngine:
         )
 
         probs = torch.softmax(logits, dim=1)
-        class_prob_resized = probs[0, self.class_index].cpu().numpy()   # model size probability map
-        pred_resized = (class_prob_resized > self.threshold).astype(np.uint8)
+        
+        # For multi-class models: use argmax to find class with highest probability
+        preds_multiclass = torch.argmax(probs, dim=1)  # [H, W] with class indices
+        pred_resized = (preds_multiclass[0] == self.class_index).cpu().numpy().astype(np.uint8)
+        
+        # Keep probability map for visualization
+        class_prob_resized = probs[0, self.class_index].cpu().numpy()
 
         # --- Map predictions back to original image size ---
         pred = cv2.resize(pred_resized, (w, h), interpolation=cv2.INTER_NEAREST)
