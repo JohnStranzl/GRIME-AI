@@ -20,7 +20,12 @@ from hydra.utils import instantiate
 
 import torch
 from torch import nn
-from torch.amp import autocast
+try:
+    from torch.amp import autocast
+except ImportError:
+    from torch.cuda.amp import autocast  # FALLBACK FOR OLDER PYTORCH
+
+
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../sam2'))
@@ -832,13 +837,6 @@ class SAM2Trainer:
             optimizer.zero_grad()
 
             # Pick dtype depending on device
-            if use_amp and device.type == "cuda":
-                # MAKE PORTABLE ACROSS GPU AND CPU MACHINES
-                try:
-                    from torch.amp import autocast
-                except ImportError:
-                    from torch.cuda.amp import autocast  # FALLBACK FOR OLDER PYTORCH
-
             if device.type == "cuda":
                 autocast_dtype = torch.float16  # or torch.bfloat16 if you prefer
             else:  # CPU
