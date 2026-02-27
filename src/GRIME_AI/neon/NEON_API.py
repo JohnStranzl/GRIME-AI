@@ -377,8 +377,8 @@ class  NEON_API:
             os.makedirs(self.dest)
 
         # JES OVERRIDE DOWNLOAD PATH DUE TO WINDOWS FILE PATH LENGTH LIMITATION.
-        downloadsFilePath = JsonEditor().getValue("Scratchpad_folder")
-        print("Scratchpad_folder override:", downloadsFilePath)
+        scratchPath = os.path.normpath(JsonEditor().getValue("Scratchpad_folder"))
+        print("Scratchpad_folder override:", scratchPath)
 
         strProduct = 'DP1.' + strProduct.split('.')[1] + '.001'
         print("Normalized strProduct:", strProduct)
@@ -389,17 +389,14 @@ class  NEON_API:
         progressBar.setValue(20)
 
         try:
-            downloadsFilePath = os.path.normpath(downloadsFilePath)
-            print("Normalized downloadsFilePath:", downloadsFilePath)
-
-            # Download zip files for the product
+            # Download zip files for the product into Scratchpad
             result = zips_by_product(
-                dpid=strProduct,  # e.g., "DP1.10003.001"
-                site=SiteCode,  # list of site codes, e.g., ["HARV"]
-                savepath=downloadsFilePath,  # local folder
-                startdate=strStartDate,  # "YYYY-MM"
-                enddate=strEndDate,  # "YYYY-MM"
-                package="basic",  # or "expanded"
+                dpid=strProduct,
+                site=SiteCode,
+                savepath=scratchPath,
+                startdate=strStartDate,
+                enddate=strEndDate,
+                package="basic",
                 include_provisional=True,
                 check_size=False
             )
@@ -407,21 +404,18 @@ class  NEON_API:
 
             progressBar.setValue(40)
 
-            # PATH WHERE THE zipsByProduct PLACED THE DOWNLOADED ZIP FILES
-            myFolderPath = os.path.join(downloadsFilePath, ('filesToStack' + strProduct.split('.')[1].zfill(5)))
-            myFolderPath = os.path.normpath(myFolderPath)
+            # PATH WHERE zipsByProduct PLACED THE DOWNLOADED ZIP FILES (Scratchpad)
+            myFolderPath = os.path.join(scratchPath, 'filesToStack' + strProduct.split('.')[1].zfill(5))
             print("myFolderPath:", myFolderPath, "exists?", os.path.exists(myFolderPath))
 
-            # PATH WHERE WE WANT TO PLACE THE STACKED FILES (i.e., CONCATENATED MONTHLY DATA FILES) WILL BE STORED
-            mySavePath = os.path.normpath(downloadsFilePath + '\\' + foldername)
+            # TEMPORARY STACKING PATH IN SCRATCHPAD
+            mySavePath = os.path.join(scratchPath, foldername)
             print("mySavePath:", mySavePath)
 
             if os.path.exists(mySavePath):
                 print("Removing existing mySavePath:", mySavePath)
                 shutil.rmtree(mySavePath)
 
-            # USE AS MANY CORES ARE AVAILABLE FOR STACKING THE DATA (i.e., UNZIP ALL THE INDIVIDUAL MONTHS DOWNLOADED ZIP
-            # FILES AND CONCATENATE INTO ONE CSV FILE)
             nMyCores = multiprocessing.cpu_count()
             print("CPU cores available:", nMyCores)
 
@@ -435,23 +429,18 @@ class  NEON_API:
             )
             print("stack_by_table completed")
 
-            # IF ALL ZIPPED FILES WERE STACKED PROPERLY, AND THE FUNCTION stackByTable REMOVES THE ZIP FILES ONCE ALL
-            # FILES ARE CONCATENATED, WE CAN DELETE WHAT NOW SHOULD BE THE EMPTY ZIP FILE DOWNLOAD FOLDER.
+            # REMOVE THE ZIP FILE DOWNLOAD FOLDER
             if os.path.exists(myFolderPath):
                 print("Cleaning up myFolderPath:", myFolderPath)
                 shutil.rmtree(myFolderPath)
 
-            # LET'S REMOVE ONE LEVEL OF INDIRECTION AND MOVE THE FILES STACKED BY stackByTable TO THE ROOT PRODUCT FOLDER IN THE
-            # DOWNLOAD DIRECTORY
-            src = downloadsFilePath + '\\' + foldername + '\\stackedFiles'
-            #JES self.dest = downloadsFilePath + '\\' + foldername
+            # MOVE STACKED FILES FROM SCRATCHPAD TO FINAL DESTINATION (Downloads/NEON/data)
+            src = os.path.join(scratchPath, foldername, 'stackedFiles')
+            print("src:", src)
             if os.path.exists(src) and os.path.exists(self.dest):
-                filenames = os.listdir(src)
-                for filename in filenames:
+                for filename in os.listdir(src):
                     shutil.move(os.path.join(src, filename), self.dest)
-
-                # NOW WE REMOVE THE EMPTY TEMPORARY DOWNLOAD FOLDER SINCE THE FILES HAVE BEEN MOVED
-                shutil.rmtree(os.path.join(downloadsFilePath, foldername))
+                shutil.rmtree(os.path.join(scratchPath, foldername))
 
             progressBar.setValue(100)
 
@@ -471,7 +460,6 @@ class  NEON_API:
 
         print("=== FetchData completed with nError =", nError, "===")
         return nError
-
 
     # ======================================================================================================================
     # THIS FUNCTION DOWNLOADS THE LATEST IMAGE FOR THE SITE SELECTED BY THE END-USER AND DISPLAYS IT IN THE GUI SO THE
