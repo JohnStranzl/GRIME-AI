@@ -178,11 +178,11 @@ class GRIME_AI_Utils:
         # e.g., NEON, USGS, PBT (and create an OTHER folder into which a user can download data from other
         # sources
         # --------------------------------------------------------------------------------------------------------------
-        default_folders = ['Downloads/NEON',  'Downloads/NEON/Images',  'Downloads/NEON/Data',  'Downloads/NEON/Videos',  'Downloads/NEON/EXIF', 'Downloads/NEON/MetaData', \
-                           'Downloads/USGS',  'Downloads/USGS/Images',  'Downloads/USGS/Data',  'Downloads/USGS/Videos',  'Downloads/USGS/EXIF', \
-                           'Downloads/PBT',   'Downloads/PBT/Images',   'Downloads/PBT/Data',   'Downloads/PBT/Videos',   'Downloads/PBT/EXIF', \
-                           'Downloads/OTHER', 'Downloads/OTHER/Images', 'Downloads/OTHER/Data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
-                           'Downloads/KOLA',  'Downloads/KOLA/Images',  'Downloads/KOLA/Data',  'Downloads/KOLA/Videos',  'Downloads/KOLA/EXIF', \
+        default_folders = ['Downloads/NEON',  'Downloads/NEON/Images',  'Downloads/NEON/data',  'Downloads/NEON/Videos',  'Downloads/NEON/EXIF', 'Downloads/NEON/MetaData', \
+                           'Downloads/USGS',  'Downloads/USGS/Images',  'Downloads/USGS/data',  'Downloads/USGS/Videos',  'Downloads/USGS/EXIF', \
+                           'Downloads/PBT',   'Downloads/PBT/Images',   'Downloads/PBT/data',   'Downloads/PBT/Videos',   'Downloads/PBT/EXIF', \
+                           'Downloads/OTHER', 'Downloads/OTHER/Images', 'Downloads/OTHER/data', 'Downloads/OTHER/Videos', 'Downloads/OTHER/EXIF', \
+                           'Downloads/KOLA',  'Downloads/KOLA/Images',  'Downloads/KOLA/data',  'Downloads/KOLA/Videos',  'Downloads/KOLA/EXIF', \
                            'Models', 'Artifacts']
 
         for folder in default_folders:
