@@ -3552,7 +3552,7 @@ def downloadProductDataFiles(self, item):
                     missing_data_message = missing_data_message + 'Partial Download!\n   ' + strProductIDCell + strMsg + '\n'
 
                 if monthCount > 0:
-                    downloadsFilePath = os.path.join(NEON_download_file_path, '../../data')
+                    downloadsFilePath = os.path.normpath(os.path.join(NEON_download_file_path, 'data'))
                     if not os.path.exists(downloadsFilePath):
                         os.makedirs(downloadsFilePath)
 
