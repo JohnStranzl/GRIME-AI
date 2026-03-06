@@ -1010,23 +1010,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 time.sleep(2.0)
 
                 start_time = time.time()
-                self.NEON_updateSiteProducts(item)
+                num_matches, matches = self.NEON_updateSiteProducts(item)
                 end_time = time.time()
                 print ("NEON Site Products Elapsed Time: ", end_time - start_time)
 
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
-                print("Download latest image...")
-                time.sleep(2.0)
+                if num_matches > 0:
+                    print("Download latest image...")
+                    time.sleep(2.0)
 
-                start_time = time.time()
-                nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
-                end_time = time.time()
-                print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
+                    start_time = time.time()
+                    strFirstProductID = matches[0]
+                    strProductID = strFirstProductID.split('.')[1]
+                    nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE, strProductID)
+                    end_time = time.time()
+                    print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
 
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
-                if nErrorCode == 404:
+                if nErrorCode == 404 or num_matches == 0:
                     gWebImagesAvailable = 0
                     self.NEON_labelLatestImage.setText("No Images Available")
                 else:
@@ -2613,8 +2616,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             NEON_updateProductTable(self, nIndex)
 
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        #JES
         #JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         item20002 = self.NEON_listboxSiteProducts.findItems('20002', QtCore.Qt.MatchContains)
@@ -2626,9 +2627,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             NEON_updateProductTable(self, nIndex)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        #JES
 
-        self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
+        targets = ["20002", "00042", "00033"]
+
+        matches = []
+        for t in targets:
+            found = self.NEON_listboxSiteProducts.findItems(t, QtCore.Qt.MatchContains)
+            if found:
+                matches.extend(item.text() for item in found)
+
+        num_matches = len(matches)
+        print("Matches found:", num_matches)
+        print("Matched values:", matches)
+
+        #self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
+
+
+        return num_matches, matches
 
     # ======================================================================================================================
     # THIS FUNCTION WILL DISPLAY THE LATEST IMAGE ON THE GUI.
@@ -3368,16 +3383,16 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
+def DP1_20002_fetchImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
 
-    imageList = DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time)
+    imageList = DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time)
 
     DP1_20002_downloadImages(self, imageList, downloadsFilePath)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time):
+def DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time):
     global SITECODE, DOMAINCODE, dailyImagesList, gWebImageCount
 
     if nRow <= -1:
@@ -3404,9 +3419,11 @@ def DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_t
 
         QCoreApplication.processEvents()
 
+        product_str = str(nProductID).zfill(5)
+
         # Build URL
         dailyURLvisible = (
-            f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.20002/"
+            f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.{product_str}/"
             f"{start_date.year}/{str(start_date.month).zfill(2)}/{str(start_date.day).zfill(2)}"
         )
 
@@ -3514,12 +3531,12 @@ def downloadProductDataFiles(self, item):
 
             # PHENOCAM IMAGES
             # ----------------------------------------------------------------------------------------------------------
-            if nProductID == 20002:
+            if nProductID == 20002 or nProductID == 42 or nProductID == 33:
                 downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
                 if not os.path.exists(downloadsFilePath):
                     os.makedirs(downloadsFilePath)
 
-                DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath)
+                DP1_20002_fetchImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time, downloadsFilePath)
 
                 processLocalImage(self, imageFileFolder=downloadsFilePath)
 

@@ -20,12 +20,13 @@ class Renderer:
         )
         return QPixmap.fromImage(qimage)
 
-    def overlay_masks(self, base_pixmap, masks, opacity=120):
+    def overlay_masks(self, base_pixmap, masks, opacity=120, selected_mask_id=-1):
         """
         masks: list of dicts:
           - 'mask': np.ndarray (H, W)
           - 'color': (r, g, b)
           - 'visible': bool
+        selected_mask_id: draw this mask's border in yellow instead of black
         """
         result = QPixmap(base_pixmap)
         painter = QPainter(result)
@@ -52,17 +53,21 @@ class Renderer:
             )
             painter.drawImage(0, 0, qimage)
 
-            # Draw black border around mask
+            # Draw border — yellow+thicker for selected, black for others
+            is_selected = (m.get("id", -1) == selected_mask_id)
+            if is_selected:
+                border_pen = QPen(QColor(255, 220, 0), 3)
+            else:
+                border_pen = QPen(QColor(0, 0, 0), 2)
+
             mask_uint8 = mask.astype(np.uint8) * 255
             contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            painter.setPen(QPen(QColor(0, 0, 0), 2))  # Black, 2 pixels wide
+            painter.setPen(border_pen)
 
             for contour in contours:
                 if len(contour) < 3:
                     continue
-
-                # Convert contour to QPolygonF
                 points = [QPointF(float(pt[0][0]), float(pt[0][1])) for pt in contour]
                 polygon = QPolygonF(points)
                 painter.drawPolygon(polygon)

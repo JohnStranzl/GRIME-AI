@@ -8,10 +8,15 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QFileDialog,
     QMessageBox,
-QSizePolicy
+    QSizePolicy,
+    QToolBar,
+    QSpinBox,
+    QLabel,
 )
+from PyQt5.QtWidgets import QAction
 from PyQt5.QtCore import Qt
 import os
+import csv
 import copy
 import json
 import math
@@ -23,12 +28,10 @@ from SAGE.utils.image_io import load_image_rgb
 from SAGE.core.controller import SegmentationController
 from SAGE.core.renderer import Renderer
 from SAGE.ui.canvas import Canvas
-from SAGE.ui.sidebar import Sidebar
-from SAGE.ui.dialogs import ask_for_label
+from SAGE.ui.sidebar import Sidebar, MASK_STATE_LOCKED, MASK_STATE_LOADED, MASK_STATE_PERSISTS
+from SAGE.utils.mask_ops import compute_mask_stats
 from SAGE.ui.mask_item import MaskItem
 from SAGE.settings_manager import SettingsManager
-from SAGE.utils.colors import get_color_for_index
-from SAGE.utils.mask_ops import compute_mask_stats
 
 
 class MainWindow(QMainWindow):
@@ -58,8 +61,17 @@ class MainWindow(QMainWindow):
         self.seed_mask_path = None  # path to .tif/.tiff mask
         self.seed_mask_bool = None  # cached boolean mask resized to current image
         self.auto_seed_enabled = True  # auto-apply when each image loads
-        self.skip_seed_for_images = set()  # stores full image paths where seeding is skipped
         self.eraser_radius = 18
+        self._opacity_percent = int(120 / 255 * 100)  # default; overwritten below from sage.json
+
+        # Read sage.json early so opacity is correct before any image auto-loads
+        self._settings_dir = os.path.join(
+            os.path.expanduser("~"), "Documents", "GRIME-AI", "settings"
+        )
+        self._sage_settings_path = os.path.join(self._settings_dir, "sage.json")
+        _early_settings = self._read_sage_settings()
+        if "mask_opacity_percent" in _early_settings:
+            self._opacity_percent = int(_early_settings["mask_opacity_percent"])
 
         central = QWidget()
 
@@ -103,7 +115,6 @@ class MainWindow(QMainWindow):
         self.sidebar = Sidebar(
             controller=None,  # Will be set when image is loaded
             on_run_segmentation=self._run_segmentation,
-            on_opacity_changed=self._on_opacity_changed,
             on_visibility_changed=self._update_canvas,
             on_clear_points=self._clear_points,
             parent=self,
@@ -115,12 +126,17 @@ class MainWindow(QMainWindow):
         # Sidebar requests COCO save → MainWindow handles it
         self.sidebar.save_all_coco_requested.connect(self.save_all_coco)
 
-        # New Sidebar
+        # Seed mask signals
         self.sidebar.load_seed_mask_requested.connect(self._browse_seed_mask)
+        self.sidebar.clear_seed_mask_requested.connect(self._clear_seed_mask)
         self.sidebar.seed_points_now_requested.connect(self._seed_points_from_mask_current_image)
         self.sidebar.auto_seed_toggled.connect(self._on_auto_seed_toggled)
-        self.sidebar.skip_seed_this_image_toggled.connect(self._on_skip_seed_toggled)
         self.sidebar.eraser_toggled.connect(self._on_eraser_toggled)
+        self.sidebar.mask_selected.connect(self._on_mask_selected)
+        self.sidebar.mask_renamed.connect(self._on_mask_renamed)
+        self.sidebar.label_class_renamed.connect(self._on_label_class_renamed)
+
+        self.selected_mask_id = -1
 
         # New: segmentation mode + sampling mode signals
         self.sidebar.segmentation_mode_changed.connect(self._on_segmentation_mode_changed)
@@ -133,6 +149,44 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(layout)
 
         self.setCentralWidget(central)
+
+        # ---------------------------------------------------------
+        # Toolbar: Mask Opacity spinbox
+        # ---------------------------------------------------------
+        toolbar = QToolBar("View")
+        toolbar.setMovable(False)
+        self.addToolBar(toolbar)
+
+        toolbar.addWidget(QLabel("  Mask Opacity: "))
+        self.opacity_spinbox = QSpinBox()
+        self.opacity_spinbox.setRange(0, 100)
+        self.opacity_spinbox.setSuffix(" %")
+        self.opacity_spinbox.setValue(int(120 / 255 * 100))  # match sidebar default
+        self.opacity_spinbox.setFixedWidth(72)
+        self.opacity_spinbox.setToolTip("Mask overlay opacity (0 = transparent, 100 = opaque)")
+        self.opacity_spinbox.valueChanged.connect(self._on_opacity_spinbox_changed)
+        toolbar.addWidget(self.opacity_spinbox)
+
+        # ---------------------------------------------------------
+        # Menu bar: File
+        # ---------------------------------------------------------
+        self._labels_dir = os.path.join(
+            os.path.expanduser("~"), "Documents", "GRIME-AI", "labels"
+        )
+
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
+
+        export_action = QAction("Export Labels…", self)
+        export_action.setStatusTip("Export label classes to a CSV file")
+        export_action.triggered.connect(self._export_labels)
+        file_menu.addAction(export_action)
+
+        import_action = QAction("Import Labels…", self)
+        import_action.setStatusTip("Import label classes from a CSV file")
+        import_action.triggered.connect(self._import_labels)
+        file_menu.addAction(import_action)
+
         self.showMaximized()
 
         # Load saved folder path and populate
@@ -141,25 +195,166 @@ class MainWindow(QMainWindow):
             self.folder_edit.setText(saved_folder)
             self._populate_image_list(saved_folder)
 
+        # Auto-load last used labels file from sage.json
+        self._autoload_labels()
+
+        # Restore saved opacity
+        self._autoload_opacity()
+
     # ------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------
     def _on_auto_seed_toggled(self, on: bool):
         self.auto_seed_enabled = on
 
-    # ------------------------------------------------------------------------
-    #
-    # ------------------------------------------------------------------------
-    def _on_skip_seed_toggled(self, on: bool):
-        # store per-image skip flag
-        if not hasattr(self, "skip_seed_for_image"):
-            self.skip_seed_for_image = {}
-        if self.current_image_path:
-            self.skip_seed_for_image[self.current_image_path] = on
+    # -------------------------------------------------------------------------
+    # Sage settings (~/Documents/GRIME-AI/settings/sage.json)
+    # -------------------------------------------------------------------------
+
+    def _read_sage_settings(self) -> dict:
+        """Read sage.json, returning an empty dict on any error."""
+        try:
+            with open(self._sage_settings_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _write_sage_settings(self, data: dict):
+        """Merge data into sage.json, creating the file and directory if needed."""
+        os.makedirs(self._settings_dir, exist_ok=True)
+        current = self._read_sage_settings()
+        current.update(data)
+        with open(self._sage_settings_path, "w", encoding="utf-8") as f:
+            json.dump(current, f, indent=2)
+
+    def _autoload_labels(self):
+        """On startup, load the last used labels file if it still exists."""
+        settings = self._read_sage_settings()
+        last_labels = settings.get("last_labels_file")
+        if last_labels and os.path.isfile(last_labels):
+            self._load_labels_from_path(last_labels, silent=True)
+
+    def _autoload_opacity(self):
+        """Sync the spinbox to _opacity_percent (already loaded from sage.json in __init__)."""
+        self.opacity_spinbox.blockSignals(True)
+        self.opacity_spinbox.setValue(self._opacity_percent)
+        self.opacity_spinbox.blockSignals(False)
+
+    # -------------------------------------------------------------------------
+    # Label CSV Export / Import
+    # -------------------------------------------------------------------------
+
+    def _export_labels(self):
+        classes = self.sidebar.get_label_classes()
+        if not classes:
+            QMessageBox.warning(self, "Export Labels",
+                "No label classes defined. Add labels before exporting.")
+            return
+
+        os.makedirs(self._labels_dir, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Labels", self._labels_dir,
+            "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                for idx, name in enumerate(classes, start=1):
+                    writer.writerow([idx, name])
+            self._write_sage_settings({"last_labels_file": path})
+            QMessageBox.information(self, "Export Labels",
+                f"Exported {len(classes)} label(s) to:\n{path}")
+        except OSError as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
+
+    def _import_labels(self):
+        os.makedirs(self._labels_dir, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Labels", self._labels_dir,
+            "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        self._load_labels_from_path(path, silent=False)
+
+    def _load_labels_from_path(self, path: str, silent: bool = False):
+        """Parse a labels CSV and apply to the sidebar. Persists path to sage.json."""
+        try:
+            names = []
+            seen = set()
+            with open(path, newline="", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                for lineno, row in enumerate(reader, start=1):
+                    if not row or all(c.strip() == "" for c in row):
+                        continue
+                    if len(row) < 2:
+                        if not silent:
+                            QMessageBox.warning(self, "Import Labels",
+                                f"Line {lineno} is malformed (expected: id,name):\n{','.join(row)}")
+                        return
+                    name = row[1].strip()
+                    if not name:
+                        if not silent:
+                            QMessageBox.warning(self, "Import Labels",
+                                f"Line {lineno} has an empty label name.")
+                        return
+                    if name in seen:
+                        if not silent:
+                            QMessageBox.warning(self, "Import Labels",
+                                f"Duplicate label name on line {lineno}: \"{name}\"\n"
+                                "Each label must be unique.")
+                        return
+                    seen.add(name)
+                    names.append(name)
+
+            if not names:
+                if not silent:
+                    QMessageBox.warning(self, "Import Labels", "No labels found in file.")
+                return
+
+            self.sidebar.set_label_classes(names)
+            self._write_sage_settings({"last_labels_file": path})
+            if not silent:
+                QMessageBox.information(self, "Import Labels",
+                    f"Imported {len(names)} label(s) from:\n{path}")
+
+        except OSError as e:
+            if not silent:
+                QMessageBox.critical(self, "Import Failed", str(e))
 
     # ------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------
+    def _on_mask_selected(self, mask_id: int):
+        self.selected_mask_id = mask_id
+        self._update_canvas()
+
+    def _on_label_class_renamed(self, old_name: str, new_name: str):
+        """Propagate a label class rename to all existing mask entries."""
+        if self.controller is None:
+            return
+        for m in self.controller.masks:
+            if m["label"] == old_name:
+                m["label"] = new_name
+        self.sidebar.refresh_masks()
+
+    def _on_mask_renamed(self, mask_id: int, new_name: str):
+        """Rename a single specific mask instance and update its color to match the label class."""
+        if self.controller is None:
+            return
+        for m in self.controller.masks:
+            if m["id"] == mask_id:
+                m["label"] = new_name
+                m["color"] = self.sidebar.get_color_for_label(new_name)
+                break
+        self.sidebar.refresh_masks()
+        self._update_canvas()
+
     def _on_eraser_toggled(self, on: bool):
         self.canvas.set_eraser_enabled(on)
         # optional: change cursor
@@ -173,7 +368,7 @@ class MainWindow(QMainWindow):
         if self.canvas._segmentation_mode == "manual_polygon":
             self._on_manual_polygon_drawn(points)
         else:
-            self._on_polygon_drawn(points)  # Existing SAM2 polygon handler
+            self._on_polygon_drawn(points)  # SAM2 Polygon and SAM2 Freehand
 
     # ------------------------------------------------------------------------
     #
@@ -191,11 +386,11 @@ class MainWindow(QMainWindow):
 
         import cv2
 
-        # Ask for label first
-        default_label = f"Region {len(self.controller.masks) + 1}"
-        label = ask_for_label(self, default_label)
-
-        if not label:  # User cancelled
+        # Get label from active label class
+        label = self.sidebar.get_active_label()
+        if label is None:
+            QMessageBox.warning(self, "No Label Defined",
+                "Please define at least one label class before annotating.")
             return
 
         # Create mask from polygon
@@ -208,7 +403,7 @@ class MainWindow(QMainWindow):
 
         # Create mask entry manually (without SAM2)
         mask_id = next(self.controller._mask_id_counter)
-        color = get_color_for_index(len(self.controller.masks))
+        color = self.sidebar.get_color_for_label(label)
         stats = compute_mask_stats(mask)
 
         mask_entry = {
@@ -253,11 +448,26 @@ class MainWindow(QMainWindow):
             return
 
         self.seed_mask_path = path
-        # self.seed_mask_edit.setText(path)
-
-        # Load once (resized when image is loaded)
         self.seed_mask_bool = None  # reset cache
-        QMessageBox.information(self, "Seed Mask Loaded", f"Loaded:\n{path}")
+
+        # Auto-populate label classes from the mask filename stem
+        # e.g. "water_surface_mask.tif" → "water_surface"
+        stem = os.path.splitext(os.path.basename(path))[0]
+        for suffix in ("_mask", "_roi", "_label", "_labels", "_seg"):
+            if stem.lower().endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        self.sidebar.add_label_classes_from_mask([stem])
+
+        if self.auto_seed_enabled and self.controller is not None:
+            self._seed_points_from_mask_current_image()
+
+        self.sidebar.set_mask_subpanel_state(MASK_STATE_LOADED, path)
+
+    def _clear_seed_mask(self):
+        self.seed_mask_path = None
+        self.seed_mask_bool = None
+        self.sidebar.set_mask_subpanel_state(MASK_STATE_LOCKED)
 
     def _load_seed_mask_bool(self, target_shape):
         """
@@ -349,43 +559,10 @@ class MainWindow(QMainWindow):
 
         return roi
 
-    def _toggle_auto_seed(self):
-        self.auto_seed_enabled = self.seed_auto_checkbox.isChecked()
-        self.seed_auto_checkbox.setText("Auto-Seed: ON" if self.auto_seed_enabled else "Auto-Seed: OFF")
-
-    def _toggle_skip_seed_for_current_image(self):
-        if not self.current_image_path:
-            return
-
-        if self.current_image_path in self.skip_seed_for_images:
-            self.skip_seed_for_images.remove(self.current_image_path)
-            QMessageBox.information(self, "Seed Enabled", "Seed mask WILL be used for this image.")
-        else:
-            self.skip_seed_for_images.add(self.current_image_path)
-            QMessageBox.information(self, "Seed Skipped", "Seed mask will NOT be used for this image.")
-
-        # Update button text so it's obvious
-        self._update_seed_skip_button_text()
-
-    def _update_seed_skip_button_text(self):
-        if not self.current_image_path:
-            self.seed_skip_btn.setText("Skip Seed (This Image)")
-            return
-
-        if self.current_image_path in self.skip_seed_for_images:
-            self.seed_skip_btn.setText("Use Seed (This Image)")
-        else:
-            self.seed_skip_btn.setText("Skip Seed (This Image)")
-
     # ---------------------------------------------------------
     # Seed points from input mask
     # ---------------------------------------------------------
     def _seed_points_from_mask_current_image(self):
-        # If user manually requests seeding, ensure this image is not skipped
-        if self.current_image_path in self.skip_seed_for_images:
-            self.skip_seed_for_images.remove(self.current_image_path)
-            self._update_seed_skip_button_text()
-
         if self.controller is None or self.image_np is None:
             return
         if not self.seed_mask_path:
@@ -582,11 +759,13 @@ class MainWindow(QMainWindow):
         if self.controller is None:
             return
 
-        seed_label = self._default_label_from_seed_mask()
-        fallback = f"Region {len(self.controller.masks) + 1}"
-        default_label = seed_label or fallback
-        label = ask_for_label(self, default_label)
-        mask_entry = self.controller.run_segmentation(label=label)
+        label = self.sidebar.get_active_label()
+        if label is None:
+            QMessageBox.warning(self, "No Label Defined",
+                "Please define at least one label class before annotating.")
+            return
+        color = self.sidebar.get_color_for_label(label)
+        mask_entry = self.controller.run_segmentation(label=label, color=color)
 
         if mask_entry is not None:
             # If in paint mode, constrain to FOREGROUND painted area only
@@ -618,7 +797,19 @@ class MainWindow(QMainWindow):
             self.sidebar.refresh_masks()
             self._update_canvas()
 
+    def _on_opacity_spinbox_changed(self, percent: int):
+        self._opacity_percent = percent
+        if self.controller is None:
+            return
+        self.controller.set_opacity(int(percent / 100 * 255))
+        self._write_sage_settings({"mask_opacity_percent": percent})
+        self._update_canvas()
+
     def _on_opacity_changed(self, value):
+        """Legacy hook kept for sidebar signal compatibility — converts 0-255 to spinbox %."""
+        self.opacity_spinbox.blockSignals(True)
+        self.opacity_spinbox.setValue(int(value / 255 * 100))
+        self.opacity_spinbox.blockSignals(False)
         if self.controller is None:
             return
         self.controller.set_opacity(value)
@@ -640,47 +831,31 @@ class MainWindow(QMainWindow):
     def _on_polygon_drawn(self, points):
         """
         points: list of (x, y) tuples defining a closed polygon in image coords.
-        We sample interior points, run segmentation, then SPATIALLY CONSTRAIN
-        the result to only include pixels inside the polygon boundary.
+        Sample a small number of interior points using the selected polygon
+        sampling strategy and let SAM2 find the object naturally.
         """
         if self.controller is None:
             return
-
         if len(points) < 3:
             return
 
-        # Sample interior points
         interior_points = self._sample_points_inside_polygon(points)
-
         if not interior_points:
             return
 
         for x, y in interior_points:
             self.controller.add_point(x, y, is_fg=True)
 
-        # Run segmentation with polygon constraint
-        seed_label = self._default_label_from_seed_mask()
-        fallback = f"Region {len(self.controller.masks) + 1}"
-        default_label = seed_label or fallback
-        label = ask_for_label(self, default_label)
-        mask_entry = self.controller.run_segmentation(label=label)
+        label = self.sidebar.get_active_label()
+        if label is None:
+            QMessageBox.warning(self, "No Label Defined",
+                "Please define at least one label class before annotating.")
+            self.controller.clear_points()
+            return
+        color = self.sidebar.get_color_for_label(label)
+        mask_entry = self.controller.run_segmentation(label=label, color=color)
 
         if mask_entry is not None:
-            # CRITICAL: Constrain mask to polygon area
-            import cv2
-
-            # Create polygon mask
-            h, w = self.image_np.shape[:2]
-            poly_mask = np.zeros((h, w), dtype=np.uint8)
-            polygon_array = np.array(points, dtype=np.int32)
-            cv2.fillPoly(poly_mask, [polygon_array], 1)
-
-            # Apply spatial constraint: intersect SAM2 result with polygon
-            mask_entry["mask"] = mask_entry["mask"] & poly_mask.astype(bool)
-
-            # Recompute stats for the constrained mask
-            mask_entry["stats"] = compute_mask_stats(mask_entry["mask"])
-
             self.sidebar.refresh_masks()
             self._update_canvas()
 
@@ -694,7 +869,8 @@ class MainWindow(QMainWindow):
         base_pixmap = self.renderer.base_pixmap()
         masks = self.controller.get_visible_masks()
         pixmap_with_masks = self.renderer.overlay_masks(
-            base_pixmap, masks, opacity=self.controller.opacity
+            base_pixmap, masks, opacity=self.controller.opacity,
+            selected_mask_id=self.selected_mask_id
         )
         pixmap_with_points = self.renderer.draw_points(
             pixmap_with_masks,
@@ -798,7 +974,7 @@ class MainWindow(QMainWindow):
             j = i
         return inside
 
-    def _sample_dense_grid(self, polygon, min_x, max_x, min_y, max_y, step=5):
+    def _sample_dense_grid(self, polygon, min_x, max_x, min_y, max_y, step=20):
         points = []
         # Step as int pixels
         min_x_int = int(math.floor(min_x))
@@ -813,7 +989,7 @@ class MainWindow(QMainWindow):
         return points
 
     def _sample_random_uniform(
-            self, polygon, min_x, max_x, min_y, max_y, num_points=300
+            self, polygon, min_x, max_x, min_y, max_y, num_points=9
     ):
         points = []
         attempts = 0
@@ -829,7 +1005,7 @@ class MainWindow(QMainWindow):
         return points
 
     def _sample_poisson_disk(
-            self, polygon, min_x, max_x, min_y, max_y, radius=8.0, k=30
+            self, polygon, min_x, max_x, min_y, max_y, radius=25.0, k=30
     ):
         """
         Simple Poisson disk sampling (Bridson) restricted to polygon.
@@ -1061,6 +1237,8 @@ class MainWindow(QMainWindow):
 
         # Reset controller + renderer
         self.controller = SegmentationController(self.model_manager, self.image_np)
+        self.selected_mask_id = -1
+        self.controller.set_opacity(int(self._opacity_percent / 100 * 255))
         self.renderer = Renderer(self.image_np)
 
         # Restore masks if they exist
@@ -1068,19 +1246,16 @@ class MainWindow(QMainWindow):
             self.controller.masks = copy.deepcopy(self.mask_store[full_path])
 
         # Auto-seed points from seed mask if available
-        skip = False
-        if hasattr(self, "skip_seed_for_image") and self.current_image_path:
-            skip = self.skip_seed_for_image.get(self.current_image_path, False)
-
-        if self.seed_mask_path and self.auto_seed_enabled and not skip:
+        if self.seed_mask_path and self.auto_seed_enabled:
             self._seed_points_from_mask_current_image()
 
-        # update sidebar checkbox state to reflect this image
-        self.sidebar.set_seed_controls_state(
-            auto_on=self.auto_seed_enabled,
-            skip_on=skip,
-            eraser_on=self.canvas._eraser_enabled
-        )
+        # Drive mask sub-panel state
+        if self.seed_mask_path:
+            self.sidebar.set_mask_subpanel_state(MASK_STATE_PERSISTS, self.seed_mask_path)
+        elif self.canvas._segmentation_mode == "mask":
+            self.sidebar.set_mask_subpanel_state(MASK_STATE_LOCKED)
+
+        self.sidebar.set_seed_controls_state(auto_on=self.auto_seed_enabled)
 
         # Update sidebar controller reference
         self.sidebar.controller = self.controller

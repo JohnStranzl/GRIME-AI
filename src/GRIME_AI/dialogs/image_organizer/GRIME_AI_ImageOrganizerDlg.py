@@ -4,6 +4,7 @@ import traceback
 
 from datetime import datetime
 from GRIME_AI.utils.resource_utils import ui_path
+from pathlib import Path
 
 from PyQt5.uic import loadUi
 from PyQt5.QtCore import pyqtSlot, QTimer, Qt

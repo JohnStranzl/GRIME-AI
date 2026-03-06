@@ -45,6 +45,10 @@ class Canvas(QGraphicsView):
         self._eraser_radius = 18  # tweakable
         self._is_erasing = False
 
+        # Manual polygon (click-by-click) state
+        self._manual_polygon_points = []
+        self._manual_rubber_band = None
+
         # Eraser preview circle (cursor)
         self._eraser_preview = QGraphicsEllipseItem()
         self._eraser_preview.setZValue(10_000)  # always on top
@@ -61,7 +65,9 @@ class Canvas(QGraphicsView):
         self._scene.addItem(self._eraser_preview)
 
     def set_segmentation_mode(self, mode: str):
-        if mode in ("points", "polygon", "paint", "manual_polygon"):
+        if mode in ("points", "polygon", "paint", "manual_polygon", "manual_draw", "mask"):
+            if self._segmentation_mode in ("polygon", "manual_polygon") and mode not in ("polygon", "manual_polygon"):
+                self._cancel_manual_polygon()
             self._segmentation_mode = mode
 
     def set_pixmap(self, pixmap: QPixmap):
@@ -92,9 +98,14 @@ class Canvas(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event):
         """Handle double-click events - MUST come before mousePressEvent logic"""
-        # ----------------------------------------------------
-        # Right-double-click: Delete mask (same as Ctrl+Right-click)
-        # ----------------------------------------------------
+        # Double-click closes a manual polygon in progress
+        if event.button() == Qt.LeftButton and self._segmentation_mode in ("polygon", "manual_polygon"):
+            if len(self._manual_polygon_points) >= 3:
+                self._close_manual_polygon()
+            event.accept()
+            return
+
+        # Right-double-click: Delete mask
         if event.button() == Qt.RightButton:
             scene_pos = self.mapToScene(event.pos())
             item = self._scene.itemAt(scene_pos, self.transform())
@@ -129,6 +140,15 @@ class Canvas(QGraphicsView):
             # If clicking on a mask, wait to see if it's a double-click
             if isinstance(item, MaskItem):
                 super().mousePressEvent(event)
+                return
+
+            # SAM2 Polygon and Manual Polygon: right-click closes or cancels
+            if self._segmentation_mode in ("polygon", "manual_polygon"):
+                if len(self._manual_polygon_points) >= 3:
+                    self._close_manual_polygon()
+                else:
+                    self._cancel_manual_polygon()
+                event.accept()
                 return
 
             # Paint mode: start negative brush stroke
@@ -195,7 +215,10 @@ class Canvas(QGraphicsView):
                     return
 
                 else:
-                    if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
+                    if self._segmentation_mode in ("polygon", "manual_polygon"):
+                        self._add_manual_polygon_vertex(x, y)
+
+                    elif self._segmentation_mode == "manual_draw":
                         self._drawing_polygon = True
                         self._polygon_points = [(x, y)]
                         self._init_polygon_path_item()
@@ -246,18 +269,21 @@ class Canvas(QGraphicsView):
                 self.verticalScrollBar().value() - delta.y()
             )
 
-        if self._drawing_polygon and (self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon"):
+        # SAM2 Polygon and Manual Polygon: update rubber-band line to cursor
+        if self._segmentation_mode in ("polygon", "manual_polygon") and self._manual_polygon_points:
             pos = self.mapToScene(event.pos())
-            x = pos.x()
-            y = pos.y()
+            self._update_manual_rubber_band(pos.x(), pos.y())
 
+        # Manual Draw: freehand drag streaming
+        if self._drawing_polygon and self._segmentation_mode == "manual_draw":
+            pos = self.mapToScene(event.pos())
+            x, y = pos.x(), pos.y()
             if (
-                    self._orig_width is not None
-                    and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+                self._orig_width is not None
+                and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
             ):
                 super().mouseMoveEvent(event)
                 return
-
             self._polygon_points.append((x, y))
             self._update_polygon_path()
 
@@ -314,18 +340,15 @@ class Canvas(QGraphicsView):
             self._pan_start = None
             self.setCursor(Qt.ArrowCursor)
 
-        if event.button() == Qt.LeftButton and self._drawing_polygon:
+        if event.button() == Qt.LeftButton and self._drawing_polygon and self._segmentation_mode == "manual_draw":
             self._drawing_polygon = False
-
             if len(self._polygon_points) >= 3:
                 if self._polygon_points[0] != self._polygon_points[-1]:
                     self._polygon_points.append(self._polygon_points[0])
                 self.polygon_drawn.emit(self._polygon_points.copy())
-
             if self._polygon_path_item is not None:
                 self._scene.removeItem(self._polygon_path_item)
                 self._polygon_path_item = None
-
             self._polygon_points = []
 
         # Paint mode release - allow multiple strokes before segmentation
@@ -371,9 +394,11 @@ class Canvas(QGraphicsView):
 
     def _init_polygon_path_item(self):
         if self._polygon_path_item is None:
-            pen = QPen(QColor(255, 0, 0))
+            pen = QPen(QColor(255, 255, 0))  # yellow outline, easy to see
             pen.setWidth(2)
+            pen.setCosmetic(True)
             self._polygon_path_item = self._scene.addPath(QPainterPath(), pen)
+            self._polygon_path_item.setBrush(QBrush(Qt.NoBrush))
 
     def _update_polygon_path(self):
         if not self._polygon_points or self._polygon_path_item is None:
@@ -408,3 +433,56 @@ class Canvas(QGraphicsView):
             path.lineTo(x, y)
 
         self._paint_path_item.setPath(path)
+
+    # ------------------------------------------------------------------
+    # Manual polygon (click-by-click) helpers
+    # ------------------------------------------------------------------
+
+    def _add_manual_polygon_vertex(self, x, y):
+        self._manual_polygon_points.append((x, y))
+        self._init_polygon_path_item()
+        self._update_manual_polygon_path()
+
+    def _update_manual_polygon_path(self):
+        if not self._manual_polygon_points or self._polygon_path_item is None:
+            return
+        path = QPainterPath()
+        x0, y0 = self._manual_polygon_points[0]
+        path.moveTo(x0, y0)
+        for x, y in self._manual_polygon_points[1:]:
+            path.lineTo(x, y)
+        # Do NOT close the path here — closing happens only on double-click/right-click
+        self._polygon_path_item.setPath(path)
+        self._polygon_path_item.setBrush(QBrush(Qt.NoBrush))
+
+    def _update_manual_rubber_band(self, cx, cy):
+        if not self._manual_polygon_points:
+            return
+        lx, ly = self._manual_polygon_points[-1]
+        if self._manual_rubber_band is None:
+            from PyQt5.QtWidgets import QGraphicsLineItem
+            self._manual_rubber_band = QGraphicsLineItem()
+            pen = QPen(QColor(255, 200, 0))  # amber dashed
+            pen.setWidth(1)
+            pen.setStyle(Qt.DashLine)
+            pen.setCosmetic(True)
+            self._manual_rubber_band.setPen(pen)
+            self._manual_rubber_band.setZValue(9999)
+            self._scene.addItem(self._manual_rubber_band)
+        self._manual_rubber_band.setLine(lx, ly, cx, cy)
+
+    def _close_manual_polygon(self):
+        pts = self._manual_polygon_points.copy()
+        if pts[0] != pts[-1]:
+            pts.append(pts[0])
+        self.polygon_drawn.emit(pts)
+        self._cancel_manual_polygon()
+
+    def _cancel_manual_polygon(self):
+        self._manual_polygon_points = []
+        if self._polygon_path_item is not None:
+            self._scene.removeItem(self._polygon_path_item)
+            self._polygon_path_item = None
+        if self._manual_rubber_band is not None:
+            self._scene.removeItem(self._manual_rubber_band)
+            self._manual_rubber_band = None
