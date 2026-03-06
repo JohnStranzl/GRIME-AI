@@ -185,9 +185,9 @@ class Canvas(QGraphicsView):
             self._handle_click(QPointF(x, y), is_left=False)
             return
 
-        # ----------------------------------------------------
+        # ----------------------------------------------------------------
         # Left-click: Eraser or Add positive point, draw polygon, or paint
-        # ----------------------------------------------------
+        # ----------------------------------------------------------------
         if event.button() == Qt.LeftButton:
             # If eraser is enabled, DO NOT do polygon/paint/point behavior
             if self._eraser_enabled:
