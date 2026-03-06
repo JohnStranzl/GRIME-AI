@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grime-ai"
-version = "1.0.0.0"
+version = "1.1.0.0"
 dynamic = ["dependencies"]
 requires-python = ">=3"
 authors = [
@@ -40,7 +40,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["GRIME_AI*"]
+include = ["GRIME_AI*","SAGE*"]
 exclude = ["GRIME_AI.sam2*"]
 
 #[project.optional-dependencies]
@@ -52,12 +52,15 @@ Repository = "https://github.com/JohnStranzl/GRIME-AI/"
 
 [project.scripts]
 grime-ai = "GRIME_AI.main:my_main"
+sage = "SAGE.main:main"
 
 [project.gui-scripts]
 grime-ai = "GRIME_AI.main:my_main"
+sage = "SAGE.main:main"
 
 [tool.setuptools.package-data]
 GRIME_AI = ["dialogs/**/*","neon/*","resources/**/*","SplashScreen Images/*"]
+SAGE = ["resources/*","utils/*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["sam2", "**/sam2/**/*.*", "*sam2*", "*sam2/**"]
