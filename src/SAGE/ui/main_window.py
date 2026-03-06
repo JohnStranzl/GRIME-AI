@@ -75,9 +75,9 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
 
-        # -------------------------------------------------------_
+        # ---------------------------------------------------------
         # TOP-LEVEL LAYOUT: VERTICAL (folder row above everything)
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
         main_layout = QVBoxLayout(central)
 
         # Folder row ABOVE the image
