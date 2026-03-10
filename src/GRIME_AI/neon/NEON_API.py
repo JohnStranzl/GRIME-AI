@@ -318,7 +318,7 @@ class  NEON_API:
         # Build target directory
         configFilePath = os.path.join(
             os.path.expanduser('~'),
-            'Documents', 'GRIME-AI', 'Downloads', '', 'Metadata'
+            'Documents', 'GRIME-AI', 'Downloads', 'NEON', 'Metadata'
         )
         os.makedirs(configFilePath, exist_ok=True)
         filename_with_path = os.path.join(configFilePath, file_name)
