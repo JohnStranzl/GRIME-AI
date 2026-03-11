@@ -13,14 +13,13 @@ jobs:
 
       - uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-activate: true
-          activate-environment: base
+          auto-activate-base: true
           miniconda-version: "latest"
 
       - name: Set nightly version
         run: |
           DATE=$(date +%Y%m%d)
-          BASE=$(sed -n 's/.*{%.*set version.*=.*"\(.*\)".*/\1/p' recipe/grime-ai/meta.yaml)
+          BASE=$(grep "{% set version" recipe/grime-ai/meta.yaml | grep -oP '"\K[^"]+')
           echo "NIGHTLY_VERSION=${BASE}.dev${DATE}" >> $GITHUB_ENV
 
       - name: Patch meta.yaml version
