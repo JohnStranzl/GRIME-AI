@@ -1,4 +1,4 @@
-name: GRIME AI Nightly Build
+name: Nightly Build
 
 on:
   schedule:
@@ -13,13 +13,14 @@ jobs:
 
       - uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-activate-base: true
+          auto-activate: true
+          activate-environment: base
           miniconda-version: "latest"
 
       - name: Set nightly version
         run: |
           DATE=$(date +%Y%m%d)
-          BASE=$(grep "{% set version" recipe/grime-ai/meta.yaml | grep -oP '"\K[^"]+')
+          BASE=$(sed -n 's/.*{%.*set version.*=.*"\(.*\)".*/\1/p' recipe/grime-ai/meta.yaml)
           echo "NIGHTLY_VERSION=${BASE}.dev${DATE}" >> $GITHUB_ENV
 
       - name: Patch meta.yaml version
