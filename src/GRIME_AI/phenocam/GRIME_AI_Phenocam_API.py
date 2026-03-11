@@ -51,9 +51,9 @@ class GRIME_AI_Phenocam_API:
         """Fetch camera metadata. By default, fetch all records in one call."""
         return self._fetch(self.endpoints["cameras"], all_records=all_records)
 
-    def get_roilists(self) -> pd.DataFrame:
-        """Fetch ROI lists."""
-        return self._fetch(self.endpoints["roilists"], all_records=True)
+    def get_roilists(self, all_records: bool = True) -> pd.DataFrame:
+        """Fetch ROI lists. By default, fetch all records in one call."""
+        return self._fetch(self.endpoints["roilists"], all_records=all_records)
 
     def get_dailycounts(self) -> pd.DataFrame:
         """Fetch daily image counts."""
