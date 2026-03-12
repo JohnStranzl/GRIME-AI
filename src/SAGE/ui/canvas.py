@@ -42,12 +42,13 @@ class Canvas(QGraphicsView):
 
         # Eraser mode variables
         self._eraser_enabled = False
-        self._eraser_radius = 18  # tweakable
+        self._resize_anchor = None
+        self._min_eraser_radius = 5
+        self._max_eraser_radius = 150
         self._is_erasing = False
-
-        # Manual polygon (click-by-click) state
-        self._manual_polygon_points = []
-        self._manual_rubber_band = None
+        self._eraser_radius = 18
+        self._resizing_eraser = False
+        self.setFocusPolicy(Qt.StrongFocus)
 
         # Eraser preview circle (cursor)
         self._eraser_preview = QGraphicsEllipseItem()
@@ -65,9 +66,7 @@ class Canvas(QGraphicsView):
         self._scene.addItem(self._eraser_preview)
 
     def set_segmentation_mode(self, mode: str):
-        if mode in ("points", "polygon", "paint", "manual_polygon", "manual_draw", "mask"):
-            if self._segmentation_mode in ("polygon", "manual_polygon") and mode not in ("polygon", "manual_polygon"):
-                self._cancel_manual_polygon()
+        if mode in ("points", "polygon", "paint", "manual_polygon"):
             self._segmentation_mode = mode
 
     def set_pixmap(self, pixmap: QPixmap):
@@ -98,14 +97,12 @@ class Canvas(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event):
         """Handle double-click events - MUST come before mousePressEvent logic"""
-        # Double-click closes a manual polygon in progress
-        if event.button() == Qt.LeftButton and self._segmentation_mode in ("polygon", "manual_polygon"):
-            if len(self._manual_polygon_points) >= 3:
-                self._close_manual_polygon()
+        if self._eraser_enabled:
             event.accept()
             return
-
-        # Right-double-click: Delete mask
+        # ----------------------------------------------------
+        # Right-double-click: Delete mask (same as Ctrl+Right-click)
+        # ----------------------------------------------------
         if event.button() == Qt.RightButton:
             scene_pos = self.mapToScene(event.pos())
             item = self._scene.itemAt(scene_pos, self.transform())
@@ -118,6 +115,30 @@ class Canvas(QGraphicsView):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
+
+        # =========================================================
+        # ERASER MODE OWNS THE MOUSE (blocks ALL other behaviors)
+        # =========================================================
+        if self._eraser_enabled:
+            # If holding R (resizing mode), start anchor on left press
+            if self._resizing_eraser and event.button() == Qt.LeftButton:
+                self._is_erasing = False
+                self._resize_anchor = event.pos()
+                event.accept()
+                return
+
+            # Normal erase: left-click begins erasing
+            if event.button() == Qt.LeftButton:
+                self._is_erasing = True
+                x, y = self._map_to_image_coords(event.pos())
+                if self._is_in_bounds(x, y):
+                    self._update_eraser_preview(x, y)
+                    self.eraser_move.emit(x, y)
+
+            # IMPORTANT: swallow everything (blocks right-click negative points, mask delete, etc.)
+            event.accept()
+            return
+
         # ----------------------------------------------------
         # Ctrl+Right-click: Delete mask
         # ----------------------------------------------------
@@ -140,15 +161,6 @@ class Canvas(QGraphicsView):
             # If clicking on a mask, wait to see if it's a double-click
             if isinstance(item, MaskItem):
                 super().mousePressEvent(event)
-                return
-
-            # SAM2 Polygon and Manual Polygon: right-click closes or cancels
-            if self._segmentation_mode in ("polygon", "manual_polygon"):
-                if len(self._manual_polygon_points) >= 3:
-                    self._close_manual_polygon()
-                else:
-                    self._cancel_manual_polygon()
-                event.accept()
                 return
 
             # Paint mode: start negative brush stroke
@@ -189,58 +201,44 @@ class Canvas(QGraphicsView):
         # Left-click: Eraser or Add positive point, draw polygon, or paint
         # ----------------------------------------------------
         if event.button() == Qt.LeftButton:
-            # If eraser is enabled, DO NOT do polygon/paint/point behavior
-            if self._eraser_enabled:
-                self._is_erasing = True
-                x, y = self._map_to_image_coords(event.pos())
+            pos = self.mapToScene(event.pos())
+            x = pos.x()
+            y = pos.y()
 
-                if self._is_in_bounds(x, y):
-                    self._update_eraser_preview(x, y)  # optional but nice
-                    self.eraser_move.emit(x, y)
-
-                event.accept()
+            if (
+                    self._orig_width is not None
+                    and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+            ):
+                super().mousePressEvent(event)
                 return
 
-            # Normal behavior
+            if self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon":
+                self._drawing_polygon = True
+                self._polygon_points = [(x, y)]
+                self._init_polygon_path_item()
+                self._update_polygon_path()
+
+            elif self._segmentation_mode == "paint":
+                self._painting = True
+                self._paint_is_negative = False  # Left-click = positive
+                self._paint_points = [(x, y)]
+                self._on_left_click(x, y)  # Add as foreground point
+                self._init_paint_path_item()
+                self._update_paint_path()
             else:
-                pos = self.mapToScene(event.pos())
-                x = pos.x()
-                y = pos.y()
+                self._handle_click(QPointF(x, y), is_left=True)
 
-                if (
-                        self._orig_width is not None
-                        and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
-                ):
-                    super().mousePressEvent(event)
-                    return
-
-                else:
-                    if self._segmentation_mode in ("polygon", "manual_polygon"):
-                        self._add_manual_polygon_vertex(x, y)
-
-                    elif self._segmentation_mode == "manual_draw":
-                        self._drawing_polygon = True
-                        self._polygon_points = [(x, y)]
-                        self._init_polygon_path_item()
-                        self._update_polygon_path()
-
-                    elif self._segmentation_mode == "paint":
-                        self._painting = True
-                        self._paint_is_negative = False  # Left-click = positive
-                        self._paint_points = [(x, y)]
-                        self._on_left_click(x, y)  # Add as foreground point
-                        self._init_paint_path_item()
-                        self._update_paint_path()
-                    else:
-                        self._handle_click(QPointF(x, y), is_left=True)
+            return
 
         # ----------------------------------------------------
         # Middle-click: Pan
         # ----------------------------------------------------
-        elif event.button() == Qt.MiddleButton:
+        if event.button() == Qt.MiddleButton:
             self._panning = True
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+            return
 
         super().mousePressEvent(event)
 
@@ -269,21 +267,18 @@ class Canvas(QGraphicsView):
                 self.verticalScrollBar().value() - delta.y()
             )
 
-        # SAM2 Polygon and Manual Polygon: update rubber-band line to cursor
-        if self._segmentation_mode in ("polygon", "manual_polygon") and self._manual_polygon_points:
+        if self._drawing_polygon and (self._segmentation_mode == "polygon" or self._segmentation_mode == "manual_polygon"):
             pos = self.mapToScene(event.pos())
-            self._update_manual_rubber_band(pos.x(), pos.y())
+            x = pos.x()
+            y = pos.y()
 
-        # Manual Draw: freehand drag streaming
-        if self._drawing_polygon and self._segmentation_mode == "manual_draw":
-            pos = self.mapToScene(event.pos())
-            x, y = pos.x(), pos.y()
             if (
-                self._orig_width is not None
-                and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
+                    self._orig_width is not None
+                    and (x < 0 or y < 0 or x >= self._orig_width or y >= self._orig_height)
             ):
                 super().mouseMoveEvent(event)
                 return
+
             self._polygon_points.append((x, y))
             self._update_polygon_path()
 
@@ -318,37 +313,67 @@ class Canvas(QGraphicsView):
 
             self._update_paint_path()
 
-        # Show eraser preview following mouse
+        if self._eraser_enabled and self._resizing_eraser and self._resize_anchor:
+            dy = event.pos().y() - self._resize_anchor.y()
+            new_radius = self._eraser_radius + dy * 0.3
+
+            self._eraser_radius = int(
+                max(self._min_eraser_radius, min(self._max_eraser_radius, new_radius))
+            )
+            self._resize_anchor = event.pos()
+
+            # update preview
+            x, y = self._map_to_image_coords(event.pos())
+            if self._is_in_bounds(x, y):
+                self._update_eraser_preview(x, y)
+
+            event.accept()
+            return
+
+        # Eraser enabled: always show preview; erase only if dragging
         if self._eraser_enabled:
             x, y = self._map_to_image_coords(event.pos())
             if self._is_in_bounds(x, y):
                 self._update_eraser_preview(x, y)
 
-        # Erase points when it is enabled
-        if self._is_erasing and self._eraser_enabled:
-            x, y = self._map_to_image_coords(event.pos())
-            if self._is_in_bounds(x, y):
-                self.eraser_move.emit(x, y)
+                if self._is_erasing:  # <-- ONLY erase while mouse is held
+                    self.eraser_move.emit(x, y)
+
             event.accept()
             return
 
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        # Stop erasing on left release
+        if self._eraser_enabled and event.button() == Qt.LeftButton:
+            self._is_erasing = False
+            event.accept()
+            return
+
+        # If resizing (R held), stop "drag anchor" on release too
+        if self._eraser_enabled and self._resizing_eraser and event.button() == Qt.LeftButton:
+            self._resize_anchor = None
+            event.accept()
+            return
+
         if event.button() == Qt.MiddleButton:
             self._panning = False
             self._pan_start = None
             self.setCursor(Qt.ArrowCursor)
 
-        if event.button() == Qt.LeftButton and self._drawing_polygon and self._segmentation_mode == "manual_draw":
+        if event.button() == Qt.LeftButton and self._drawing_polygon:
             self._drawing_polygon = False
+
             if len(self._polygon_points) >= 3:
                 if self._polygon_points[0] != self._polygon_points[-1]:
                     self._polygon_points.append(self._polygon_points[0])
                 self.polygon_drawn.emit(self._polygon_points.copy())
+
             if self._polygon_path_item is not None:
                 self._scene.removeItem(self._polygon_path_item)
                 self._polygon_path_item = None
+
             self._polygon_points = []
 
         # Paint mode release - allow multiple strokes before segmentation
@@ -363,11 +388,6 @@ class Canvas(QGraphicsView):
 
             # Keep paint_points for bounding box calculation
             # They'll be cleared when segmentation runs
-
-        # Releasing erasing
-        if self._is_erasing and event.button() == Qt.LeftButton:
-            self._is_erasing = False
-            return
 
         super().mouseReleaseEvent(event)
 
@@ -394,11 +414,9 @@ class Canvas(QGraphicsView):
 
     def _init_polygon_path_item(self):
         if self._polygon_path_item is None:
-            pen = QPen(QColor(255, 255, 0))  # yellow outline, easy to see
+            pen = QPen(QColor(255, 0, 0))
             pen.setWidth(2)
-            pen.setCosmetic(True)
             self._polygon_path_item = self._scene.addPath(QPainterPath(), pen)
-            self._polygon_path_item.setBrush(QBrush(Qt.NoBrush))
 
     def _update_polygon_path(self):
         if not self._polygon_points or self._polygon_path_item is None:
@@ -434,55 +452,22 @@ class Canvas(QGraphicsView):
 
         self._paint_path_item.setPath(path)
 
-    # ------------------------------------------------------------------
-    # Manual polygon (click-by-click) helpers
-    # ------------------------------------------------------------------
-
-    def _add_manual_polygon_vertex(self, x, y):
-        self._manual_polygon_points.append((x, y))
-        self._init_polygon_path_item()
-        self._update_manual_polygon_path()
-
-    def _update_manual_polygon_path(self):
-        if not self._manual_polygon_points or self._polygon_path_item is None:
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_R and self._eraser_enabled:
+            self._resizing_eraser = True
+            self._resize_anchor = None
+            event.accept()
             return
-        path = QPainterPath()
-        x0, y0 = self._manual_polygon_points[0]
-        path.moveTo(x0, y0)
-        for x, y in self._manual_polygon_points[1:]:
-            path.lineTo(x, y)
-        # Do NOT close the path here — closing happens only on double-click/right-click
-        self._polygon_path_item.setPath(path)
-        self._polygon_path_item.setBrush(QBrush(Qt.NoBrush))
+        super().keyPressEvent(event)
 
-    def _update_manual_rubber_band(self, cx, cy):
-        if not self._manual_polygon_points:
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_R:
+            self._resizing_eraser = False
+            self._resize_anchor = None
+            event.accept()
             return
-        lx, ly = self._manual_polygon_points[-1]
-        if self._manual_rubber_band is None:
-            from PyQt5.QtWidgets import QGraphicsLineItem
-            self._manual_rubber_band = QGraphicsLineItem()
-            pen = QPen(QColor(255, 200, 0))  # amber dashed
-            pen.setWidth(1)
-            pen.setStyle(Qt.DashLine)
-            pen.setCosmetic(True)
-            self._manual_rubber_band.setPen(pen)
-            self._manual_rubber_band.setZValue(9999)
-            self._scene.addItem(self._manual_rubber_band)
-        self._manual_rubber_band.setLine(lx, ly, cx, cy)
+        super().keyReleaseEvent(event)
 
-    def _close_manual_polygon(self):
-        pts = self._manual_polygon_points.copy()
-        if pts[0] != pts[-1]:
-            pts.append(pts[0])
-        self.polygon_drawn.emit(pts)
-        self._cancel_manual_polygon()
-
-    def _cancel_manual_polygon(self):
-        self._manual_polygon_points = []
-        if self._polygon_path_item is not None:
-            self._scene.removeItem(self._polygon_path_item)
-            self._polygon_path_item = None
-        if self._manual_rubber_band is not None:
-            self._scene.removeItem(self._manual_rubber_band)
-            self._manual_rubber_band = None
+    def _emit_erase(self, event):
+        pos = self.mapToScene(event.pos())
+        self.eraser_move.emit(int(pos.x()), int(pos.y()))

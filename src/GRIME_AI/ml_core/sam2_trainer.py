@@ -24,7 +24,8 @@ try:
     from torch.amp import autocast
 except ImportError:
     from torch.cuda.amp import autocast  # FALLBACK FOR OLDER PYTORCH
-    
+
+
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../sam2'))
