@@ -318,7 +318,7 @@ class  NEON_API:
         # Build target directory
         configFilePath = os.path.join(
             os.path.expanduser('~'),
-            'Documents', 'GRIME-AI', 'Downloads', '', 'Metadata'
+            'Documents', 'GRIME-AI', 'Downloads', 'NEON', 'Metadata'
         )
         os.makedirs(configFilePath, exist_ok=True)
         filename_with_path = os.path.join(configFilePath, file_name)
@@ -465,14 +465,14 @@ class  NEON_API:
     # THIS FUNCTION DOWNLOADS THE LATEST IMAGE FOR THE SITE SELECTED BY THE END-USER AND DISPLAYS IT IN THE GUI SO THE
     # END-USER CAN CAN SEE WHAT THE PARTICULAR SITE LOOKS LIKE.
     # ======================================================================================================================
-    def DownloadLatestImage(self, siteCode, domainCode):
+    def DownloadLatestImage(self, siteCode, domainCode, strProductID=20002):
         nErrorCode = -1
         nRetryCount = 3
         nWebImageCount = 0
         latestImage = []
 
         # Build URL
-        latestImageURL = 'https://phenocam.nau.edu/data/latest/NEON.D10.ARIK.DP1.20002.jpg'
+        latestImageURL = f'https://phenocam.nau.edu/data/latest/NEON.D10.ARIK.DP1.{strProductID}.jpg'
         tmp = latestImageURL.replace('ARIK', siteCode)
         latestImageURL = tmp.replace('D10', domainCode)
 

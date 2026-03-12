@@ -517,7 +517,7 @@ class SAM2InferenceEngine:
                 
                 # Adaptive radius threshold (same as training)
                 img_diagonal = np.sqrt(target_h * target_h + target_w * target_w)
-                radius_threshold = max(10, int(0.025 * img_diagonal))
+                radius_threshold = max(10, int(0.15 * img_diagonal))
                 
                 for lbl in range(1, num_labels):  # skip background
                     ys, xs = np.nonzero(labels == lbl)
@@ -536,6 +536,9 @@ class SAM2InferenceEngine:
 
             # Check if mask has any foreground pixels
             if np.sum(mask) == 0:
+                # Save diagnostic panel with empty mask before skipping
+                self._save_panel(image_array, mask, prob_map, self.predictions_output_path, base)
+
                 # Mask is empty - category not found in this image
                 images_not_found += 1
                 images_processed += 1

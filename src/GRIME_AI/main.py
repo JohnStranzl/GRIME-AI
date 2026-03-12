@@ -202,6 +202,7 @@ from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
 from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+from GRIME_AI.dialogs.temporal_averaging.GRIME_AI_TemporalAveragingDlg import GRIME_AI_TemporalAveragingDlg
 from GRIME_AI.GRIME_AI_ProductTable import GRIME_AI_ProductTable
 from GRIME_AI.GRIME_AI_QLabel import DrawingMode
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
@@ -315,6 +316,112 @@ g_modelSettings = modelSettingsClass()
 hyperparameterDlg = None
 
 # ======================================================================================================================
+# PHENOCAM BACKGROUND WORKERS
+# ======================================================================================================================
+class PhenocamPreviewFetcher(QtCore.QThread):
+    result = QtCore.pyqtSignal(object, str)
+    def __init__(self, site_name, parent=None, roi_name=None):
+        super().__init__(parent)
+        self.site_name = site_name
+        self.roi_name  = roi_name  # e.g. "NEON.D01.BART.DP1.00033_DB_1000"
+    def run(self):
+        import urllib.request, datetime as dt_mod
+        from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam
+        today = dt_mod.date.today()
+        t0, t1 = dt_mod.time(11, 0), dt_mod.time(13, 0)
+        # Extract ROI type prefix for filename filtering (e.g. "DB" from "..._DB_1000")
+        roi_filter = None
+        if self.roi_name:
+            parts = self.roi_name.split("_")
+            # roi_name format: sitename_TYPE_NNNN — TYPE is second-to-last segment
+            if len(parts) >= 2:
+                roi_filter = parts[-2]  # e.g. "DB", "EN", "SH", etc.
+        img_url = None
+        for offset in range(30):
+            check = today - dt_mod.timedelta(days=offset)
+            url = (f"https://phenocam.nau.edu/webcam/browse/{self.site_name}/"
+                   f"{check.year}/{str(check.month).zfill(2)}/{str(check.day).zfill(2)}")
+            try:
+                imgs = GRIME_AI_PhenoCam().getVisibleImages(url, t0, t1).getVisibleList()
+                if imgs:
+                    if roi_filter:
+                        # Filter to images whose filename contains the ROI type
+                        filtered = [i for i in imgs
+                                    if f"_{roi_filter}_" in i.fullPathAndFilename
+                                    or f"_{roi_filter}." in i.fullPathAndFilename]
+                        imgs = filtered if filtered else imgs
+                    img_url = imgs[-1].fullPathAndFilename
+                    break
+            except Exception:
+                pass
+        if img_url is None:
+            self.result.emit(None, "No recent images found.")
+            return
+        try:
+            data = urllib.request.urlopen(img_url, timeout=15).read()
+            qimg = QtGui.QImage()
+            qimg.loadFromData(data)
+            self.result.emit(QtGui.QPixmap.fromImage(qimg) if not qimg.isNull() else None,
+                             "" if not qimg.isNull() else "Could not decode image.")
+        except Exception as e:
+            self.result.emit(None, f"Error: {e}")
+
+
+class PhenocamDownloadWorker(QtCore.QThread):
+    progress = QtCore.pyqtSignal(int, int, str)
+    finished = QtCore.pyqtSignal(int)
+    def __init__(self, site_name, start_dt, end_dt, save_folder, parent=None):
+        super().__init__(parent)
+        self.site_name, self.start_dt = site_name, start_dt
+        self.end_dt, self.save_folder = end_dt, save_folder
+    def run(self):
+        import urllib.request, os, datetime as dt_mod
+        from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam
+        start_date, end_date = self.start_dt.date(), self.end_dt.date()
+        start_time, end_time = self.start_dt.time(), self.end_dt.time()
+        t_min = dt_mod.time(0, 0)
+        t_max = dt_mod.time(23, 59)
+        image_list, delta = [], max((end_date - start_date).days + 1, 1)
+        current, day_idx = start_date, 0
+        while current <= end_date:
+            day_idx += 1
+            # Use exact time bounds only on first/last day; full day for middle days
+            if current == start_date and current == end_date:
+                t0, t1 = start_time, end_time
+            elif current == start_date:
+                t0, t1 = start_time, t_max
+            elif current == end_date:
+                t0, t1 = t_min, end_time
+            else:
+                t0, t1 = t_min, t_max
+            url = (f"https://phenocam.nau.edu/webcam/browse/{self.site_name}/"
+                   f"{current.year}/{str(current.month).zfill(2)}/{str(current.day).zfill(2)}")
+            try:
+                image_list.extend(
+                    GRIME_AI_PhenoCam().getVisibleImages(url, t0, t1).getVisibleList())
+            except Exception:
+                pass
+            self.progress.emit(day_idx, delta, f"Scanning {current.strftime('%Y-%m-%d')}...")
+            current += dt_mod.timedelta(days=1)
+        if not image_list:
+            self.finished.emit(0)
+            return
+        os.makedirs(self.save_folder, exist_ok=True)
+        total, downloaded = len(image_list), 0
+        for i, img in enumerate(image_list):
+            filename = os.path.basename(img.fullPathAndFilename)
+            dest = os.path.join(self.save_folder, filename)
+            if not os.path.isfile(dest):
+                try:
+                    urllib.request.urlretrieve(img.fullPathAndFilename, dest)
+                    downloaded += 1
+                except Exception:
+                    pass
+            self.progress.emit(i + 1, total, f"Downloading {filename}")
+        self.finished.emit(downloaded)
+
+
+# ======================================================================================================================
 #
 # ======================================================================================================================
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -385,7 +492,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # TAB 5 - SENSOR DATA GRAPHS
 
+        self._phenocam_fit_preview_height()
+
         #QtWidgets.resizeEvent(self, event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QtCore.QTimer.singleShot(100, self._phenocam_fit_preview_height)
 
     # ------------------------------------------------------------------------------------------------------------------
     # CLASS INITIALIZATION
@@ -527,6 +640,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_Inspect_Annotations.triggered.connect(self.menubar_inspect_annotations)
 
         self.action_ImageOrganizer.triggered.connect(self.menubar_ImageOrganizer)
+
+        try:
+            self.action_TemporalAveraging = QAction("Temporal Averaging", self)
+            self.action_TemporalAveraging.setStatusTip("Average a folder of images together")
+            self.action_TemporalAveraging.triggered.connect(self.toolbarButtonTemporalAveraging)
+            self.menuTools.addSeparator()
+            self.menuTools.addAction(self.action_TemporalAveraging)
+            print("[INFO] Temporal Averaging added to Tools menu successfully.")
+        except Exception as e:
+            print(f"[ERROR] Failed to add Temporal Averaging to Tools menu: {e}")
+            traceback.print_exc()
 
         # GRAPH TAB(S)
         self.NEON_labelLatestImage.setScaledContents(True)
@@ -677,6 +801,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.osm_widget.add_pin(info["lat"], info["lon"], color="yellow", label=site_id)
 
             self.populate_phenocam_tree()
+            self.setup_phenocam_right_panel()
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -709,17 +834,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def populate_phenocam_tree(self):
         """
-        Populate the Phenocam tree widget with sites (roots) and camera-like children
-        based on available columns in the current DataFrame schema.
+        Populate the Phenocam tree widget.
+          Top-level items : site name only
+          └─ Detail fields (Lat, Lon, Elev, active, utc_offset,
+                            date_first, date_last, infrared)
+          └─ ROI name
+             └─ Hyperlink items (opened in browser on click)
         """
         api = GRIME_AI_Phenocam_API()
         cameras_df = api.get_cameras(all_records=True)
-
-        # Preserve your schema but also create lowercase aliases for robust access
-        cols_lower = {c.lower(): c for c in cameras_df.columns}
-
-        def has(col):
-            return col in cameras_df.columns
+        rois_df    = api.get_roilists(all_records=True)
 
         def get_col(*candidates):
             for c in candidates:
@@ -727,57 +851,367 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     return c
             return None
 
-        # Pick site column (prefer your capitalized 'Sitename' if present)
         site_col = get_col("Sitename", "sitename")
         if cameras_df.empty or site_col is None:
             print("Camera data missing expected site column.")
             return
 
-        # Choose a child label column from what's available
-        # Priority: camera_description, camera_orientation, active, date_first/date_last
-        child_label_col = get_col("sitemetadata.camera_description",
-                                  "sitemetadata.camera_orientation")
-        # Optional extra detail to append
-        extra_detail_cols = [c for c in [
-            get_col("active", "infrared"),
-            get_col("date_first"),
-            get_col("date_last")
-        ] if c is not None]
+        roi_site_col = "site" if "site" in rois_df.columns else None
 
-        # Clear existing items
+        CAMERA_FIELDS = [
+            ("Lat",        "Latitude"),
+            ("Lon",        "Longitude"),
+            ("Elev",       "Elevation (m)"),
+            ("active",     "Active"),
+            ("utc_offset", "UTC Offset"),
+            ("date_first", "First Date"),
+            ("date_last",  "Last Date"),
+            ("infrared",   "Infrared"),
+        ]
+
+        ROI_LINK_FIELDS = [
+            ("roi_page",                   "ROI Page"),
+            ("roi_stats_file",             "ROI Stats File"),
+            ("one_day_summary",            "1-Day Summary"),
+            ("three_day_summary",          "3-Day Summary"),
+            ("one_day_transition_dates",   "1-Day Transition Dates"),
+            ("three_day_transition_dates", "3-Day Transition Dates"),
+        ]
+
         self.treeWidget_Phenocam.clear()
 
-        # Group by site and create nodes
         for site_name, group in cameras_df.groupby(site_col):
+            # ── Top-level: site name only ──────────────────────────────────
             site_item = QTreeWidgetItem([str(site_name)])
+            site_item.setData(0, QtCore.Qt.UserRole, str(site_name))
 
-            # If we have a descriptive child column, create one child per row; else, add a single child
-            if child_label_col is not None:
-                for _, row in group.iterrows():
-                    label = str(row.get(child_label_col, site_name))
-                    # Append extra details in a readable way
-                    details = []
-                    for col in extra_detail_cols:
-                        val = row.get(col)
-                        if pd.notna(val):
-                            details.append(f"{col}:{val}")
-                    child_text = label if not details else f"{label}  ({', '.join(details)})"
-                    camera_item = QTreeWidgetItem([child_text])
-                    site_item.addChild(camera_item)
-            else:
-                # No explicit child label available—add a single placeholder child per site
-                camera_item = QTreeWidgetItem([str(site_name)])
-                site_item.addChild(camera_item)
+            row = group.iloc[0]
+
+            # ── Camera detail fields directly under site ───────────────────
+            for col, label in CAMERA_FIELDS:
+                val = row.get(col, None)
+                if val is not None and pd.notna(val):
+                    detail_item = QTreeWidgetItem([f"{label}: {val}"])
+                    site_item.addChild(detail_item)
+
+            # ── ROI links: one bold ROI-name label + its links, all under site ──
+            if roi_site_col is not None and not rois_df.empty:
+                site_rois = rois_df[rois_df[roi_site_col] == site_name]
+                for _, roi_row in site_rois.iterrows():
+                    # Collect valid links for this ROI first
+                    roi_links = []
+                    for col, label in ROI_LINK_FIELDS:
+                        link = roi_row.get(col, None)
+                        if link and pd.notna(link) and str(link).startswith("http"):
+                            roi_links.append((label, str(link)))
+
+                    if not roi_links:
+                        continue
+
+                    # Bold ROI name as a non-clickable separator label
+                    roi_name = str(roi_row.get("roi_name", "ROI"))
+                    roi_label_item = QTreeWidgetItem([roi_name])
+                    roi_label_item.setData(0, QtCore.Qt.UserRole,     str(site_name))
+                    roi_label_item.setData(0, QtCore.Qt.UserRole + 2, roi_name)
+                    roi_label_item_font = roi_label_item.font(0)
+                    roi_label_item_font.setBold(True)
+                    roi_label_item.setFont(0, roi_label_item_font)
+                    site_item.addChild(roi_label_item)
+
+                    # Hyperlinks directly under site (same level as camera fields)
+                    for label, link in roi_links:
+                        link_item = QTreeWidgetItem([f"{label}: {link}"])
+                        link_item.setData(0, QtCore.Qt.UserRole + 1, link)
+                        link_item.setForeground(0, QtGui.QBrush(QtGui.QColor("#1a6fc4")))
+                        font = link_item.font(0)
+                        font.setUnderline(True)
+                        link_item.setFont(0, font)
+                        site_item.addChild(link_item)
 
             self.treeWidget_Phenocam.addTopLevelItem(site_item)
 
-        self.treeWidget_Phenocam.expandAll()
+        self.treeWidget_Phenocam.collapseAll()
 
         ###JES - THIS INTERACTION WITH THE PHENOCAM SERVERS TAKES ON THE ORDER OF 4 MINUTES; SO I
         if 0:
             print("START: Phenocam Meta Data Export...")
             api.export_all_to_excel(output_dir=GRIME_AI_Save_Utils().get_phenocam_folder())
             print("COMPLETED: Phenocam Meta Data Export.")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # PHENOCAM RIGHT PANEL
+    # ------------------------------------------------------------------------------------------------------------------
+    def _make_date_time_row(self, default_qdate, default_hour, default_minute):
+        """Returns (row_widget, date_edit, hour_spin, minute_spin)."""
+        row = QtWidgets.QWidget()
+        hl = QtWidgets.QHBoxLayout(row)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(4)
+        date_edit = QtWidgets.QDateEdit(default_qdate)
+        date_edit.setCalendarPopup(True)
+        date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_edit.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        hour_spin = QtWidgets.QSpinBox()
+        hour_spin.setRange(0, 23)
+        hour_spin.setValue(default_hour)
+        hour_spin.setFixedWidth(48)
+        hour_spin.setAlignment(QtCore.Qt.AlignRight)
+        minute_spin = QtWidgets.QSpinBox()
+        minute_spin.setRange(0, 59)
+        minute_spin.setValue(default_minute)
+        minute_spin.setFixedWidth(48)
+        minute_spin.setAlignment(QtCore.Qt.AlignRight)
+        hl.addWidget(date_edit)
+        hl.addWidget(hour_spin)
+        hl.addWidget(QtWidgets.QLabel("h"))
+        hl.addWidget(minute_spin)
+        hl.addWidget(QtWidgets.QLabel("m"))
+        return row, date_edit, hour_spin, minute_spin
+
+    def setup_phenocam_right_panel(self):
+        # ── LEFT: hard-cap the tree width, pin to top ────────────────────────────
+        self.treeWidget_Phenocam.setMaximumWidth(300)
+        self.treeWidget_Phenocam.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.verticalLayout_PhenocamLeft.setAlignment(QtCore.Qt.AlignTop)
+        self.verticalLayout_PhenocamLeft.setAlignment(
+            self.treeWidget_Phenocam, QtCore.Qt.AlignTop)
+        self.horizontalLayout_Phenocam.setStretch(0, 1)
+        self.horizontalLayout_Phenocam.setStretch(1, 3)
+
+        # ── RIGHT: clear verticalLayout_PhenocamRight and rebuild ───────────────
+        rl = self.verticalLayout_PhenocamRight
+        while rl.count():
+            item = rl.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+        rl.setContentsMargins(4, 4, 4, 4)
+        rl.setSpacing(6)
+
+        # Preview fixed at half the known tab content height (800px tab - ~30px tabbar = 770px)
+        self.phenocam_preview_label = self.labelPhenocamImage
+        self.phenocam_preview_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.phenocam_preview_label.setStyleSheet(
+            "QLabel { background-color: #1a1a1a; color: #888888; }")
+        self.phenocam_preview_label.setText("Select a site to preview the latest image")
+        self.phenocam_preview_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.phenocam_preview_label.setFixedHeight(385)
+        rl.addWidget(self.phenocam_preview_label, stretch=0)
+
+        # Cap the tree to the same usable height so it never overflows
+        self.treeWidget_Phenocam.setMaximumHeight(740)
+
+        # Date / Time Range
+        dt_group = QtWidgets.QGroupBox("Date / Time Range")
+        dt_form  = QtWidgets.QFormLayout(dt_group)
+        dt_form.setContentsMargins(8, 4, 8, 4)
+        dt_form.setVerticalSpacing(4)
+        now   = QtCore.QDate.currentDate()
+        (start_row, self.phenocam_start_date,
+         self.phenocam_start_hour, self.phenocam_start_minute) = \
+            self._make_date_time_row(now.addDays(-30), 0, 0)
+        (end_row, self.phenocam_end_date,
+         self.phenocam_end_hour, self.phenocam_end_minute) = \
+            self._make_date_time_row(now, 23, 59)
+        dt_form.addRow("Start:", start_row)
+        dt_form.addRow("End:",   end_row)
+        rl.addWidget(dt_group, stretch=0)
+
+        # Download Folder
+        folder_group  = QtWidgets.QGroupBox("Download Folder")
+        folder_layout = QtWidgets.QHBoxLayout(folder_group)
+        folder_layout.setContentsMargins(8, 4, 8, 4)
+        self.phenocam_folder_edit = QtWidgets.QLineEdit()
+        self.phenocam_folder_edit.setPlaceholderText("Select output folder...")
+        try:
+            saved = JsonEditor().getValue("Phenocam_Root_Folder")
+            if saved:
+                self.phenocam_folder_edit.setText(saved)
+        except Exception:
+            pass
+        self.phenocam_browse_btn = QtWidgets.QPushButton("Browse...")
+        self.phenocam_browse_btn.setFixedWidth(80)
+        self.phenocam_browse_btn.setStyleSheet(
+            "QPushButton { background-color: steelblue; color: white; }")
+        self.phenocam_browse_btn.clicked.connect(self._phenocam_browse_folder)
+        folder_layout.addWidget(self.phenocam_folder_edit)
+        folder_layout.addWidget(self.phenocam_browse_btn)
+        rl.addWidget(folder_group, stretch=0)
+
+        # Progress + status
+        self.phenocam_progress_bar = QtWidgets.QProgressBar()
+        self.phenocam_progress_bar.setRange(0, 100)
+        self.phenocam_progress_bar.setFixedHeight(16)
+        self.phenocam_progress_bar.setVisible(False)
+        rl.addWidget(self.phenocam_progress_bar, stretch=0)
+        self.phenocam_status_label = QtWidgets.QLabel("")
+        self.phenocam_status_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.phenocam_status_label.setVisible(False)
+        rl.addWidget(self.phenocam_status_label, stretch=0)
+
+        # Download button
+        self.phenocam_download_btn = QtWidgets.QPushButton("Download Images")
+        self.phenocam_download_btn.setStyleSheet(
+            "QPushButton { background-color: steelblue; color: white; font-weight: bold; }")
+        self.phenocam_download_btn.setMinimumHeight(32)
+        self.phenocam_download_btn.clicked.connect(self._phenocam_download_clicked)
+        rl.addWidget(self.phenocam_download_btn, stretch=0)
+
+        # Trailing spacer so controls pin to top
+        rl.addStretch(1)
+
+        # Connect tree selection
+        self.treeWidget_Phenocam.currentItemChanged.connect(self._phenocam_site_selected)
+        # Open hyperlink items in the browser on click
+        self.treeWidget_Phenocam.itemClicked.connect(self._phenocam_tree_item_clicked)
+        self._phenocam_worker          = None
+        self._phenocam_preview_fetcher = None
+
+    def _phenocam_fit_preview_height(self):
+        if not hasattr(self, 'phenocam_preview_label'):
+            return
+        tab_h = self.tab_phenocam_sites.height()
+        if tab_h < 50:
+            return
+        self.treeWidget_Phenocam.setFixedHeight(tab_h - 110)
+        self.verticalLayout_PhenocamLeft.setAlignment(QtCore.Qt.AlignTop)
+        self.phenocam_preview_label.setFixedHeight(tab_h // 2)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _phenocam_get_start_datetime(self):
+        import datetime as dt_mod
+        d = self.phenocam_start_date.date()
+        return dt_mod.datetime(d.year(), d.month(), d.day(),
+                               self.phenocam_start_hour.value(),
+                               self.phenocam_start_minute.value())
+
+    def _phenocam_get_end_datetime(self):
+        import datetime as dt_mod
+        d = self.phenocam_end_date.date()
+        return dt_mod.datetime(d.year(), d.month(), d.day(),
+                               self.phenocam_end_hour.value(),
+                               self.phenocam_end_minute.value())
+
+    def _phenocam_get_selected_sitename(self):
+        item = self.treeWidget_Phenocam.currentItem()
+        if item is None:
+            return None
+        # Walk up to find an item that has a sitename stored
+        while item is not None:
+            site = item.data(0, QtCore.Qt.UserRole)
+            if site:
+                return site
+            item = item.parent()
+        return None
+
+    def _phenocam_get_selected_roi_name(self):
+        """Return the roi_name string if an ROI node (or its child) is selected."""
+        item = self.treeWidget_Phenocam.currentItem()
+        if item is None:
+            return None
+        # Check the item itself and its parent for UserRole+2 (roi_name)
+        for candidate in [item, item.parent()]:
+            if candidate is None:
+                continue
+            roi = candidate.data(0, QtCore.Qt.UserRole + 2)
+            if roi:
+                return roi
+        return None
+
+    def _phenocam_tree_item_clicked(self, item, column):
+        """Open URL in the browser if the clicked item is a hyperlink."""
+        url = item.data(0, QtCore.Qt.UserRole + 1)
+        if url:
+            from PyQt5.QtGui import QDesktopServices
+            from PyQt5.QtCore import QUrl
+            QDesktopServices.openUrl(QUrl(url))
+
+    def _phenocam_site_selected(self, current, previous):
+        if current is None:
+            return
+        site_name = self._phenocam_get_selected_sitename()
+        if site_name:
+            roi_name = self._phenocam_get_selected_roi_name()
+            self._phenocam_load_latest_preview(site_name, roi_name=roi_name)
+
+    def _phenocam_load_latest_preview(self, site_name, roi_name=None):
+        label = roi_name if roi_name else site_name
+        self.phenocam_preview_label.setPixmap(QtGui.QPixmap())
+        self.phenocam_preview_label.setText(f"Loading latest image for {label}...")
+
+        def _on_result(pixmap, err):
+            if pixmap is None:
+                self.phenocam_preview_label.setText(err or "No image available.")
+            else:
+                lbl = self.phenocam_preview_label
+                scaled = pixmap.scaled(lbl.width(), lbl.height(),
+                                       QtCore.Qt.KeepAspectRatio,
+                                       QtCore.Qt.SmoothTransformation)
+                lbl.setPixmap(scaled)
+            self._phenocam_preview_fetcher = None
+
+        fetcher = PhenocamPreviewFetcher(site_name, self, roi_name=roi_name)
+        fetcher.result.connect(_on_result)
+        self._phenocam_preview_fetcher = fetcher
+        fetcher.start()
+
+    def _phenocam_browse_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Download Folder", self.phenocam_folder_edit.text() or "")
+        if folder:
+            self.phenocam_folder_edit.setText(folder)
+            try:
+                JsonEditor().update_json_entry("Phenocam_Root_Folder", folder)
+            except Exception:
+                pass
+
+    def _phenocam_download_clicked(self):
+        site_name = self._phenocam_get_selected_sitename()
+        if not site_name:
+            GRIME_AI_QMessageBox("PhenoCam Download",
+                                 "Please select a site first.").displayMsgBox()
+            return
+        save_folder = self.phenocam_folder_edit.text().strip()
+        if not save_folder:
+            GRIME_AI_QMessageBox("PhenoCam Download",
+                                 "Please specify a download folder.").displayMsgBox()
+            return
+        start_dt = self._phenocam_get_start_datetime()
+        end_dt   = self._phenocam_get_end_datetime()
+        if start_dt >= end_dt:
+            GRIME_AI_QMessageBox("PhenoCam Download",
+                                 "Start must be before End.").displayMsgBox()
+            return
+        try:
+            JsonEditor().update_json_entry("Phenocam_Root_Folder", save_folder)
+        except Exception:
+            pass
+        self.phenocam_download_btn.setEnabled(False)
+        self.phenocam_progress_bar.setValue(0)
+        self.phenocam_progress_bar.setVisible(True)
+        self.phenocam_status_label.setVisible(True)
+        self.phenocam_status_label.setText("Starting...")
+        worker = PhenocamDownloadWorker(
+            site_name, start_dt, end_dt, save_folder, parent=self)
+        worker.progress.connect(self._phenocam_download_progress)
+        worker.finished.connect(self._phenocam_download_finished)
+        self._phenocam_worker = worker
+        worker.start()
+
+    def _phenocam_download_progress(self, current, total, label):
+        if total > 0:
+            self.phenocam_progress_bar.setValue(int(current / total * 100))
+        self.phenocam_status_label.setText(label)
+
+    def _phenocam_download_finished(self, count):
+        self.phenocam_progress_bar.setValue(100)
+        self.phenocam_download_btn.setEnabled(True)
+        self._phenocam_worker = None
+        msg = (f"Download complete. {count} new image(s) saved." if count > 0
+               else "No new images found for the selected date range.")
+        self.phenocam_status_label.setText(msg)
+        GRIME_AI_QMessageBox("PhenoCam Download", msg).displayMsgBox()
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -965,6 +1399,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
              "GRIME2 - Water Level Measurement", self.toolbarButtonGRIME2),
             ("Help_2.png", "Help",
              "Help and Release Notes", self.toolbarButtonReleaseNotes),
+            ("TemporalAvg.png", "Temporal Averaging",
+             "Average a folder of images together", self.toolbarButtonTemporalAveraging),
         ]
 
         # Generic creation loop
@@ -1010,23 +1446,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 time.sleep(2.0)
 
                 start_time = time.time()
-                self.NEON_updateSiteProducts(item)
+                num_matches, matches = self.NEON_updateSiteProducts(item)
                 end_time = time.time()
                 print ("NEON Site Products Elapsed Time: ", end_time - start_time)
 
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
-                print("Download latest image...")
-                time.sleep(2.0)
+                if num_matches > 0:
+                    print("Download latest image...")
+                    time.sleep(2.0)
 
-                start_time = time.time()
-                nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE)
-                end_time = time.time()
-                print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
+                    start_time = time.time()
+                    strFirstProductID = matches[0]
+                    strProductID = strFirstProductID.split('.')[1]
+                    nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE, strProductID)
+                    end_time = time.time()
+                    print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
 
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
-                if nErrorCode == 404:
+                if nErrorCode == 404 or num_matches == 0:
                     gWebImagesAvailable = 0
                     self.NEON_labelLatestImage.setText("No Images Available")
                 else:
@@ -2049,6 +2488,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 
     # ======================================================================================================================
+    # TEMPORAL AVERAGING
+    # ======================================================================================================================
+    def toolbarButtonTemporalAveraging(self):
+        """Launch the Temporal Averaging dialog."""
+        if not hasattr(self, "_temporalAvgDlg") or self._temporalAvgDlg is None:
+            self._temporalAvgDlg = GRIME_AI_TemporalAveragingDlg(self)
+        self._temporalAvgDlg.show()
+        self._temporalAvgDlg.raise_()
+        self._temporalAvgDlg.activateWindow()
+
+
+    # ======================================================================================================================
     # ======================================================================================================================
     # ======================================================================================================================
     def toolbarButtonReleaseNotes(self):
@@ -2613,8 +3064,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             NEON_updateProductTable(self, nIndex)
 
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        #JES
         #JES - TEMPORARILY SET NITRATE DATA ('should only be one nitrate product') AS THE DEFAULT SELECTION
         # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         item20002 = self.NEON_listboxSiteProducts.findItems('20002', QtCore.Qt.MatchContains)
@@ -2626,9 +3075,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             NEON_updateProductTable(self, nIndex)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        #JES
 
-        self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
+        targets = ["20002", "00042", "00033"]
+
+        matches = []
+        for t in targets:
+            found = self.NEON_listboxSiteProducts.findItems(t, QtCore.Qt.MatchContains)
+            if found:
+                matches.extend(item.text() for item in found)
+
+        num_matches = len(matches)
+        print("Matches found:", num_matches)
+        print("Matched values:", matches)
+
+        #self.NEON_listboxSiteProducts.item(0).setToolTip("Hello?")
+
+
+        return num_matches, matches
 
     # ======================================================================================================================
     # THIS FUNCTION WILL DISPLAY THE LATEST IMAGE ON THE GUI.
@@ -3368,16 +3831,16 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
+def DP1_20002_fetchImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
 
-    imageList = DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time)
+    imageList = DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time)
 
     DP1_20002_downloadImages(self, imageList, downloadsFilePath)
 
 # ======================================================================================================================
 #
 # ======================================================================================================================
-def DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_time):
+def DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time):
     global SITECODE, DOMAINCODE, dailyImagesList, gWebImageCount
 
     if nRow <= -1:
@@ -3404,9 +3867,11 @@ def DP1_20002_buildImageList(self, nRow, start_date, end_date, start_time, end_t
 
         QCoreApplication.processEvents()
 
+        product_str = str(nProductID).zfill(5)
+
         # Build URL
         dailyURLvisible = (
-            f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.20002/"
+            f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.{product_str}/"
             f"{start_date.year}/{str(start_date.month).zfill(2)}/{str(start_date.day).zfill(2)}"
         )
 
@@ -3514,12 +3979,12 @@ def downloadProductDataFiles(self, item):
 
             # PHENOCAM IMAGES
             # ----------------------------------------------------------------------------------------------------------
-            if nProductID == 20002:
+            if nProductID == 20002 or nProductID == 42 or nProductID == 33:
                 downloadsFilePath = os.path.join(self.edit_NEONSaveFilePath.text(), 'Images')
                 if not os.path.exists(downloadsFilePath):
                     os.makedirs(downloadsFilePath)
 
-                DP1_20002_fetchImageList(self, nRow, start_date, end_date, start_time, end_time, downloadsFilePath)
+                DP1_20002_fetchImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time, downloadsFilePath)
 
                 processLocalImage(self, imageFileFolder=downloadsFilePath)
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'C:\Users\johns\pycharmprojects\GRIME-AI-X\src\GRIME_AI\neonAIgui.ui'
+# Form implementation generated from reading ui file 'C:\Users\johns\pycharmprojects\GRIME-AI-X-feature\src\GRIME_AI\neonAIgui.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -281,19 +281,13 @@ class Ui_MainWindow(object):
         self.horizontalLayout_Phenocam.setObjectName("horizontalLayout_Phenocam")
         self.verticalLayout_PhenocamLeft = QtWidgets.QVBoxLayout()
         self.verticalLayout_PhenocamLeft.setObjectName("verticalLayout_PhenocamLeft")
-        self.labelPhenocamSites = QtWidgets.QLabel(self.tab_phenocam_sites)
-        font = QtGui.QFont()
-        font.setPointSize(12)
-        self.labelPhenocamSites.setFont(font)
-        self.labelPhenocamSites.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
-        self.labelPhenocamSites.setObjectName("labelPhenocamSites")
-        self.verticalLayout_PhenocamLeft.addWidget(self.labelPhenocamSites)
         self.treeWidget_Phenocam = QtWidgets.QTreeWidget(self.tab_phenocam_sites)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.treeWidget_Phenocam.sizePolicy().hasHeightForWidth())
         self.treeWidget_Phenocam.setSizePolicy(sizePolicy)
+        self.treeWidget_Phenocam.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustIgnored)
         self.treeWidget_Phenocam.setHeaderHidden(False)
         self.treeWidget_Phenocam.setObjectName("treeWidget_Phenocam")
         self.verticalLayout_PhenocamLeft.addWidget(self.treeWidget_Phenocam)
@@ -327,8 +321,6 @@ class Ui_MainWindow(object):
         self.verticalLayout_PhenocamRight.addWidget(self.labelPhenocamImage)
         spacerItem = QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_PhenocamRight.addItem(spacerItem)
-        self.verticalLayout_PhenocamRight.setStretch(0, 1)
-        self.verticalLayout_PhenocamRight.setStretch(1, 1)
         self.horizontalLayout_Phenocam.addLayout(self.verticalLayout_PhenocamRight)
         self.tabWidget.addTab(self.tab_phenocam_sites, "")
         self.tab_FeatureAnalysis = QtWidgets.QWidget()
@@ -502,7 +494,7 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menu_About.menuAction())
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(4)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
         MainWindow.setTabOrder(self.tableWidget_ROIList, self.NEON_listboxSites)
         MainWindow.setTabOrder(self.NEON_listboxSites, self.NEON_listboxSiteProducts)
@@ -545,7 +537,6 @@ class Ui_MainWindow(object):
         self.edit_USGSSaveFilePath.setToolTip(_translate("MainWindow", "This field is pre-populated and cannot be changed at this time."))
         self.pushButton_USGS_BrowseImageFolder.setText(_translate("MainWindow", "Browse"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "USGS Download Manager"))
-        self.labelPhenocamSites.setText(_translate("MainWindow", "Phenocam Sites"))
         self.treeWidget_Phenocam.headerItem().setText(0, _translate("MainWindow", "Site / Camera"))
         self.labelPhenocamImageTitle.setText(_translate("MainWindow", "Latest Image"))
         self.labelPhenocamImageTitle1.setText(_translate("MainWindow", "Latest Image"))

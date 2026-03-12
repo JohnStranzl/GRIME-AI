@@ -49,7 +49,7 @@ class SegmentationController:
         self.bg_points = [p for p in self.bg_points if keep(p)]
 
     # ---- segmentation ----
-    def run_segmentation(self, label=None):
+    def run_segmentation(self, label=None, color=None):
         if not self.fg_points and not self.bg_points:
             return None
 
@@ -71,7 +71,8 @@ class SegmentationController:
             return None
 
         mask_id = next(self._mask_id_counter)
-        color = get_color_for_index(len(self.masks))
+        if color is None:
+            color = get_color_for_index(len(self.masks))
         stats = compute_mask_stats(mask)
 
         mask_entry = {
