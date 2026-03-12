@@ -509,6 +509,43 @@
           </property>
          </widget>
         </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="label_blobFilterRadius">
+          <property name="text">
+           <string>Blob Filter Radius (px):</string>
+          </property>
+          <property name="toolTip">
+           <string>Minimum distance (in pixels) a predicted blob centroid must be from a training centroid prompt to be kept. Stored internally as a fraction of image diagonal so it scales across different image resolutions.</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QSpinBox" name="spinBox_blobFilterRadius">
+          <property name="toolTip">
+           <string>Minimum distance (in pixels) a detected blob centroid must be from the training centroid prompt to be kept. Set based on expected scene variation: stream gauge cameras with variable water level typically need 150-300px; static vegetation or lake scenes typically need 50-150px.</string>
+          </property>
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="maximum">
+           <number>2000</number>
+          </property>
+          <property name="value">
+           <number>50</number>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="2">
+         <widget class="QLabel" name="label_blobFilterRadiusPct">
+          <property name="text">
+           <string>≈ — % of diagonal</string>
+          </property>
+          <property name="toolTip">
+           <string>Equivalent percentage of image diagonal. This fraction is what gets saved and applied at runtime, so it scales correctly across different image resolutions.</string>
+          </property>
+         </widget>
+        </item>
+
         <item row="4" column="3">
          <widget class="QSpinBox" name="spinBox_patience">
           <property name="minimum">

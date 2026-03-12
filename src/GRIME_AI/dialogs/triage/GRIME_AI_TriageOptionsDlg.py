@@ -10,7 +10,8 @@
 import os
 import promptlib
 
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialog, QApplication, QWidget
+from PyQt5.QtGui import QFont
 from PyQt5.uic import loadUi
 
 # ======================================================================================================================
@@ -23,6 +24,15 @@ class GRIME_AI_TriageOptionsDlg(QDialog):
         ui_dir_name = os.path.dirname(__file__)
         ui_file_absolute = os.path.join(ui_dir_name, 'QDialog_TriageOptions.ui')
         loadUi(ui_file_absolute, self)
+
+        # Normalize font across all platforms to prevent truncation on high-DPI screens
+        normal_font = QFont("Arial", 9)
+        normal_font.setStyleHint(QFont.SansSerif)
+        self.setFont(normal_font)
+        for widget in self.findChildren(QWidget):
+            widget.setFont(normal_font)
+
+        self.adjustSize()
 
         self.referenceImageFilename = ''
 

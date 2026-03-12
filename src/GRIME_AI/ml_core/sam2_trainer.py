@@ -24,8 +24,7 @@ try:
     from torch.amp import autocast
 except ImportError:
     from torch.cuda.amp import autocast  # FALLBACK FOR OLDER PYTORCH
-
-
+    
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../sam2'))
@@ -41,6 +40,7 @@ from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
 from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 
 from GRIME_AI.utils.datasetutils import DatasetUtils
+from GRIME_AI.ml_core.ml_helpers import build_centroid_point_prompts
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -152,6 +152,7 @@ class SAM2Trainer:
         self._last_checkpoint_path = None
         self.selected_backend = None
         self.progress_bar_closed = False
+        self.suggested_blob_radius_result = None
 
         # Track top N best validation checkpoints
         self.best_checkpoints = []  # List of (val_loss, path) tuples
@@ -203,6 +204,12 @@ class SAM2Trainer:
         self.save_model_frequency = self.site_config['save_model_frequency']
         self.early_stopping = self.site_config['early_stopping']
         self.patience = self.site_config['patience']
+
+        # Blob filter radius — stored as fraction of image diagonal
+        # Default: 50px / diagonal of a 2000x1000 image ≈ 0.02236
+        import math as _math
+        _DEFAULT_BLOB_FRACTION = 50.0 / _math.sqrt(2000**2 + 1000**2)
+        self.blob_filter_radius = float(self.site_config.get('blob_filter_radius', _DEFAULT_BLOB_FRACTION))
 
         # Validation overlay settings (default: 5 samples per epoch)
         self.validation_overlay_samples = self.site_config.get('validation_overlay_samples', 5)
@@ -399,6 +406,7 @@ class SAM2Trainer:
                 # Train on this category
                 for lr in self.learning_rates:
                     print(f"\nTraining {category_name} with learning rate: {lr}")
+                    self.reset_metrics()
                     self.train_sam(lr, self.weight_decay, train_images, val_images, 
                                  epochs=self.num_epochs, target_label=category_name)
                     self._plot_training_graphs(lr)
@@ -425,6 +433,7 @@ class SAM2Trainer:
                 # Train on this category (dataset already has all annotations)
                 for lr in self.learning_rates:
                     print(f"\nTraining {category_name} with learning rate: {lr}")
+                    self.reset_metrics()
                     self.train_sam(lr, self.weight_decay, train_images, val_images,
                                      epochs=self.num_epochs, target_label=category_name)
                     self._plot_training_graphs(lr)
@@ -618,6 +627,14 @@ class SAM2Trainer:
                     # LEARNING RATE IF NO IMPROVEMENT IS DETECTED FOR PATIENCE=3 EPOCHS
                     # ============================================================================
                     scheduler.step(avg_val_loss)
+            # ----------------------------------------------------------------
+            # POST-TRAINING: compute suggested blob filter radius and store
+            # on self so the caller can retrieve it and prompt the user
+            # ----------------------------------------------------------------
+            self.suggested_blob_radius_result = self._compute_suggested_blob_radius(
+                train_images, target_label
+            )
+
         finally:
             if not self.progress_bar_closed and 'progressBar' in locals():
                 progressBar.close()
@@ -638,6 +655,103 @@ class SAM2Trainer:
         self.miou_values.clear()
         self.train_dice_values.clear()
         self.train_iou_values.clear()
+        self.val_dice_values.clear()
+        self.val_iou_values.clear()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _compute_suggested_blob_radius(self, train_images, target_label):
+        """
+        Post-training: estimate the blob filter radius needed at inference by
+        measuring how far each per-image centroid is from the global mean
+        centroid across all training images.
+
+        The global mean centroid is what gets stored as the prompt centroid in
+        the checkpoint. At inference, any image's detected region could be at a
+        different position than that mean. The 95th percentile of per-image
+        centroid distances from the global mean is therefore the tightest radius
+        that would not reject any legitimate detection in the training set.
+
+        Returns (suggested_fraction, suggested_px, diagonal_px) or None.
+        """
+        target_id = next((c["id"] for c in self.categories if c["name"] == target_label), None)
+        if target_id is None:
+            print(f"[Blob Radius] Category '{target_label}' not found — skipping.")
+            return None
+
+        per_image_centroids = []
+        skipped = 0
+
+        for image_file in train_images:
+            result = self.dataset_util.load_true_mask(
+                image_file, self.annotation_index, mode="binary", target_id=target_id
+            )
+            true_mask = result[0] if isinstance(result, tuple) else result
+            if true_mask is None or true_mask.sum() == 0:
+                skipped += 1
+                continue
+            if true_mask.ndim == 3:
+                true_mask = true_mask[..., 0]
+            true_mask = true_mask.astype(np.uint8)
+
+            ys, xs = np.where(true_mask > 0)
+            per_image_centroids.append((float(np.mean(xs)), float(np.mean(ys))))
+
+        if not per_image_centroids:
+            print("[Blob Radius] No valid images — skipping computation.")
+            return None
+
+        # Global mean centroid — this is the prompt centroid stored in the checkpoint
+        global_cx = float(np.mean([c[0] for c in per_image_centroids]))
+        global_cy = float(np.mean([c[1] for c in per_image_centroids]))
+
+        # Distance from each per-image centroid to the global mean
+        distances = np.array([
+            float(np.sqrt((cx - global_cx) ** 2 + (cy - global_cy) ** 2))
+            for cx, cy in per_image_centroids
+        ])
+
+        p95_px  = float(np.percentile(distances, 95))
+        p50_px  = float(np.percentile(distances, 50))
+        pmax_px = float(np.max(distances))
+
+        try:
+            img = np.array(Image.open(train_images[0]).convert("RGB"))
+            h, w = img.shape[:2]
+            diagonal_px = float(np.sqrt(w ** 2 + h ** 2))
+        except Exception:
+            diagonal_px = float(np.sqrt(1920 ** 2 + 1080 ** 2))
+
+        suggested_fraction = p95_px / diagonal_px
+
+        print(f"\n[Blob Radius] Category: '{target_label}'")
+        print(f"  Images analyzed : {len(per_image_centroids)}  (skipped: {skipped})")
+        print(f"  Global centroid : ({global_cx:.1f}, {global_cy:.1f}) px")
+        print(f"  Median distance : {p50_px:.1f} px")
+        print(f"  95th percentile : {p95_px:.1f} px  <- suggested")
+        print(f"  Maximum         : {pmax_px:.1f} px")
+        print(f"  Diagonal        : {diagonal_px:.1f} px")
+        print(f"  Fraction        : {suggested_fraction:.4f} ({suggested_fraction * 100:.2f}%)")
+
+        return suggested_fraction, p95_px, diagonal_px
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _update_checkpoints_blob_radius(self, new_fraction):
+        """
+        Reopen each saved checkpoint and update blob_filter_radius.
+        Called only after the user confirms they want the computed radius.
+        """
+        for rank, (val_loss, ckpt_path) in enumerate(self.best_checkpoints, start=1):
+            if not ckpt_path or not os.path.isfile(ckpt_path):
+                continue
+            try:
+                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+                ckpt["blob_filter_radius"] = new_fraction
+                torch.save(ckpt, ckpt_path)
+                print(f"[Blob Radius] Updated checkpoint #{rank}: {os.path.basename(ckpt_path)}")
+            except Exception as e:
+                print(f"[Blob Radius] Failed to update {ckpt_path}: {e}")
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -905,11 +1019,10 @@ class SAM2Trainer:
                 num_labels, labels = cv2.connectedComponents(labels_np)
                 valid_mask = np.zeros_like(labels, dtype=np.uint8)
 
-                # ADAPTIVE RADIUS THRESHOLD BASED ON IMAGE SIZE (2.5% OF DIAGONAL).
-                # THIS WILL SCALE WITH IMAGE RESOLUTION
-                # BLOB FILTERING = 0.025
+                # ADAPTIVE RADIUS THRESHOLD BASED ON IMAGE SIZE.
+                # FRACTION IS SET BY USER IN GUI AND STORED IN site_config + .torch METADATA.
                 img_diagonal = math.sqrt(h * h + w * w)
-                radius_threshold = max(10, int(0.025 * img_diagonal))  # min 10px
+                radius_threshold = max(10, int(self.blob_filter_radius * img_diagonal))
 
                 for lbl in range(1, num_labels):  # skip background
                     ys, xs = np.nonzero(labels == lbl)
@@ -1020,11 +1133,29 @@ class SAM2Trainer:
 
                 predictor.set_image(val_image)
 
+                # ===== BUILD CENTROID PROMPTS (matches training and inference) =====
+                h_img, w_img = val_image.shape[:2]
+                point_coords, point_labels = build_centroid_point_prompts(
+                    category_id=target_id,
+                    category_centroids=self.category_centroids,
+                    image_w=w_img,
+                    image_h=h_img,
+                    device=device,
+                    random_seed=42
+                )
+
+                # Guard: if no centroids yet (e.g. called before epoch 1 completes),
+                # skip this image rather than producing unprompted metrics silently.
+                if point_coords is None:
+                    print(f"  Validation skipped for {val_image_file} — "
+                          f"no centroids yet for category '{target_label}' (ID {target_id}).")
+                    continue
+
                 # ===== ERROR HANDLING =====
                 try:
                     masks, scores, low_res_logits = predictor.predict(
-                        point_coords=None,
-                        point_labels=None,
+                        point_coords=point_coords,
+                        point_labels=point_labels,
                         multimask_output=False
                     )
 
@@ -1187,7 +1318,8 @@ class SAM2Trainer:
             "miou": miou,
             "target_category_name": target_category_name,
             "base_model": "sam2",
-            "category_centroids": self.category_centroids
+            "category_centroids": self.category_centroids,
+            "blob_filter_radius": self.blob_filter_radius
         }
 
         # Only save best validation checkpoints (not "final")

@@ -336,6 +336,9 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.comboBox_train_label_selection.currentIndexChanged.connect(self.on_train_label_changed)
 
+        # Blob filter radius — update companion label whenever value changes
+        self.spinBox_blobFilterRadius.valueChanged.connect(self._update_blob_filter_pct_label)
+
         # Connect signals
         self.radioButton_train_model_SAM2.toggled.connect(lambda checked: self.set_training_model("sam2", checked))
         self.radioButton_train_model_segformer.toggled.connect(lambda checked: self.set_training_model("segformer", checked))
@@ -697,6 +700,16 @@ class TrainingTab(QtWidgets.QWidget):
         self.spinBox_patience.setValue(int(cfg.get("patience", 3) or 3))
         self.comboBox_device.setCurrentText(cfg.get("device", "cpu"))
 
+        # Blob filter radius — stored as fraction, displayed as pixels
+        blob_fraction = float(cfg.get("blob_filter_radius", 0.0))
+        if blob_fraction > 0.0:
+            # Convert fraction back to pixels using reference diagonal from first training image
+            ref_px = self._blob_fraction_to_pixels(blob_fraction)
+            if ref_px is not None:
+                self.spinBox_blobFilterRadius.setValue(int(round(ref_px)))
+        # Always refresh the companion label
+        self._update_blob_filter_pct_label()
+
         # Folder lists
         self.listWidget_availableFolders.clear()
         for p in cfg.get("available_folders", []):
@@ -757,6 +770,7 @@ class TrainingTab(QtWidgets.QWidget):
             "early_stopping": bool(self.checkBox_earlyStopping.isChecked()),
             "patience": int(self.spinBox_patience.value()),
             "device": self.comboBox_device.currentText(),
+            "blob_filter_radius": self._blob_pixels_to_fraction(),
             "segmentation_images_path": self.lineEdit_model_training_images_path.text().strip(),
             "available_folders": [self.listWidget_availableFolders.item(i).text()
                                   for i in range(self.listWidget_availableFolders.count())],
@@ -1209,4 +1223,120 @@ class TrainingTab(QtWidgets.QWidget):
             json.dump(settings, f, indent=4)
 
         print(f"Updated siteName in {config_file} to '{settings['siteName']}'")
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _get_reference_diagonal(self) -> float:
+        """
+        Return the diagonal (in pixels) of the first image found in the
+        configured training folder. Used to convert px ↔ fraction.
+        Returns None if no image can be found.
+        """
+        import math
+        root = self.lineEdit_model_training_images_path.text().strip()
+        if not root or not os.path.isdir(root):
+            return None
+
+        valid_exts = ('.jpg', '.jpeg', '.png')
+        for dirpath, _, filenames in os.walk(root):
+            for fname in filenames:
+                if fname.lower().endswith(valid_exts):
+                    try:
+                        from PIL import Image as PILImage
+                        img_path = os.path.join(dirpath, fname)
+                        with PILImage.open(img_path) as im:
+                            w, h = im.size
+                        return math.sqrt(w * w + h * h)
+                    except Exception:
+                        continue
+        return None
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _blob_pixels_to_fraction(self) -> float:
+        """
+        Convert the spinBox_blobFilterRadius pixel value to a fraction of
+        image diagonal using the reference image. Falls back to the default
+        fraction (50 px / 2236 px ≈ 0.02236) if no reference image is found.
+        """
+        import math
+        DEFAULT_FRACTION = 50.0 / math.sqrt(2000**2 + 1000**2)  # ~0.02236
+        px = self.spinBox_blobFilterRadius.value()
+        diagonal = self._get_reference_diagonal()
+        if diagonal and diagonal > 0:
+            return px / diagonal
+        return DEFAULT_FRACTION
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _blob_fraction_to_pixels(self, fraction: float):
+        """
+        Convert a stored fraction back to pixels using the reference diagonal.
+        Returns None if no reference image is found.
+        """
+        diagonal = self._get_reference_diagonal()
+        if diagonal and diagonal > 0:
+            return fraction * diagonal
+        return None
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _update_blob_filter_pct_label(self):
+        """
+        Recompute and display the blob filter radius as a percentage of image
+        diagonal next to the spinbox, e.g. '≈ 2.24% of diagonal'.
+        """
+        fraction = self._blob_pixels_to_fraction()
+        pct = fraction * 100.0
+        self.label_blobFilterRadiusPct.setText(f"≈ {pct:.2f}% of diagonal")
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def prompt_blob_radius_update(self, trainer):
+        """
+        Called from main.py after training completes. Reads the suggested blob
+        radius from the trainer and shows a QMessageBox.question. If the user
+        accepts, updates the spinbox and rewrites all saved checkpoints.
+        """
+        result = getattr(trainer, "suggested_blob_radius_result", None)
+        if result is None:
+            return
+
+        suggested_fraction, suggested_px, diagonal_px = result
+        seed_fraction = trainer.blob_filter_radius
+        seed_px = int(round(seed_fraction * diagonal_px))
+        seed_pct = seed_fraction * 100.0
+        suggested_pct = suggested_fraction * 100.0
+
+        msg = (
+            "Blob Filter Radius Analysis\n\n"
+            "Seed radius (used during training):\n"
+            "  {} px  ({:.2f}% of diagonal)\n\n"
+            "Computed suggested radius (95th percentile of centroid variation):\n"
+            "  {} px  ({:.2f}% of diagonal)\n\n"
+            "Note: the saved checkpoints were validated using the seed radius. "
+            "Updating the radius without retraining means inference behaviour "
+            "may differ from what validation metrics reflect.\n\n"
+            "Would you like to update the spinbox and all saved checkpoints "
+            "to use the computed radius?"
+        ).format(seed_px, seed_pct, int(round(suggested_px)), suggested_pct)
+
+        reply = QMessageBox.question(
+            self,
+            "Update Blob Filter Radius?",
+            msg,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            trainer._update_checkpoints_blob_radius(suggested_fraction)
+            trainer.blob_filter_radius = suggested_fraction
+            self.spinBox_blobFilterRadius.setValue(int(round(suggested_px)))
+            self._update_blob_filter_pct_label()
+            print("[Blob Radius] Spinbox and checkpoints updated to "
+                  "{} px ({:.2f}% of diagonal).".format(
+                      int(round(suggested_px)), suggested_pct))
+        else:
+            print("[Blob Radius] User kept seed radius of {} px.".format(seed_px))
 

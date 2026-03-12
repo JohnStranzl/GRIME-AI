@@ -4451,18 +4451,31 @@ def train_main(cfg: DictConfig) -> None:
             print("Hydra SAM2 training config:")
             print(OmegaConf.to_yaml(cfg))
 
-        # CLOSE UP THE MACHINE LEARNING DIALOG BOX
-        # WE'RE DONE GETTING WHAT WE NEED FROM IT
-        hyperparameterDlg.close()
-        del hyperparameterDlg
-        hyperparameterDlg = None
+        # Keep the ML dialog open — disable Train button during training
+        try:
+            hyperparameterDlg.training_tab.pushButton_train.setEnabled(False)
+        except Exception:
+            pass
 
         # BEGIN TRAINING THE MODEL
         print("Instantiate MLModelTraining class...")
         myML_Dispatcher = MLModelTraining(cfg)
 
         print("Execute ML training...")
-        myML_Dispatcher.Model_Training_Dispatcher(cfg=cfg, mode=selected_training_model)
+        trainer = myML_Dispatcher.Model_Training_Dispatcher(cfg=cfg, mode=selected_training_model)
+
+        # Re-enable Train button
+        try:
+            hyperparameterDlg.training_tab.pushButton_train.setEnabled(True)
+        except Exception:
+            pass
+
+        # Prompt user about suggested blob radius if available
+        if trainer is not None and selected_training_model.lower().startswith("sam"):
+            try:
+                hyperparameterDlg.training_tab.prompt_blob_radius_update(trainer)
+            except Exception as e:
+                print(f"[Blob Radius] Could not show prompt: {e}")
 
 # ======================================================================================================================
 #
@@ -4482,12 +4495,20 @@ def segment_main(cfg: DictConfig) -> None:
         selected_label_categories = hyperparameterDlg.get_selected_label_categories()
         selected_segment_model = hyperparameterDlg.get_selected_segment_model()
 
-        hyperparameterDlg.close()
-        del hyperparameterDlg
-        hyperparameterDlg = None
+        # Keep the ML dialog open — disable Segment button during inference
+        try:
+            hyperparameterDlg.segment_tab.pushButton_Segment.setEnabled(False)
+        except Exception:
+            pass
 
         mySegmentation = MLImageSegmentation(cfg)
         mySegmentation.ML_Segmentation_Dispatcher(copy_original_image, save_masks, selected_label_categories, mode=selected_segment_model)
+
+        # Re-enable Segment button
+        try:
+            hyperparameterDlg.segment_tab.pushButton_Segment.setEnabled(True)
+        except Exception:
+            pass
 
 # ======================================================================================================================
 #
