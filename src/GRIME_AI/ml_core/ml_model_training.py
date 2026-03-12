@@ -151,6 +151,9 @@ class MLModelTraining:
             else:
                 print("No checkpoints were saved during training")
 
+            # Return trainer so caller can access suggested_blob_radius_result
+            return mySAM2_pipeline
+
         # --------------------------------------------------------------------
         #      SAM3   ---   SAM3   ---   SAM3   ---   SAM3   ---   SAM3
         # --------------------------------------------------------------------

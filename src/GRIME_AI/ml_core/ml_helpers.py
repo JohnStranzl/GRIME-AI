@@ -3,9 +3,80 @@
 
 import os
 import json
+import random
 import cv2
 import numpy as np
 from pathlib import Path
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------
+def build_centroid_point_prompts(category_id, category_centroids, image_w, image_h, device,
+                                 negative_balance=3, random_seed=42):
+    """
+    Build SAM2-ready point prompt tensors from stored centroid metadata.
+
+    Positive prompts come from the target category; negative prompts come from
+    all other categories, balanced to negative_balance * len(positives).
+    Uses a fixed random_seed for reproducibility.
+
+    Args:
+        category_id      : int — target category ID
+        category_centroids: dict — {cat_id: [{"centroid_norm": (cx, cy)}, ...], ...}
+        image_w, image_h : int — pixel dimensions of the current image
+        device           : torch.device
+        negative_balance : int — max negatives = this * number of positives (default 3)
+        random_seed      : int — seed for negative sampling (default 42)
+
+    Returns:
+        (point_coords, point_labels) as torch.Tensor, or (None, None) if no
+        positive centroids exist for category_id.
+    """
+    import torch
+
+    # ---- Positive prompts (target category) --------------------------------
+    positive_centroids = category_centroids.get(int(category_id), [])
+    if not positive_centroids:
+        return None, None
+
+    positive_coords = []
+    for entry in positive_centroids:
+        if isinstance(entry, dict):
+            cx_norm, cy_norm = entry["centroid_norm"]
+        else:
+            cx_norm, cy_norm = entry
+        cx_px = int(round(cx_norm * (image_w - 1)))
+        cy_px = int(round(cy_norm * (image_h - 1)))
+        positive_coords.append([cx_px, cy_px])
+
+    # ---- Negative prompts (all other categories) ---------------------------
+    negative_coords = []
+    for cat_id, centroids in category_centroids.items():
+        if int(cat_id) == int(category_id):
+            continue
+        for entry in centroids:
+            if isinstance(entry, dict):
+                cx_norm, cy_norm = entry["centroid_norm"]
+            else:
+                cx_norm, cy_norm = entry
+            cx_px = int(round(cx_norm * (image_w - 1)))
+            cy_px = int(round(cy_norm * (image_h - 1)))
+            negative_coords.append([cx_px, cy_px])
+
+    # Balance negatives with fixed seed for reproducibility
+    max_negatives = len(positive_coords) * negative_balance
+    if len(negative_coords) > max_negatives:
+        rng = random.Random(random_seed)
+        negative_coords = rng.sample(negative_coords, max_negatives)
+
+    # ---- Combine and build tensors -----------------------------------------
+    all_coords = positive_coords + negative_coords
+    all_labels = [1] * len(positive_coords) + [0] * len(negative_coords)
+
+    point_coords = torch.tensor(all_coords, device=device, dtype=torch.float32)
+    point_labels = torch.tensor(all_labels, device=device, dtype=torch.int64)
+
+    return point_coords, point_labels
 
 # ------------------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------------------------

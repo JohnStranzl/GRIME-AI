@@ -31,7 +31,9 @@ from hydra import initialize, compose
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from GRIME_AI.ml_core.ml_helpers import (get_color_for_category, init_coco_structure, add_coco_entries, save_coco_json)
+from GRIME_AI.ml_core.ml_helpers import (get_color_for_category, init_coco_structure,
+                                          add_coco_entries, save_coco_json,
+                                          build_centroid_point_prompts)
 from PyQt5.QtWidgets import QMessageBox
 
 
@@ -147,8 +149,60 @@ class SAM2InferenceEngine:
         if self.target_category_name:
             print(f"Model trained on category: {self.target_category_name}")
 
+        # Resolve blob_filter_radius using three-tier fallback:
+        #   1. .torch checkpoint metadata
+        #   2. site_config.json
+        #   3. GUI/default value (50px / 2236px diagonal ≈ 0.02236)
+        self.blob_filter_radius = self._resolve_blob_filter_radius(checkpoint)
+        print(f"Blob filter radius: {self.blob_filter_radius:.5f} (fraction of diagonal)")
+
         print("=== Model ready for inference ===\n")
         return predictor
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _resolve_blob_filter_radius(self, checkpoint: dict) -> float:
+        """
+        Resolve blob_filter_radius using a three-tier fallback:
+          1. .torch checkpoint metadata  (most authoritative — matches training exactly)
+          2. site_config.json            (fallback for checkpoints predating this feature)
+          3. Default of 50px / 2236px   (last resort, ~0.02236 fraction of diagonal)
+        Returns the fraction of image diagonal to use as the radius threshold.
+        """
+        import math as _math
+        DEFAULT_FRACTION = 50.0 / _math.sqrt(2000**2 + 1000**2)  # ~0.02236
+
+        # Tier 1: checkpoint metadata
+        ckpt_value = checkpoint.get("blob_filter_radius")
+        if ckpt_value is not None:
+            try:
+                val = float(ckpt_value)
+                if val > 0:
+                    print(f"  blob_filter_radius: loaded from checkpoint ({val:.5f})")
+                    return val
+            except (TypeError, ValueError):
+                pass
+
+        # Tier 2: site_config.json
+        try:
+            from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
+            from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
+            import os
+            settings_folder = GRIME_AI_Save_Utils().get_settings_folder()
+            config_file = os.path.join(settings_folder, "site_config.json")
+            cfg = JsonEditor().load_json_file(config_file)
+            cfg_value = cfg.get("blob_filter_radius")
+            if cfg_value is not None:
+                val = float(cfg_value)
+                if val > 0:
+                    print(f"  blob_filter_radius: loaded from site_config.json ({val:.5f})")
+                    return val
+        except Exception as e:
+            print(f"  blob_filter_radius: could not read site_config.json ({e})")
+
+        # Tier 3: default
+        print(f"  blob_filter_radius: using default ({DEFAULT_FRACTION:.5f})")
+        return DEFAULT_FRACTION
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -184,65 +238,26 @@ class SAM2InferenceEngine:
         """
         Run prediction using centroids as prompts.
         Uses POSITIVE prompts from target category and NEGATIVE prompts from all other categories.
-        This matches the training approach for better generalization.
+        Delegates prompt construction to the shared build_centroid_point_prompts helper
+        so training, validation, and inference all use identical logic.
         """
         predictor.set_image(image_array)
 
         h, w = image_array.shape[:2]
-        
-        # ============================================================
-        # POSITIVE PROMPTS (target category)
-        # ============================================================
-        positive_centroids = self.category_centroids.get(int(category_id), [])
-        if not positive_centroids:
-            # No centroids for this category - model wasn't trained on it
-            print(f"Warning: No centroids found for category ID {category_id}. Model may not be trained for this category.")
+
+        point_coords, point_labels = build_centroid_point_prompts(
+            category_id=category_id,
+            category_centroids=self.category_centroids,
+            image_w=w,
+            image_h=h,
+            device=self.device,
+            random_seed=42
+        )
+
+        if point_coords is None:
+            print(f"Warning: No centroids found for category ID {category_id}. "
+                  f"Model may not be trained for this category.")
             return None, None, None
-
-        # Denormalize positive centroids to pixel coords
-        positive_coords = []
-        for entry in positive_centroids:
-            if isinstance(entry, dict):
-                cx_norm, cy_norm = entry["centroid_norm"]
-            else:
-                cx_norm, cy_norm = entry
-            cx_px = int(round(cx_norm * (w - 1)))
-            cy_px = int(round(cy_norm * (h - 1)))
-            positive_coords.append([cx_px, cy_px])
-        
-        # ============================================================
-        # NEGATIVE PROMPTS (all other categories)
-        # ============================================================
-        negative_coords = []
-
-        for cat_id, centroids in self.category_centroids.items():
-            # Skip the target category
-            if int(cat_id) == int(category_id):
-                continue
-
-            # Denormalize negative centroids
-            for entry in centroids:
-                if isinstance(entry, dict):
-                    cx_norm, cy_norm = entry["centroid_norm"]
-                else:
-                    cx_norm, cy_norm = entry
-                cx_px = int(round(cx_norm * (w - 1)))
-                cy_px = int(round(cy_norm * (h - 1)))
-                negative_coords.append([cx_px, cy_px])
-
-        # Balance negatives (same as training)
-        if len(negative_coords) > len(positive_coords) * 3:
-            import random
-            negative_coords = random.sample(negative_coords, len(positive_coords) * 3)
-        
-        # ============================================================
-        # COMBINE POSITIVE AND NEGATIVE PROMPTS
-        # ============================================================
-        all_coords = positive_coords + negative_coords
-        all_labels = [1] * len(positive_coords) + [0] * len(negative_coords)
-
-        point_coords = torch.tensor(all_coords, device=self.device, dtype=torch.float32)
-        point_labels = torch.tensor(all_labels, device=self.device, dtype=torch.int64)
 
         # Run prediction with both positive and negative prompts
         masks, scores, logits = predictor.predict(
@@ -464,6 +479,11 @@ class SAM2InferenceEngine:
 
             image_path = os.path.join(self.segmentation_images_path, image)
 
+            # Initialize per-iteration variables to safe defaults so they are
+            # always defined even if prediction fails or mask is empty.
+            base = os.path.splitext(os.path.basename(image_path))[0]
+            prob_map = None  # will be set to a zero map after image loads
+
             try:
                 pil_image = Image.open(image_path).convert("RGB")
             except Exception as e:
@@ -473,6 +493,8 @@ class SAM2InferenceEngine:
                 continue
 
             image_array = np.array(pil_image)
+            # Safe zero map now that we know image dimensions
+            prob_map = np.zeros((image_array.shape[0], image_array.shape[1]), dtype=np.float32)
 
             multimask_output = False
             category_id = selected_label_categories[0]["id"] if selected_label_categories else 2
@@ -515,9 +537,11 @@ class SAM2InferenceEngine:
                 num_labels, labels = cv2.connectedComponents(labels_np)
                 valid_mask = np.zeros_like(labels, dtype=np.uint8)
                 
-                # Adaptive radius threshold (same as training)
+                # Adaptive radius threshold — uses the same fraction resolved at model load time
+                # (from checkpoint metadata → site_config.json → default), ensuring
+                # inference matches the threshold used during training exactly.
                 img_diagonal = np.sqrt(target_h * target_h + target_w * target_w)
-                radius_threshold = max(10, int(0.15 * img_diagonal))
+                radius_threshold = max(10, int(self.blob_filter_radius * img_diagonal))
                 
                 for lbl in range(1, num_labels):  # skip background
                     ys, xs = np.nonzero(labels == lbl)
@@ -645,7 +669,6 @@ class SAM2InferenceEngine:
                 if not progressBar.isVisible():
                     print("Inference stopped - progress bar closed")
                     break
-                    progressBar.setValue(img_index)
 
             image_path = os.path.join(self.segmentation_images_path, image)
 

@@ -12,6 +12,7 @@ sam2_transforms.pt
 src/GRIME_AI/utils/__pycache__/
 # Ignore everything in the Installer folder
 Installer/*
+exp/*
 # But keep the installer script
 !Installer/*.iss
 src/GRIME_AI/sam2/

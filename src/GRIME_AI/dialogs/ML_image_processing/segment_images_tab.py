@@ -40,20 +40,35 @@ except Exception:
 # ======================================================================================================================
 # ======================================================================================================================
 def _normalize_labels(raw):
+    """
+    Normalize checkpoint label data into a list of dicts with at minimum a
+    'name' key, and 'id' where available.  Preserving 'id' is critical so
+    that the correct COCO category ID is used at inference rather than the
+    listbox position.
+    """
     if raw is None:
         return None
     if isinstance(raw, list) and raw and isinstance(raw[0], dict):
-        return [str(c.get("name") or c.get("label") or c.get("class") or repr(c)) for c in raw]
+        # Already a list of dicts — preserve id if present
+        result = []
+        for c in raw:
+            name = c.get("name") or c.get("label") or c.get("class") or repr(c)
+            entry = {"name": str(name)}
+            if "id" in c:
+                entry["id"] = c["id"]
+            result.append(entry)
+        return result
     if isinstance(raw, dict):
+        # Dict keyed by id or name — convert to list of dicts
         try:
             items = sorted(raw.items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else kv[0])
-            return [str(v) for _, v in items]
+            return [{"id": int(k) if str(k).isdigit() else None, "name": str(v)} for k, v in items]
         except Exception:
-            return [str(v) for v in raw.values()]
+            return [{"name": str(v)} for v in raw.values()]
     if isinstance(raw, str):
-        return [raw]
+        return [{"name": raw}]
     try:
-        return [str(x) for x in list(raw)]
+        return [{"name": str(x)} for x in list(raw)]
     except Exception:
         return None
 
@@ -446,13 +461,18 @@ class SegmentImagesTab(QWidget):
                 return
 
             # Populate selected_label_categories from selection
+            # Use the real category ID stored via UserRole, not listbox position
             self.selected_label_categories = []
             if self.categories_available == True:
                 for idx in range(self.listWidget_labels.count()):
-                    item_text = self.listWidget_labels.item(idx).text().strip()
+                    item = self.listWidget_labels.item(idx)
+                    item_text = item.text().strip()
                     if item_text and item_text in selected_labels:
+                        cat_id = item.data(QtCore.Qt.UserRole)
+                        if cat_id is None:
+                            cat_id = idx + 1  # fallback for older checkpoints without stored IDs
                         self.selected_label_categories.append({
-                            "id": idx + 1,
+                            "id": cat_id,
                             "name": item_text
                         })
 
@@ -595,19 +615,22 @@ class SegmentImagesTab(QWidget):
             self.listWidget_labels.setDisabled(True)
             return
 
-        # Populate listbox with only the label name (string)
+        # Populate listbox with label name; store real category ID via UserRole
         self.categories_available = True
         self.listWidget_labels.setDisabled(False)
         for entry in labels:
             if isinstance(entry, dict):
-                # prefer common name keys; skip entries with no readable name
                 name = entry.get("name") or entry.get("label") or entry.get("class") or entry.get("title")
                 if name is None:
-                    # if you prefer to skip entries without a name, continue; otherwise fallback to stringifying
                     continue
+                cat_id = entry.get("id")
             else:
                 name = str(entry)
-            self.listWidget_labels.addItem(str(name))
+                cat_id = None
+            item = QtWidgets.QListWidgetItem(str(name))
+            if cat_id is not None:
+                item.setData(QtCore.Qt.UserRole, int(cat_id))
+            self.listWidget_labels.addItem(item)
 
         self.select_label(target_label)
 

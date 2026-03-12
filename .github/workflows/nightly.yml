@@ -16,6 +16,8 @@ jobs:
           auto-activate: true
           activate-environment: base
           miniconda-version: "latest"
+          channels: conda-forge,pytorch,defaults
+          channel-priority: strict
 
       - name: Set nightly version
         run: |
@@ -33,7 +35,10 @@ jobs:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
           conda install conda-build anaconda-client -y
-          conda build recipe/grime-ai/
+          conda build recipe/grime-ai/ \
+            -c conda-forge \
+            -c pytorch \
+            -c defaults
           anaconda -t $ANACONDA_API_TOKEN upload \
             $(conda build recipe/grime-ai/ --output) \
             --user GRIMELab \
