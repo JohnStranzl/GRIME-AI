@@ -6,7 +6,7 @@ package:
   version: {{ version }}
 
 source:
-    path: /repo
+    path: ../..
   #git_url: https://github.com/JohnStranzl/GRIME-AI.git
   #git_rev: main
 
