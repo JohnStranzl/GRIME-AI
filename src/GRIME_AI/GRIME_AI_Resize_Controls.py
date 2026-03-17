@@ -19,52 +19,7 @@ class GRIME_AI_Resize_Controls:
     # RESIZE TAB 0 - NEON SITES
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def resizeTab_0(self, selfControl, event):
-        windowSize = event.size()
-        oldWindowSize = event.oldSize()
-
-        gap = 10
-        border = 25
-        vertical_margin = 50
-        newWidth = (int)((windowSize.width() - (gap * (3 + 1)) - (2 * border)) / 3)
-
-        one = selfControl.NEON_listboxSites.pos()
-
-        # PANEL 1 - SITES
-        left = one.x()
-        top = one.y()
-        width = newWidth
-        height = windowSize.height() - vertical_margin * 2
-        selfControl.NEON_listboxSites.setGeometry(left, top, width, height)
-
-        # PANEL 2A - SITE INFO
-        left = left + newWidth + gap
-        top = one.y()
-        width = newWidth
-        height = (int)(windowSize.height() / 2)
-        selfControl.NEON_listboxSiteInfo.setGeometry(left, top, width, height)
-
-        # PANEL 2B - SITE IMAGE
-        top = one.y() + (int)(selfControl.NEON_listboxSites.height() / 2)
-        width = newWidth
-        height = (int)(windowSize.height() / 2) - vertical_margin
-        selfControl.NEON_labelLatestImage.setGeometry(left, top, width, height)
-        # self.NEON_labelLatestImage.setGeometry(QtCore.QRect(one.x()+newWidth+border, one.y(), newWidth, windowSize.height()))        # setGeometry(left, top, width, height)
-
-        # PANEL 3 - SITE PRODUCTS
-        left = left + newWidth + gap
-        top = one.y()
-        width = newWidth - border
-        height = windowSize.height()
-        selfControl.NEON_listboxSiteProducts.setGeometry(left, top, width, height)
-
-        # TAB WIDGET - RESIZE THE TAB WIDGET
-        left = one.x() + border
-        top = one.y() - (int)(vertical_margin / 2)
-        width = windowSize.width() - (2 * border)
-        height = windowSize.height() - vertical_margin
-        selfControl.tabWidget.setGeometry(left, top, width, height)
-
-        # QtWidgets.resizeEvent(self, event)
+        pass
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # RESIZE TAB 1 - NEON DOWNLOAD MANAGER
