@@ -421,6 +421,26 @@ class PhenocamDownloadWorker(QtCore.QThread):
         self.finished.emit(downloaded)
 
 
+class NEONPreviewFetcher(QtCore.QThread):
+    result = QtCore.pyqtSignal(object, str)
+    def __init__(self, site_code, domain_code, product_id=20002, parent=None):
+        super().__init__(parent)
+        self.site_code = site_code
+        self.domain_code = domain_code
+        self.product_id = product_id
+    def run(self):
+        from GRIME_AI.neon.NEON_API import NEON_API as _NEON_API
+        try:
+            nErrorCode, pixmap, count = _NEON_API().DownloadLatestImage(
+                self.site_code, self.domain_code, self.product_id)
+            if nErrorCode == 200 and count > 0 and pixmap and not pixmap.isNull():
+                self.result.emit(pixmap, "")
+            else:
+                self.result.emit(None, "No latest image available.")
+        except Exception as e:
+            self.result.emit(None, f"Error: {e}")
+
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -511,6 +531,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.setupUi(self)
         self.setWindowTitle("GRIME AI" + " " + SW_VERSION + " - John E. Stranzl Jr.")
+        self.tabWidget.setTabVisible(1, False)
         #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
 
         # Initialize a variable to hold the current NEON site information
@@ -614,6 +635,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_USGS_BrowseImageFolder.clicked.connect(self.pushButton_USGS_BrowseImageFolder_Clicked)
         self.pushButton_NEON_BrowseImageFolder.clicked.connect(self.pushButton_NEON_BrowseImageFolder_Clicked)
 
+        # Tab 0 browse and download buttons
+        self.pushButton_NEON_Browse.clicked.connect(self.pushButton_NEON_Browse_Clicked)
+        self.pushButton_NEON_Download.clicked.connect(self.pushbutton_NEONDownloadClicked)
+
+        self.pushButton_SyncDates.setChecked(True)
+        self._update_sync_dates_icon()
+        self.pushButton_SyncDates.toggled.connect(self._on_sync_dates_toggled)
+
         # Connect Check Availability button (will be added to UI)
         try:
             self.pushButton_USGSCheckAvailability.clicked.connect(self.pushButton_USGSCheckAvailability_Clicked)
@@ -653,7 +682,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             traceback.print_exc()
 
         # GRAPH TAB(S)
-        self.NEON_labelLatestImage.setScaledContents(True)
+        self.NEON_labelLatestImage.setScaledContents(False)
+        self.NEON_labelLatestImage.setAlignment(QtCore.Qt.AlignCenter)
         # self.ui.labelLatestImage.setScaledContents(True)
         # self.ui.labelOriginalImage.setScaledContents(True)
         # self.ui.labelEdgeImage.setScaledContents(True)
@@ -661,7 +691,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         # NEON
         # ------------------------------------------------------------------------------------------------------------------
-        self.NEON_listboxSites.itemClicked.connect(self.NEON_SiteClicked)
+        self.NEON_listboxSites.currentItemChanged.connect(self.NEON_SiteClicked)
+        self.NEON_listboxSites.itemClicked.connect(self._neon_tree_item_clicked)
         self.NEON_listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
 
         # ------------------------------------------------------------------------------------------------------------------
@@ -756,20 +787,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print("NEON Field Site Table from NEON website FAILED...")
         # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
-            print("Populate NEON Products tab on GUI...")
-            myList = []
+            print("Populate NEON Sites tab on GUI...")
+            self.NEON_listboxSites.clear()
 
             for site in self.NEON_siteList:
-                strSiteName = site.siteID + ' - ' + site.siteName
-                myList.append(strSiteName)
+                site_item = QTreeWidgetItem([f"{site.siteID} - {site.siteName}"])
+                site_item.setData(0, QtCore.Qt.UserRole, site.siteID)
+                for label, value in [("Site ID", site.siteID),
+                                     ("Site Name", site.siteName),
+                                     ("Latitude", site.latitude),
+                                     ("Longitude", site.longitude),
+                                     ("PhenoCams", site.phenocamSite)]:
+                    child = QTreeWidgetItem([f"{label}: {value}"])
+                    child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                    site_item.addChild(child)
+                self.NEON_listboxSites.addTopLevelItem(site_item)
 
-            self.NEON_listboxSites.addItems(myList)
+            self.NEON_listboxSites.collapseAll()
 
             #JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
             try:
-                self.NEON_listboxSites.setCurrentRow(2)
-                self.NEON_listboxSites.show()
-                self.NEON_SiteClicked(2)
+                default_item = self.NEON_listboxSites.topLevelItem(2)
+                if default_item:
+                    self.NEON_listboxSites.setCurrentItem(default_item)
+                    self.NEON_listboxSites.show()
+                    self.NEON_SiteClicked(default_item)
             except Exception:
                 pass
 
@@ -1285,6 +1327,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # NEON CONTROLS
         NEON_download_file_path = JsonEditor().getValue("NEON_Root_Folder")
         self.edit_NEONSaveFilePath.setText(NEON_download_file_path)
+        self.edit_NEON_TableInput.setText(NEON_download_file_path)
 
         # USGS CONTROLS
         USGS_download_file_path = JsonEditor().getValue("USGS_Root_Folder")
@@ -1417,11 +1460,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # PROCESS NEON SITE CHANGE
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    def NEON_SiteClicked(self, item):
+    def NEON_SiteClicked(self, item, previous=None):
         global SITECODE
         global gWebImagesAvailable
         global gProcessClick
         global gWebImageCount
+
+        if item is None or item.parent() is not None:
+            return
 
         print("NEON Site selected...")
         try:
@@ -1453,28 +1499,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # --------------------------------------------------------------------------------
                 # --------------------------------------------------------------------------------
                 if num_matches > 0:
-                    print("Download latest image...")
-                    time.sleep(2.0)
-
-                    start_time = time.time()
                     strFirstProductID = matches[0]
                     strProductID = strFirstProductID.split('.')[1]
-                    nErrorCode, self.NEON_latestImage, gWebImageCount = NEON_API().DownloadLatestImage(SITECODE, DOMAINCODE, strProductID)
-                    end_time = time.time()
-                    print ("NEON Latest Image Elapsed Time: ", end_time - start_time)
-
-                # --------------------------------------------------------------------------------
-                # --------------------------------------------------------------------------------
-                if nErrorCode == 404 or num_matches == 0:
+                    self.NEON_labelLatestImage.setText("Loading latest image...")
+                    self._neon_preview_fetcher = NEONPreviewFetcher(SITECODE, DOMAINCODE, strProductID)
+                    self._neon_preview_fetcher.result.connect(self._neon_preview_received)
+                    self._neon_preview_fetcher.start()
+                else:
                     gWebImagesAvailable = 0
                     self.NEON_labelLatestImage.setText("No Images Available")
-                else:
-                    gWebImagesAvailable = 1
-
-                    start_time = time.time()
-                    self.NEON_DisplayLatestImage()
-                    end_time = time.time()
-                    print ("NEON Display Latest Image Elapsed Time: ", end_time - start_time)
 
                 gProcessClick = 0
         except Exception:
@@ -1704,6 +1737,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
+    def _update_sync_dates_icon(self):
+        path = icon_path("toolbar_icons", "linked.png" if self.pushButton_SyncDates.isChecked() else "unlinked.png")
+        print(f"[SYNC ICON] path={path} exists={os.path.exists(path)}")
+        pixmap = QPixmap(path)
+        print(f"[SYNC ICON] pixmap null={pixmap.isNull()}")
+        if not pixmap.isNull():
+            self.pushButton_SyncDates.setIcon(QIcon(pixmap))
+        self.pushButton_SyncDates.setIconSize(QtCore.QSize(28, 28))
+
+    def _on_sync_dates_toggled(self, checked):
+        self._update_sync_dates_icon()
+
     def pushButton_NEON_BrowseImageFolder_Clicked(self, item):
         # PROMPT USER FOR FOLDER INTO WHICH TO DOWNLOAD THE IMAGES/FILES
         folder =  promptlib.Files().dir()
@@ -1714,6 +1759,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             os.makedirs(folder)
 
         JsonEditor().update_json_entry("NEON_Image_Folder", folder)
+
+    def pushButton_NEON_Browse_Clicked(self, item=None):
+        folder = promptlib.Files().dir()
+
+        if folder:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            self.edit_NEON_TableInput.setText(folder)
+            self.edit_NEONSaveFilePath.setText(folder)
+            JsonEditor().update_json_entry("NEON_Image_Folder", folder)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1902,13 +1957,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def NEON_FormatProductTableHeader(self):
 
         # HEADER TITLES
-        headerList = ['Site', "Image Count", ' min Date ', ' max Date ', 'Start Date', 'End Date', 'Start Time', 'End Time']
+        headerList = ['Site', "Image Count", 'Start Date', 'End Date', 'Start Time', 'End Time']
 
         # DEFINE HEADER STYLE
         stylesheet = "::section{Background-color:rgb(116,175,80);border-radius:14px;}"
 
         # POINTER TO HEADER
-        header = self.NEON_tableProducts.horizontalHeader()
+        header = self.NEON_selected_products.horizontalHeader()
 
         # DEFAULT HEADER SETTINGS
         header.setMinimumSectionSize(120)
@@ -1922,8 +1977,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i, item in enumerate(headerList):
             headerItem = QTableWidgetItem(item)
             headerItem.setTextAlignment(QtCore.Qt.AlignCenter)
-            self.NEON_tableProducts.setHorizontalHeaderItem(i, headerItem)
-            self.NEON_tableProducts.setStyleSheet(stylesheet)
+            self.NEON_selected_products.setHorizontalHeaderItem(i, headerItem)
+            self.NEON_selected_products.setStyleSheet(stylesheet)
 
             header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
@@ -1932,15 +1987,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # SET THE HEADER FONT
         font = QFont()
         font.setBold(True)
-        self.NEON_tableProducts.horizontalHeader().setFont(font)
-        self.NEON_tableProducts.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.NEON_tableProducts.resizeColumnsToContents()
+        self.NEON_selected_products.horizontalHeader().setFont(font)
+        self.NEON_selected_products.resizeColumnsToContents()
 
         date_widget = QtWidgets.QDateEdit(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        self.NEON_tableProducts.setCellWidget(1, 4, date_widget)
-        self.NEON_tableProducts.setCellWidget(1, 5, date_widget)
-        self.NEON_tableProducts.setCellWidget(1, 6, date_widget)
-        self.NEON_tableProducts.setCellWidget(1, 7, date_widget)
+        self.NEON_selected_products.setCellWidget(1, 4, date_widget)
+        self.NEON_selected_products.setCellWidget(1, 5, date_widget)
+        self.NEON_selected_products.setCellWidget(1, 6, date_widget)
+        self.NEON_selected_products.setCellWidget(1, 7, date_widget)
 
         try:
             self.tableWidget_ROIList.horizontalHeader().setVisible(True)
@@ -2223,21 +2277,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # frame.radioButtonHardDriveImages.setDisabled(False)
         # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
-            myList = []
+            self.NEON_listboxSites.clear()
 
             for site in siteList:
-                strSiteName = site.siteID + ' - ' + site.siteName
-                myList.append(strSiteName)
+                site_item = QTreeWidgetItem([f"{site.siteID} - {site.siteName}"])
+                site_item.setData(0, QtCore.Qt.UserRole, site.siteID)
+                for label, value in [("Site ID", site.siteID),
+                                     ("Site Name", site.siteName),
+                                     ("Latitude", site.latitude),
+                                     ("Longitude", site.longitude),
+                                     ("PhenoCams", site.phenocamSite)]:
+                    child = QTreeWidgetItem([f"{label}: {value}"])
+                    child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                    site_item.addChild(child)
+                self.NEON_listboxSites.addTopLevelItem(site_item)
 
-            self.NEON_listboxSites.addItems(myList)
+            self.NEON_listboxSites.collapseAll()
 
             #JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
             try:
-                self.NEON_listboxSites.setCurrentRow(2)
-                self.NEON_listboxSites.show()
-                self.NEON_SiteClicked(2)
-
+                default_item = self.NEON_listboxSites.topLevelItem(2)
+                if default_item:
+                    self.NEON_listboxSites.setCurrentItem(default_item)
+                    self.NEON_listboxSites.show()
+                    self.NEON_SiteClicked(default_item)
             except Exception:
+                pass
                 pass
 
         print("Initialize USGS product table...")
@@ -3096,6 +3161,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ======================================================================================================================
     # THIS FUNCTION WILL DISPLAY THE LATEST IMAGE ON THE GUI.
     # ======================================================================================================================
+    def _neon_preview_received(self, pixmap, error_msg):
+        global gWebImagesAvailable
+        if pixmap and not pixmap.isNull():
+            gWebImagesAvailable = 1
+            self.NEON_latestImage = pixmap
+            self.NEON_DisplayLatestImage()
+        else:
+            gWebImagesAvailable = 0
+            self.NEON_labelLatestImage.setText(error_msg or "No Images Available")
+
+    def _neon_tree_item_clicked(self, item, column):
+        """Open URL in browser if the clicked NEON tree item is a hyperlink."""
+        url = item.data(0, QtCore.Qt.UserRole + 1)
+        if url:
+            from PyQt5.QtGui import QDesktopServices
+            from PyQt5.QtCore import QUrl
+            QDesktopServices.openUrl(QUrl(url))
+
     def NEON_DisplayLatestImage(self):
 
         if self.NEON_latestImage == []:
@@ -3676,27 +3759,53 @@ def top_colors(image, n):
 # ======================================================================================================================
 def NEON_updateSiteInfo(self):
 
-    # EXTRACT THE SITE ID FOR THE SELECTED ITEM
-    siteID = self.NEON_listboxSites.currentItem().text()
+    # EXTRACT THE SITE ID FROM UserRole (avoids parsing the display label)
+    item = self.NEON_listboxSites.currentItem()
+    if item is None:
+        return None
+    top = item if item.parent() is None else item.parent()
 
     global SITECODE
-    SITECODE = siteID.split(' - ')[0]
+    SITECODE = top.data(0, QtCore.Qt.UserRole) or top.text(0).split(' - ')[0]
     print (f'Fetching site info from NEON server for {SITECODE}...')
     siteInfo = NEON_API().FetchSiteInfoFromNEON(SERVER, SITECODE)
 
     global DOMAINCODE
     DOMAINCODE = siteInfo['data']['domainCode']
 
-    keys = siteInfo['data'].keys()
-    items = [f"{key}: {str(siteInfo['data'][key])}" for key in keys]
+    # Enrich the selected tree item with API fields (state, domain, deimsId)
+    data = siteInfo.get('data', {})
+    extra_fields = [
+        ("State",       data.get('stateCode', '')),
+        ("Domain Code", data.get('domainCode', '')),
+        ("Domain Name", data.get('domainName', '')),
+    ]
+    deims_url = data.get('deimsId', '')
 
-    if 0:
-        self.current_site_info = items[0:9]
+    # Remove any previously-added API children (marked with UserRole+3)
+    i = 0
+    while i < top.childCount():
+        if top.child(i).data(0, QtCore.Qt.UserRole + 3):
+            top.removeChild(top.child(i))
+        else:
+            i += 1
 
-    self.NEON_listboxSiteInfo.clear()
-    self.NEON_listboxSiteInfo.addItems(items)
+    for label, value in extra_fields:
+        if value:
+            child = QTreeWidgetItem([f"{label}: {value}"])
+            child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+            child.setData(0, QtCore.Qt.UserRole + 3, True)
+            top.addChild(child)
 
-    self.labelNEONSiteDetails.setText(SITECODE)
+    if deims_url:
+        link_item = QTreeWidgetItem([f"DEIMS ID: {deims_url}"])
+        link_item.setData(0, QtCore.Qt.UserRole + 1, deims_url)
+        link_item.setData(0, QtCore.Qt.UserRole + 3, True)
+        link_item.setForeground(0, QtGui.QBrush(QtGui.QColor("#1a6fc4")))
+        font = link_item.font(0)
+        font.setUnderline(True)
+        link_item.setFont(0, font)
+        top.addChild(link_item)
 
     return (SITECODE)
 
@@ -3708,12 +3817,12 @@ def NEON_updateProductTable(self, item):
     products = self.NEON_listboxSiteProducts.selectedItems()
 
     #JES: FUTURE CONSIDERATION - MUST MAKE CODE DYNAMIC TO ONLY DELETE UNSELECTED ITEMS
-    for i in range(self.NEON_tableProducts.rowCount()):
-        self.NEON_tableProducts.removeRow(0)
+    for i in range(self.NEON_selected_products.rowCount()):
+        self.NEON_selected_products.removeRow(0)
 
     for i in range(len(products)):
         strText = self.NEON_listboxSiteProducts.selectedItems()[i].text()
-        self.NEON_tableProducts.insertRow(i)
+        self.NEON_selected_products.insertRow(i)
 
         productID = strText.split(':')[0]
         availableMonthList = findAvailableMonths(productID)
@@ -3731,75 +3840,40 @@ def NEON_updateProductTable(self, item):
         lastYear = int(monthFields[0])
 
         m = 0
-        self.NEON_tableProducts.setItem(i, m, QTableWidgetItem(strText))
+        self.NEON_selected_products.setItem(i, m, QTableWidgetItem(strText))
 
-        # CONFIGURE DATES FOR SPECIFIC PRODUCT
-        m += 2
-        nYear = 1970
-        nMonth = 1
-        nDay = 1
-        #nYear, nMonth, nDay = GRIME_AI_PhenoCam().getStartDate()
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
-        date_widget.setDisabled(True)
-        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
-
-        m += 1
-        nYear = 1970
-        nMonth = 1
-        nDay = 1
-        #nYear, nMonth, nDay = GRIME_AI_PhenoCam().getEndDate()
-        date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
-        date_widget.setDisabled(True)
-        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
-
-        # --------------------
-        # SET THE CALENDAR START AND END DATE THE SAME USING THE DATE FOR THE LAST DAY FOR WHICH DATA IS AVAILABLE
-        # --------------------
+        # CONFIGURE DATES - columns: 0=Site, 1=Image Count, 2=Start Date, 3=End Date, 4=Start Time, 5=End Time
         nYear, nMonth, nDay = GRIME_AI_PhenoCam().getEndDate()
 
-        m += 1
+        m += 2
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
-        #JES - SET FOR TODAY'S DATE. USER'S MAY NOT WANT TO GO BACK MANY YEARS.
-        #nYear, nMonth, nDay = GRIME_AI_PhenoCam.getStartDate()
-        #date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
-        #date_widget.setDate(QtCore.QDate(date.today().year, date.today().month, date.today().day))
-        # trigger event when the user changes the date
-        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_selected_products, not self.pushButton_SyncDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
+        self.NEON_selected_products.setCellWidget(i, m, date_widget)
 
         m += 1
         date_widget = QtWidgets.QDateEdit(calendarPopup=True)
         date_widget.setDate(QtCore.QDate(nYear, nMonth, nDay))
-        # trigger event when the user changes the date
-        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
+        date_widget.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_selected_products, not self.pushButton_SyncDates.isChecked()))
         date_widget.setKeyboardTracking(False)
-        self.NEON_tableProducts.setCellWidget(i, m, date_widget)
-
-        # --------------------
-        # --------------------
-        m += 1
-        dateTime = QDateTimeEdit()
-        dateTime.setDisplayFormat("hh:mm")
-        dateTime.setFrame(False)
-        # trigger event when the user changes the time
-        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
-        date_widget.setKeyboardTracking(False)
-        self.NEON_tableProducts.setCellWidget(i, m, dateTime)
+        self.NEON_selected_products.setCellWidget(i, m, date_widget)
 
         m += 1
         dateTime = QDateTimeEdit()
         dateTime.setDisplayFormat("hh:mm")
         dateTime.setFrame(False)
-        # trigger event when the user changes the time
-        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_tableProducts, self.checkBox_UniqueDates.isChecked()))
-        date_widget.setKeyboardTracking(False)
-        self.NEON_tableProducts.setCellWidget(i, m, dateTime)
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_selected_products, not self.pushButton_SyncDates.isChecked()))
+        self.NEON_selected_products.setCellWidget(i, m, dateTime)
 
-        self.NEON_tableProducts.resizeColumnsToContents()
+        m += 1
+        dateTime = QDateTimeEdit()
+        dateTime.setDisplayFormat("hh:mm")
+        dateTime.setFrame(False)
+        dateTime.dateTimeChanged.connect(lambda: NEON_dateChangeMethod(date_widget, self.NEON_selected_products, not self.pushButton_SyncDates.isChecked()))
+        self.NEON_selected_products.setCellWidget(i, m, dateTime)
+
+        self.NEON_selected_products.resizeColumnsToContents()
 
 # ======================================================================================================================
 #
@@ -3817,11 +3891,19 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 
     if bUniqueDates == False:
         for i in range(tableWidget.rowCount()):
-            tableWidget.cellWidget(i, 4).setDate(start_date)
-            tableWidget.cellWidget(i, 5).setDate(end_date)
+            if tableWidget.cellWidget(i, 2):
+                tableWidget.cellWidget(i, 2).setDate(start_date)
+            if tableWidget.cellWidget(i, 3):
+                tableWidget.cellWidget(i, 3).setDate(end_date)
+            if tableWidget.cellWidget(i, 4):
+                tableWidget.cellWidget(i, 4).setDateTime(QtCore.QDateTime(QtCore.QDate(1970, 1, 1), QtCore.QTime(start_time.hour, start_time.minute)))
+            if tableWidget.cellWidget(i, 5):
+                tableWidget.cellWidget(i, 5).setDateTime(QtCore.QDateTime(QtCore.QDate(1970, 1, 1), QtCore.QTime(end_time.hour, end_time.minute)))
     else:
-        tableWidget.cellWidget(nRow, 4).setDate(start_date)
-        tableWidget.cellWidget(nRow, 5).setDate(end_date)
+        if tableWidget.cellWidget(nRow, 2):
+            tableWidget.cellWidget(nRow, 2).setDate(start_date)
+        if tableWidget.cellWidget(nRow, 3):
+            tableWidget.cellWidget(nRow, 3).setDate(end_date)
 
     #imageCount = GRIME_AI_PhenoCam.getPhenocamImageCount(SITECODE, DOMAINCODE, start_date, end_date, start_time, end_time)
 
@@ -3933,7 +4015,9 @@ def downloadProductDataFiles(self, item):
     # SAVE DOWNLOADED DATA TO THE USER GRIME-AI FOLDER THAT IS AUTOMATICALLY CREATED, IF IT DOES NOT EXIST,
     # CREATE IT IN THE USER'S DOCUMENT FOLDER
     # ----------------------------------------------------------------------------------------------------
-    NEON_download_file_path = self.edit_NEONSaveFilePath.text()
+    NEON_download_file_path = self.edit_NEON_TableInput.text().strip() or self.edit_NEONSaveFilePath.text().strip()
+    self.edit_NEONSaveFilePath.setText(NEON_download_file_path)
+    self.edit_NEON_TableInput.setText(NEON_download_file_path)
     JsonEditor().update_json_entry("NEON_Root_Folder", NEON_download_file_path)
 
     if len(NEON_download_file_path) == 0:
@@ -3961,15 +4045,15 @@ def downloadProductDataFiles(self, item):
     # --------------------------------------------------------------------------------
     # FIND IMAGE PRODUCT (20002) ROW TO GET DATE RANGE
     # --------------------------------------------------------------------------------
-    rowRange = range(self.NEON_tableProducts.rowCount())
+    rowRange = range(self.NEON_selected_products.rowCount())
 
     for nRow in rowRange:
         GRIME_AI_ProductTableObj = GRIME_AI_ProductTable()
-        start_date, start_time, end_date, end_time = GRIME_AI_ProductTableObj.fetchTableDates(self.NEON_tableProducts, nRow)
+        start_date, start_time, end_date, end_time = GRIME_AI_ProductTableObj.fetchTableDates(self.NEON_selected_products, nRow)
 
         # EXTRACT THE PRODUCT ID
         prodIDCol = 0
-        strProductIDCell = self.NEON_tableProducts.item(nRow, prodIDCol).text()
+        strProductIDCell = self.NEON_selected_products.item(nRow, prodIDCol).text()
         nProductID = int(strProductIDCell.split('.')[1])
         #else:
         #    nProductID = -999

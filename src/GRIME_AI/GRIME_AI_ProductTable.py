@@ -28,24 +28,24 @@ class GRIME_AI_ProductTable():
         self.delta = self.end_date - self.start_date
 
     def fetchTableDates(self, productTable, nRow):
-        startDateCol = 4
+        startDateCol = 2
         self.nStartYear = productTable.cellWidget(nRow, startDateCol).date().year()
         self.nStartMonth = productTable.cellWidget(nRow, startDateCol).date().month()
         self.nStartDay = productTable.cellWidget(nRow, startDateCol).date().day()
         self.strStartDate = str(self.nStartYear) + '-' + str(self.nStartMonth).zfill(2)
         self.start_date = datetime.date(self.nStartYear, self.nStartMonth, self.nStartDay)
 
-        startTimeCol = 6
+        startTimeCol = 4
         self.startTime = productTable.cellWidget(nRow, startTimeCol).dateTime().toPyDateTime().time()
 
-        endDateCol = 5
+        endDateCol = 3
         self.nEndYear = productTable.cellWidget(nRow, endDateCol).date().year()
         self.nEndMonth = productTable.cellWidget(nRow, endDateCol).date().month()
         self.nEndDay = productTable.cellWidget(nRow, endDateCol).date().day()
         self.strEndDate = str(self.nEndYear) + '-' + str(self.nEndMonth).zfill(2)
         self.end_date = datetime.date(self.nEndYear, self.nEndMonth, self.nEndDay)
 
-        endTimeCol = 7
+        endTimeCol = 5
         self.endTime = productTable.cellWidget(nRow, endTimeCol).dateTime().toPyDateTime().time()
 
         self.delta = self.end_date - self.start_date
