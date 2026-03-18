@@ -1739,9 +1739,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     def _update_sync_dates_icon(self):
         path = icon_path("toolbar_icons", "linked.png" if self.pushButton_SyncDates.isChecked() else "unlinked.png")
-        print(f"[SYNC ICON] path={path} exists={os.path.exists(path)}")
         pixmap = QPixmap(path)
-        print(f"[SYNC ICON] pixmap null={pixmap.isNull()}")
         if not pixmap.isNull():
             self.pushButton_SyncDates.setIcon(QIcon(pixmap))
         self.pushButton_SyncDates.setIconSize(QtCore.QSize(28, 28))
