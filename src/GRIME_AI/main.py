@@ -488,8 +488,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     def resizeEvent(self, event):
 
-        currentTabIndex = self.tabWidget.currentIndex()
-
         # PARENT CLASS WHICH CONTAINS ALL FUNCTIONS TO RESIZE ALL CONTROLS ON THE GUI, AS NEEDED
         resizeControls = GRIME_AI_Resize_Controls()
 
@@ -497,12 +495,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         resizeControls.resizeTab_0(self, event)
         self.NEON_DisplayLatestImage()
 
+        # TAB 2 - USGS SITES — keep horizontal splitter 50/50 until user moves it
+        if not getattr(self, '_usgs_splitter_moved_flag', False):
+            half = event.size().width() // 2
+            self.splitter_USGS_Horizontal.setSizes([half, half])
+
+        # TAB 2 - USGS SITES — keep vertical splitter 75/25 until user moves it
+        if not getattr(self, '_usgs_vertical_splitter_moved_flag', False):
+            h = event.size().height()
+            self.splitter_USGS_Vertical.setSizes([int(h * 0.65), int(h * 0.35)])
+
+        # TAB 0 - NEON SITES — keep splitters 50/50 until user moves them
+        if not getattr(self, '_neon_splitter_moved_flag', False):
+            half = event.size().width() // 2
+            self.splitter_NEON_Top.setSizes([half, half])
+            self.splitter_NEON_Bottom.setSizes([half, half])
+
         # TAB 1 - NEON DOWNLOAD MANAGER
         resizeControls.resizeTab_1(self, event)
 
         # TAB 2 - USGS SITES
         resizeControls.resizeTab_2(self, event)
-        self.USGS_DisplayLatestImage()
 
         # TAB 3 - USGS DOWNLOAD MANAGER
         resizeControls.resizeTab_3(self, event)
@@ -519,6 +532,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def showEvent(self, event):
         super().showEvent(event)
         QtCore.QTimer.singleShot(100, self._phenocam_fit_preview_height)
+        QtCore.QTimer.singleShot(200, self.NEON_DisplayLatestImage)
 
     # ------------------------------------------------------------------------------------------------------------------
     # CLASS INITIALIZATION
@@ -684,6 +698,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # GRAPH TAB(S)
         self.NEON_labelLatestImage.setScaledContents(False)
         self.NEON_labelLatestImage.setAlignment(QtCore.Qt.AlignCenter)
+        self.NEON_labelLatestImage.setMinimumSize(0, 0)
+        self.NEON_labelLatestImage.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+
+        self.USGS_labelLatestImage.setScaledContents(False)
+        self.USGS_labelLatestImage.setAlignment(QtCore.Qt.AlignCenter)
+        self.USGS_labelLatestImage.setMinimumSize(0, 0)
+        self.USGS_labelLatestImage.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+
+        self.NEON_labelLatestImage.resized.connect(self.NEON_DisplayLatestImage)
+        self.USGS_labelLatestImage.resized.connect(self.USGS_DisplayLatestImage)
+        self.splitter_NEON_Bottom.splitterMoved.connect(self._neon_splitter_moved)
+        self.splitter_NEON_Top.splitterMoved.connect(self._neon_splitter_moved)
+        self.splitter_USGS_Horizontal.splitterMoved.connect(self._usgs_splitter_moved)
+        self.splitter_USGS_Vertical.splitterMoved.connect(self._usgs_vertical_splitter_moved)
         # self.ui.labelLatestImage.setScaledContents(True)
         # self.ui.labelOriginalImage.setScaledContents(True)
         # self.ui.labelEdgeImage.setScaledContents(True)
@@ -700,7 +728,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         self.usgs = USGSClient()
         self.usgs.initialize()
-        self.USGS_listboxSites.itemClicked.connect(self.USGS_SiteClicked)
+        self.USGS_listboxSites.itemClicked.connect(self._usgs_tree_item_clicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
         # ============================================================================
@@ -730,17 +758,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print("Connected USGS service to HIVIS for cache access")
             
             self.USGS_listboxSites.clear()
-            self.USGS_listboxSites.addItems(self.cameraList)
+            for camID in self.cameraList:
+                site_item = QTreeWidgetItem([camID])
+                site_item.setData(0, QtCore.Qt.UserRole, camID)
+                for line in self.myHIVIS.get_camera_info(camID):
+                    child = QTreeWidgetItem([line])
+                    child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                    site_item.addChild(child)
+                self.USGS_listboxSites.addTopLevelItem(site_item)
+
+            self.USGS_listboxSites.collapseAll()
 
             self.USGS_listboxSites.show()
 
             cameraIndex = 1
-            self.USGS_listboxSites.setCurrentRow(cameraIndex)
+            default_item = self.USGS_listboxSites.topLevelItem(cameraIndex)
+            if default_item:
+                self.USGS_listboxSites.setCurrentItem(default_item)
 
-            strCamID = self.USGS_listboxSites.currentItem().text()
-
-            cameraInfo = self.myHIVIS.get_camera_info(strCamID)
-            self.listboxUSGSSiteInfo.addItems(cameraInfo)
+            strCamID = self.USGS_listboxSites.currentItem().data(0, QtCore.Qt.UserRole)
 
             self.USGS_updateSiteInfo(1)
 
@@ -1684,29 +1720,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #
     # ======================================================================================================================
     def USGS_updateSiteInfo(self, item):
-        currentRow = self.USGS_listboxSites.currentRow()
-        if currentRow < 0:
+        currentItem = self.USGS_listboxSites.currentItem()
+        if currentItem is None:
             return
 
-        strCamID = self.USGS_listboxSites.currentItem().text()
+        strCamID = currentItem.data(0, QtCore.Qt.UserRole)
 
         try:
-            # Update site info listbox
-            self.listboxUSGSSiteInfo.clear()
-            self.listboxUSGSSiteInfo.addItems(
-                self.usgs.get_camera_info_lines(strCamID)
-            )
-            self.USGS_listboxSites.setCurrentRow(currentRow)
+            # Refresh children on the tree item
+            currentItem.takeChildren()
+            for line in self.usgs.get_camera_info_lines(strCamID):
+                child = QTreeWidgetItem([line])
+                child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                currentItem.addChild(child)
 
             # Latest image
             code, pix = self.usgs.get_latest_pixmap(strCamID)
             if code == 404 or pix is None:
+                self.USGS_latestImage = []
                 self.USGS_labelLatestImage.setText("No Images Available")
             else:
-                self.USGS_labelLatestImage.setPixmap(
-                    pix.scaled(self.USGS_labelLatestImage.size(),
-                               QtCore.Qt.KeepAspectRatio,
-                               QtCore.Qt.SmoothTransformation))
+                self.USGS_latestImage = pix
+                self.USGS_DisplayLatestImage()
 
             # Update table
             self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
@@ -1717,11 +1752,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
+    def _neon_splitter_moved(self):
+        self._neon_splitter_moved_flag = True
+        self.NEON_DisplayLatestImage()
+        self.NEON_DisplayLatestImage()
+
+    def _usgs_vertical_splitter_moved(self):
+        self._usgs_vertical_splitter_moved_flag = True
+        self.USGS_DisplayLatestImage()
+
+    def _usgs_splitter_moved(self):
+        self._usgs_splitter_moved_flag = True
+        self.USGS_DisplayLatestImage()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def USGS_DisplayLatestImage(self):
-        if self.USGS_latestImage != []:
-            self.USGS_labelLatestImage.setPixmap(self.USGS_latestImage.scaled(self.USGS_labelLatestImage.size(),
-                                                                         QtCore.Qt.KeepAspectRatio,
-                                                                         QtCore.Qt.SmoothTransformation))
+        if self.USGS_latestImage != [] and self.USGS_labelLatestImage.width() > 1:
+            self.USGS_labelLatestImage.clear()
+            self.USGS_labelLatestImage.setPixmap(
+                self.USGS_latestImage.scaled(
+                    self.USGS_labelLatestImage.size(),
+                    QtCore.Qt.KeepAspectRatio,
+                    QtCore.Qt.SmoothTransformation))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _usgs_tree_item_clicked(self, item, column):
+        """Only trigger site selection for top-level items."""
+        if item.parent() is None:
+            self.USGS_SiteClicked(item)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -2043,9 +2105,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ==================================================================================================================
     def USGS_get_image_count(self):
 
-        currentRow = self.USGS_listboxSites.currentRow()
-        if (currentRow > -1):
-            site = self.USGS_listboxSites.currentItem().text()
+        currentItem = self.USGS_listboxSites.currentItem()
+        if currentItem is not None:
+            site = currentItem.data(0, QtCore.Qt.UserRole)
 
         try:
             startDateCol = 4
@@ -2148,10 +2210,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not os.path.exists(USGS_download_file_path):
                 os.makedirs(USGS_download_file_path)
 
-        currentRow = self.USGS_listboxSites.currentRow()
+        currentItem = self.USGS_listboxSites.currentItem()
 
-        if currentRow >= 0:
-            site = self.USGS_listboxSites.currentItem().text()
+        if currentItem is not None:
+            site = currentItem.data(0, QtCore.Qt.UserRole)
 
             startDateCol = 4
             nYear, nMonth, nDay = self.separateDate(self.table_USGS_Sites.cellWidget(0, startDateCol).date())
@@ -3181,7 +3243,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if self.NEON_latestImage == []:
             self.NEON_labelLatestImage.setText("No Images Available")
-        else:
+        elif self.NEON_labelLatestImage.width() > 1:
+            self.NEON_labelLatestImage.clear()
             self.NEON_labelLatestImage.setPixmap(self.NEON_latestImage.scaled(self.NEON_labelLatestImage.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
 
 
