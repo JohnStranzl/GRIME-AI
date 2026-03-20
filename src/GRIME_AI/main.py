@@ -836,6 +836,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                      ("PhenoCams", site.phenocamSite)]:
                     child = QTreeWidgetItem([f"{label}: {value}"])
                     child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                    url = next((w for w in str(value).split() if w.startswith("http")), None)
+                    if url:
+                        child.setData(0, QtCore.Qt.UserRole + 1, url)
+                        child.setForeground(0, QtGui.QBrush(QtGui.QColor("#1a6fc4")))
+                        font = child.font(0)
+                        font.setUnderline(True)
+                        child.setFont(0, font)
                     site_item.addChild(child)
                 self.NEON_listboxSites.addTopLevelItem(site_item)
 
@@ -1597,7 +1604,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.table_USGS_Sites.setHorizontalHeaderItem(i, headerItem)
             self.table_USGS_Sites.setStyleSheet(stylesheet)
 
-            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(i, QHeaderView.Interactive)
 
         header.setSectionResizeMode(0, QHeaderView.Stretch)
 
@@ -2349,6 +2356,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                      ("PhenoCams", site.phenocamSite)]:
                     child = QTreeWidgetItem([f"{label}: {value}"])
                     child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                    url = next((w for w in str(value).split() if w.startswith("http")), None)
+                    if url:
+                        child.setData(0, QtCore.Qt.UserRole + 1, url)
+                        child.setForeground(0, QtGui.QBrush(QtGui.QColor("#1a6fc4")))
+                        font = child.font(0)
+                        font.setUnderline(True)
+                        child.setFont(0, font)
                     site_item.addChild(child)
                 self.NEON_listboxSites.addTopLevelItem(site_item)
 
