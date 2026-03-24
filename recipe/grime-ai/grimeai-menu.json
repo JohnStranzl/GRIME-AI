@@ -3,7 +3,7 @@
   "menu_name": "GRIME-AI (__PKG_VERSION__)",
   "menu_items": [
     {
-      "name": "Launch GRIME-AI",
+      "name": "Launch GRIME-AI ({{ ENV_NAME }})",
       "description": "GRIME AI: Setting the stage in hydrology",
       "command": ["grime-ai"],
       "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
@@ -16,7 +16,7 @@
       }
     },
     {
-      "name": "Launch GRIME-AI (with debugging)",
+      "name": "Launch GRIME-AI (with debugging) ({{ ENV_NAME }})",
       "description": "GRIME AI: Setting the stage in hydrology",
       "command": ["grime-ai"],
       "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "name": "Launch SAGE",
+      "name": "Launch SAGE ({{ ENV_NAME }})",
       "description": "Segmentation & Annotation for Geospatial Ecohydrology (SAGE)",
       "command": ["sage"],
       "icon": "{{ MENU_DIR }}/sage.{{ ICON_EXT }}",
@@ -42,7 +42,7 @@
       }
     },
     {
-      "name": "Download SAM2 checkpoint files",
+      "name": "Download SAM2 checkpoint files ({{ ENV_NAME }})",
       "description": "Checkpoint files must be downloaded before using GRIME-AI",
       "command": ["download-sam2-checkpoints","1"],
       "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
