@@ -1,4 +1,7 @@
 import os
+import threading
+import http.server
+import socketserver
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtCore import QUrl, QTimer, pyqtSignal
@@ -34,6 +37,11 @@ class OpenStreetMapWidget(QWidget):
         self.view.loadFinished.connect(self._on_loaded)
         QTimer.singleShot(timeout_ms, self._on_timeout)
 
+        # Start local HTTP server so OSM tiles receive a valid Referer/Origin
+        self._server = None
+        self._server_thread = None
+        self._server_port = self._start_tile_server()
+
         # Start loading the map
         self._load_map()
 
@@ -43,6 +51,40 @@ class OpenStreetMapWidget(QWidget):
     def _console_logger(self, level, msg, line, source_id):
         prefix = {0: "[JS]", 1: "[JS-WARN]", 2: "[JS-ERROR]"}.get(level, "[JS]")
         print(f"{prefix} {msg} (line {line}) source: {source_id}")
+
+    # --------------------------------------------------------------------------------------------------------------
+    # Local HTTP server — gives Qt WebEngine a valid HTTP origin so OSM tiles load
+    # --------------------------------------------------------------------------------------------------------------
+    def _start_tile_server(self):
+        """
+        Serve the app's resource directory over http://127.0.0.1:<port>/.
+        Binds to port 0 so the OS picks a free port automatically.
+        Returns the chosen port number.
+        """
+        base_path = os.path.abspath(os.path.dirname(__file__))
+        serve_root = os.path.normpath(os.path.join(base_path, ".."))
+
+        class _Handler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=serve_root, **kwargs)
+
+            def log_message(self, fmt, *args):
+                pass  # suppress access log noise
+
+        self._server = socketserver.TCPServer(("127.0.0.1", 0), _Handler)
+        port = self._server.server_address[1]
+        self._server_thread = threading.Thread(
+            target=self._server.serve_forever, daemon=True
+        )
+        self._server_thread.start()
+        print(f"[OSM] Local tile server started on http://127.0.0.1:{port}")
+        return port
+
+    def closeEvent(self, event):
+        if self._server is not None:
+            self._server.shutdown()
+            self._server = None
+        super().closeEvent(event)
 
     # --------------------------------------------------------------------------------------------------------------
     # Resource helpers
@@ -199,9 +241,14 @@ class OpenStreetMapWidget(QWidget):
         leaflet_js = os.path.join(leaflet_dir, "leaflet.js")
         images_dir = os.path.join(leaflet_dir, "images")
 
-        def file_url(p): return QUrl.fromLocalFile(os.path.normpath(p)).toString()
+        # Build HTTP-relative paths from the serve root (one level above base_path)
+        serve_root = os.path.normpath(os.path.join(base_path, ".."))
 
-        icon_js_defs = self._build_icon_js(images_dir, file_url)
+        def http_url(p):
+            rel = os.path.relpath(os.path.normpath(p), serve_root).replace(os.sep, "/")
+            return f"http://127.0.0.1:{self._server_port}/{rel}"
+
+        icon_js_defs = self._build_icon_js(images_dir, http_url)
 
         html = f"""<!DOCTYPE html>
         <html>
@@ -209,12 +256,12 @@ class OpenStreetMapWidget(QWidget):
             <meta charset="utf-8"/>
             <title>OpenStreetMap Viewer</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="stylesheet" href="{file_url(leaflet_css)}"/>
+            <link rel="stylesheet" href="{http_url(leaflet_css)}"/>
             <style>html, body, #map {{ height: 100%; margin: 0; padding: 0; }}</style>
         </head>
         <body>
             <div id="map"></div>
-            <script src="{file_url(leaflet_js)}"></script>
+            <script src="{http_url(leaflet_js)}"></script>
             <script>
                 (function initWhenReady() {{
                     function ready() {{
@@ -253,4 +300,9 @@ class OpenStreetMapWidget(QWidget):
         </body>
         </html>"""
 
-        self.view.setHtml(html, QUrl.fromLocalFile(base_path + os.sep))
+        # Write HTML to disk inside the served directory so it has an HTTP origin
+        map_html_path = os.path.join(serve_root, "map.html")
+        with open(map_html_path, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        self.view.load(QUrl(f"http://127.0.0.1:{self._server_port}/map.html"))
