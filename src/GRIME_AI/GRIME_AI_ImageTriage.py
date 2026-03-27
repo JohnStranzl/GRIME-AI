@@ -94,7 +94,7 @@ class GRIME_AI_ImageTriage:
             csvFilename = 'ImageTriage_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
             imageQualityFile = os.path.join(folder, csvFilename)
             csvFile = open(imageQualityFile, 'a', newline='')
-            csvFile.write('Focus Value, Focus Attrib, Intensity Value, Intensity Attrib., Rotation, H. Shift, V. Shift, Filename\n')
+            csvFile.write('Focus Value, Focus Attrib, Intensity Value, Intensity Attrib., Rotation, H. Shift, V. Shift, Filename, Moved\n')
 
         # count the number of images that will potentially be processed and possibly saved with the specified extension
         # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
@@ -254,9 +254,10 @@ class GRIME_AI_ImageTriage:
                     quotedHyperlink = f'"{formula}"'
 
                     # Format the CSV line
-                    strOutputString = '%3.2f,%s,%3.2f,%s,%3.2f,%3.2f,%3.2f,%s\n' % (
+                    strOutputString = '%3.2f,%s,%3.2f,%s,%3.2f,%3.2f,%3.2f,%s,%s\n' % (
                         mean, strFFTFocusMetric, intensity, strIntensity,
-                        rotationAngle, horizontal_shift, vertical_shift, formula
+                        rotationAngle, horizontal_shift, vertical_shift, formula,
+                        'Y' if bMove else 'N'
                     )
                     csvFile.write(strOutputString)
 

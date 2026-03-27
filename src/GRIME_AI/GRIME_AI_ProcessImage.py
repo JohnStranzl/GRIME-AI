@@ -71,9 +71,11 @@ class GRIME_AI_ProcessImage:
 
         # QImage BYTE ORDER IS B, G, R
         #q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_BGR888)
-        q_img = QImage(img1.data, img1.shape[1], img1.shape[0], QImage.Format_BGR888)
+        img1 = np.ascontiguousarray(img1)
+        bytes_per_line = img1.strides[0]
+        q_img = QImage(img1.data, img1.shape[1], img1.shape[0], bytes_per_line, QImage.Format_BGR888)
 
-        return(QPixmap(q_img))
+        return QPixmap.fromImage(q_img)
 
     def getThresholdRange(self, threshold, sigma=0.33):
         return (1 - sigma) * threshold, (1 + sigma) * threshold

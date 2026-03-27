@@ -2393,24 +2393,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def menubarCompositeSlices(self):
         global dailyImagesList
         global imageFileFolder
+        global currentImageIndex
 
         if len(dailyImagesList.getVisibleList()) == 0:
             strMessage = 'You must first create a list of images to operate on. Use the FETCH files feature of GRIME AI.'
             msgBox = GRIME_AI_QMessageBox('Composite Slice Error', strMessage, QMessageBox.Close)
             response = msgBox.displayMsgBox()
         else:
-            imageFilename = dailyImagesList.getVisibleList()[0]
-            self.compositeSliceDlg = GRIME_AI_CompositeSliceDlg()
+            imageFilename = dailyImagesList.getVisibleList()[currentImageIndex].fullPathAndFilename
 
-            self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
-            self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
+            if self.compositeSliceDlg is None:
+                self.compositeSliceDlg = GRIME_AI_CompositeSliceDlg()
+                self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
+                self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
+                self.compositeSliceDlg.label_Image.setDrawingMode(DrawingMode.SLICE)
 
-            imageFilename = dailyImagesList.getVisibleList()[0].fullPathAndFilename
             self.compositeSliceDlg.loadImage(imageFilename)
-
-            self.compositeSliceDlg.label_Image.setDrawingMode(DrawingMode.SLICE)
-
             self.compositeSliceDlg.show()
+            self.compositeSliceDlg.raise_()
 
     def generateCompositeSlices(self):
         print("Generating composite slices image(s)...")
@@ -3674,8 +3674,10 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
             currentImageFilename = inputFrame
             numpyImage = myGRIMe_Color.loadColorImage(inputFrame)
 
-            tempCurrentImage = QImage(numpyImage, numpyImage.shape[1], numpyImage.shape[0], QImage.Format_RGB888)
-            currentImage = QPixmap(tempCurrentImage)
+            numpyImage = np.ascontiguousarray(numpyImage)
+            bytes_per_line = numpyImage.strides[0]
+            tempCurrentImage = QImage(numpyImage.data, numpyImage.shape[1], numpyImage.shape[0], bytes_per_line, QImage.Format_RGB888)
+            currentImage = QPixmap.fromImage(tempCurrentImage.copy())
 
     # ------------------------------------------------------------------------------------------------------------------
     # DISPLAY IMAGE FROM NEON SITE

@@ -270,6 +270,7 @@ class GRIME_AI_CompositeSliceDlg(QtWidgets.QDialog):
         self.lineEdit_HorizontalPosition.setText(str(self.sliceCenter))
 
     def closeEvent(self, event):
+        self.compositeSliceCancelSignal.emit()
         super(GRIME_AI_CompositeSliceDlg, self).closeEvent(event)
 
     def getSliceCenter(self):
