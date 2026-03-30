@@ -162,8 +162,8 @@ from GRIME_AI.utils.resource_utils import icon_path
 
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
-from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import QCoreApplication, QRect, QTimer
+from PyQt5 import QtCore, QtWidgets, QtGui, uic
+from PyQt5.QtCore import QCoreApplication, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
     QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
@@ -173,10 +173,6 @@ from PyQt5.QtWidgets import QTreeWidgetItem
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
 import pandas as pd
-
-# ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
-import GRIME_AI.sobelData
 
 from GRIME_AI.usgs.usgs_client import USGSClient
 
@@ -255,10 +251,6 @@ from GRIME_AI.exifData import EXIFData
 # ----------------------------------------------------------------------------------------------------------------------
 from GRIME_AI.ml_core.ml_model_training import MLModelTraining
 from GRIME_AI.ml_core.ml_image_segmentation import MLImageSegmentation
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.neonAIgui import Ui_MainWindow
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -444,7 +436,7 @@ class NEONPreviewFetcher(QtCore.QThread):
 # ======================================================================================================================
 #
 # ======================================================================================================================
-class MainWindow(QMainWindow, Ui_MainWindow):
+class MainWindow(QMainWindow):
     xStart = 0
     yStart = 0
     roiList = []
@@ -541,9 +533,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super(MainWindow, self).__init__(parent)
         self.mainwin = win
         self.session = session
-        self.ui = Ui_MainWindow()
+        ui_path = os.path.join(os.path.dirname(__file__), "neonAIgui.ui")
+        uic.loadUi(ui_path, self)
 
-        self.setupUi(self)
         self.setWindowTitle("GRIME AI" + " " + SW_VERSION + " - John E. Stranzl Jr.")
         self.tabWidget.setTabVisible(1, False)
         #self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint | QtCore.Qt.WindowStaysOnTopHint)
