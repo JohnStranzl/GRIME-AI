@@ -20,7 +20,7 @@ class Renderer:
         )
         return QPixmap.fromImage(qimage)
 
-    def overlay_masks(self, base_pixmap, masks, opacity=120, selected_mask_id=-1):
+    def overlay_masks(self, base_pixmap, masks, opacity=120, selected_mask_id=-1, show_borders=True):
         """
         masks: list of dicts:
           - 'mask': np.ndarray (H, W)
@@ -54,23 +54,24 @@ class Renderer:
             painter.drawImage(0, 0, qimage)
 
             # Draw border — yellow+thicker for selected, black for others
-            is_selected = (m.get("id", -1) == selected_mask_id)
-            if is_selected:
-                border_pen = QPen(QColor(255, 220, 0), 3)
-            else:
-                border_pen = QPen(QColor(0, 0, 0), 2)
+            if show_borders:
+                is_selected = (m.get("id", -1) == selected_mask_id)
+                if is_selected:
+                    border_pen = QPen(QColor(255, 220, 0), 3)
+                else:
+                    border_pen = QPen(QColor(0, 0, 0), 2)
 
-            mask_uint8 = mask.astype(np.uint8) * 255
-            contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                mask_uint8 = mask.astype(np.uint8) * 255
+                contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            painter.setPen(border_pen)
+                painter.setPen(border_pen)
 
-            for contour in contours:
-                if len(contour) < 3:
-                    continue
-                points = [QPointF(float(pt[0][0]), float(pt[0][1])) for pt in contour]
-                polygon = QPolygonF(points)
-                painter.drawPolygon(polygon)
+                for contour in contours:
+                    if len(contour) < 3:
+                        continue
+                    points = [QPointF(float(pt[0][0]), float(pt[0][1])) for pt in contour]
+                    polygon = QPolygonF(points)
+                    painter.drawPolygon(polygon)
 
         painter.end()
         return result
