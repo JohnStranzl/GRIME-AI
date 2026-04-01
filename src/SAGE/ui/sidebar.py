@@ -198,6 +198,18 @@ class Sidebar(QWidget):
         mode_button_group.addButton(self.manual_polygon_btn)
         mode_grid.addWidget(self.manual_polygon_btn, 2, 1)
 
+        # Edge Trace — full-width, visually separated
+        self.edge_trace_btn = QPushButton("⟿  Edge Trace")
+        self.edge_trace_btn.setCheckable(True)
+        self.edge_trace_btn.setToolTip(
+            "Drag along the center of an object. Positive points are placed along the stroke; "
+            "negative points are placed just outside the detected edges on each side.\n"
+            "+/- : adjust sample interval   [ / ] : adjust search width"
+        )
+        self.edge_trace_btn.clicked.connect(lambda: self._on_mode_button_clicked("edge_trace"))
+        mode_button_group.addButton(self.edge_trace_btn)
+        mode_grid.addWidget(self.edge_trace_btn, 3, 0, 1, 2)  # full width, row 3
+
         mode_outer.addLayout(mode_grid)
 
         # ---- Mask sub-panel (QStackedWidget with 3 pages) ----
@@ -438,6 +450,7 @@ class Sidebar(QWidget):
 
         is_mask    = mode == "mask"
         is_polygon = mode in ("polygon", "paint", "mask", "manual_draw")
+        is_edge_trace = mode == "edge_trace"
 
         # Show / hide the mask sub-panel
         self.mask_subpanel.setVisible(is_mask)
@@ -450,8 +463,16 @@ class Sidebar(QWidget):
             self.random_radio.setChecked(True)
             self._on_sampling_button_clicked("random")
 
-        # Style: green for polygon-family modes
-        if is_polygon:
+        # Style: green for polygon-family modes, teal for edge trace
+        if is_edge_trace:
+            self.edge_trace_btn.setStyleSheet(
+                "QPushButton:checked { background-color: #0097a7; color: white; }"
+            )
+            for btn in (self.polygon_btn, self.paint_btn, self.mask_btn, self.manual_draw_btn):
+                btn.setStyleSheet("")
+            self._update_sampling_button_style("")
+        elif is_polygon:
+            self.edge_trace_btn.setStyleSheet("")
             color = "#4CAF50"
             for btn in (self.polygon_btn, self.paint_btn, self.mask_btn, self.manual_draw_btn):
                 btn.setStyleSheet(
@@ -459,6 +480,7 @@ class Sidebar(QWidget):
                 )
             self._update_sampling_button_style(color)
         else:
+            self.edge_trace_btn.setStyleSheet("")
             for btn in (self.polygon_btn, self.paint_btn, self.mask_btn, self.manual_draw_btn):
                 btn.setStyleSheet("")
             self._update_sampling_button_style("")

@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QToolBar,
     QSpinBox,
     QLabel,
+    QCheckBox,
 )
 from PyQt5.QtWidgets import QAction
 from PyQt5.QtCore import Qt
@@ -145,6 +146,9 @@ class MainWindow(QMainWindow):
         # Canvas polygon signal - handle both SAM2 and manual
         self.canvas.polygon_drawn.connect(self._on_polygon_drawn_dispatcher)
 
+        # Edge Trace signal
+        self.canvas.edge_trace_stroke.connect(self._on_edge_trace_stroke)
+
         layout.addWidget(self.sidebar, stretch=1)
         main_layout.addLayout(layout)
 
@@ -166,6 +170,14 @@ class MainWindow(QMainWindow):
         self.opacity_spinbox.setToolTip("Mask overlay opacity (0 = transparent, 100 = opaque)")
         self.opacity_spinbox.valueChanged.connect(self._on_opacity_spinbox_changed)
         toolbar.addWidget(self.opacity_spinbox)
+
+        toolbar.addSeparator()
+        self.border_checkbox = QCheckBox("Show Borders")
+        self.border_checkbox.setChecked(False)
+        self.border_checkbox.setToolTip("Show/hide the border outline around masked regions")
+        self.border_checkbox.stateChanged.connect(self._on_border_checkbox_changed)
+        toolbar.addWidget(self.border_checkbox)
+        self._show_borders = False
 
         # ---------------------------------------------------------
         # Menu bar: File
@@ -200,6 +212,12 @@ class MainWindow(QMainWindow):
 
         # Restore saved opacity
         self._autoload_opacity()
+
+        # Restore saved border setting
+        self._autoload_borders()
+
+        # Restore saved edge trace settings
+        self._autoload_edge_trace_settings()
 
     # ------------------------------------------------------------------------
     #
@@ -239,6 +257,24 @@ class MainWindow(QMainWindow):
         self.opacity_spinbox.blockSignals(True)
         self.opacity_spinbox.setValue(self._opacity_percent)
         self.opacity_spinbox.blockSignals(False)
+
+    def _autoload_borders(self):
+        """Restore show_borders setting from sage.json."""
+        settings = self._read_sage_settings()
+        show = settings.get("show_borders", False)
+        self._show_borders = show
+        self.border_checkbox.blockSignals(True)
+        self.border_checkbox.setChecked(show)
+        self.border_checkbox.blockSignals(False)
+
+    def _autoload_edge_trace_settings(self):
+        """Restore edge trace interval and width from sage.json."""
+        settings = self._read_sage_settings()
+        interval = settings.get("edge_trace_interval", 40)
+        width = settings.get("edge_trace_width", 80)
+        self.canvas._edge_trace_interval = interval
+        self.canvas._ET_MAX_RAY = width
+        self.canvas._update_et_hud_text()
 
     # -------------------------------------------------------------------------
     # Label CSV Export / Import
@@ -369,6 +405,36 @@ class MainWindow(QMainWindow):
             self._on_manual_polygon_drawn(points)
         else:
             self._on_polygon_drawn(points)  # SAM2 Polygon and SAM2 Freehand
+
+    # ------------------------------------------------------------------------
+    # Edge Trace handler
+    # ------------------------------------------------------------------------
+    def _on_edge_trace_stroke(self, fg_pts, bg_pts):
+        """
+        Receives pre-computed fg/bg points from Canvas (Canny already done there).
+        Loads them into the controller and runs SAM2 segmentation.
+        """
+        if self.controller is None:
+            return
+        if not fg_pts:
+            return
+
+        label = self.sidebar.get_active_label()
+        if label is None:
+            QMessageBox.warning(self, "No Label Defined",
+                "Please define at least one label class before annotating.")
+            return
+
+        for x, y in fg_pts:
+            self.controller.add_point(x, y, is_fg=True)
+        for x, y in bg_pts:
+            self.controller.add_point(x, y, is_fg=False)
+
+        color = self.sidebar.get_color_for_label(label)
+        mask_entry = self.controller.run_segmentation(label=label, color=color)
+        if mask_entry:
+            self.sidebar.refresh_masks()
+        self._update_canvas()
 
     # ------------------------------------------------------------------------
     #
@@ -726,6 +792,10 @@ class MainWindow(QMainWindow):
     def _on_left_click(self, x, y):
         if self.controller is None:
             return
+        if self.sidebar.get_active_label() is None:
+            QMessageBox.warning(self, "No Label Defined",
+                "Please define at least one label class before annotating.")
+            return
         self.controller.add_point(x, y, is_fg=True)
         self._update_canvas()
 
@@ -752,6 +822,10 @@ class MainWindow(QMainWindow):
                 self._update_canvas()
         else:
             # It's coordinates - add negative point
+            if self.sidebar.get_active_label() is None:
+                QMessageBox.warning(self, "No Label Defined",
+                    "Please define at least one label class before annotating.")
+                return
             self.controller.add_point(x_or_mask_id, y, is_fg=False)
             self._update_canvas()
 
@@ -804,6 +878,19 @@ class MainWindow(QMainWindow):
         self.controller.set_opacity(int(percent / 100 * 255))
         self._write_sage_settings({"mask_opacity_percent": percent})
         self._update_canvas()
+
+    def _on_border_checkbox_changed(self, state):
+        self._show_borders = bool(state)
+        self._update_canvas()
+
+    def closeEvent(self, event):
+        """Save persistent settings before closing."""
+        self._write_sage_settings({
+            "show_borders": self._show_borders,
+            "edge_trace_interval": self.canvas._edge_trace_interval,
+            "edge_trace_width": self.canvas._ET_MAX_RAY,
+        })
+        super().closeEvent(event)
 
     def _on_opacity_changed(self, value):
         """Legacy hook kept for sidebar signal compatibility — converts 0-255 to spinbox %."""
@@ -870,14 +957,14 @@ class MainWindow(QMainWindow):
         masks = self.controller.get_visible_masks()
         pixmap_with_masks = self.renderer.overlay_masks(
             base_pixmap, masks, opacity=self.controller.opacity,
-            selected_mask_id=self.selected_mask_id
+            selected_mask_id=self.selected_mask_id,
+            show_borders=self._show_borders,
         )
-        pixmap_with_points = self.renderer.draw_points(
-            pixmap_with_masks,
+        self.canvas.set_pixmap(pixmap_with_masks)
+        self.canvas.update_seed_points(
             self.controller.fg_points,
             self.controller.bg_points,
         )
-        self.canvas.set_pixmap(pixmap_with_points)
 
         # Add invisible mask items for right-click detection
         self._add_mask_items_to_canvas()
@@ -1106,7 +1193,7 @@ class MainWindow(QMainWindow):
         total_images = len(all_images)
 
         # Ask user where to save the COCO file
-        default_path = os.path.join(folder, "Annotations.json")
+        default_path = os.path.join(folder, "instances_default.json")
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Save COCO Annotation File",
@@ -1261,5 +1348,6 @@ class MainWindow(QMainWindow):
         self.sidebar.controller = self.controller
         self.sidebar.refresh_masks()
 
-        # Update canvas
+        # Update canvas and reset zoom for new image
         self._update_canvas()
+        self.canvas.reset_zoom()
