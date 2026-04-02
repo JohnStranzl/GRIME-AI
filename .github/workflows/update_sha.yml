@@ -1,5 +1,5 @@
 # .github/workflows/update_version.yml
-name: Update Version
+name: Update SHA
 
 on:
   push:
