@@ -1,0 +1,31 @@
+# .github/workflows/update_version.yml
+name: Update Version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write commit SHA to version.py
+        run: |
+          # Extract the existing SW_VERSION line as-is, then append COMMIT_SHA
+          SW_VERSION_LINE=$(grep '^SW_VERSION' src/GRIME_AI/version.py)
+          echo "$SW_VERSION_LINE" > src/GRIME_AI/version.py
+          echo "COMMIT_SHA = \"${{ github.sha }}\"" >> src/GRIME_AI/version.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/GRIME_AI/version.py
+          git diff --staged --quiet || git commit -m "chore: update version.py [${{ github.sha }}]"
+          git push
