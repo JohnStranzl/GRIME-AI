@@ -64,10 +64,11 @@ def normalize_files(annotation_files):
 # ============================================================================
 class MLModelTraining:
 
-    def __init__(self, cfg: DictConfig = None):
+    def __init__(self, cfg: DictConfig = None, parent_widget=None):
         self.className = "MLModelTraining"
 
         self.cfg = cfg
+        self.parent_widget = parent_widget
 
         # ALL FILES SAVED WITH BE TAGGED WITH THE DATE AND TIME THAT TRAINING STARTED.
         self.now = datetime.now()
@@ -141,7 +142,7 @@ class MLModelTraining:
         # --------------------------------------------------------------------
         if mode.lower() == "sam2":
             from GRIME_AI.ml_core.sam2_trainer import SAM2Trainer
-            mySAM2_pipeline = SAM2Trainer(self.cfg)
+            mySAM2_pipeline = SAM2Trainer(self.cfg, parent_widget=self.parent_widget)
             mySAM2_pipeline.run_training_pipeline()
 
             # Get the best checkpoint path
@@ -191,6 +192,8 @@ class MLModelTraining:
                 categories=self.categories,
                 target_category_name=self.site_config["train_model"]["TRAINING_CATEGORIES"][0]["label_name"],
                 output_dir=self.model_output_folder,
+                formatted_time=self.formatted_time,
+                site_name=self.site_name,
             )
 
             print("Begin SegFormer Training...")
@@ -256,7 +259,7 @@ class MLModelTraining:
         - Optionally wraps with GeneralLoRAWrapper.
         - Trains using SegFormerTrainer with the correct optimizer.
         """
-        trainer = SegFormerTrainer(cfg)
+        trainer = SegFormerTrainer(cfg, parent_widget=self.parent_widget)
         
         # Calculate num_labels from categories
         # Background (class 0) + all annotated categories

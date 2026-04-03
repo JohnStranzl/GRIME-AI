@@ -45,7 +45,6 @@ class QProgressWheel(QWidget):
         self.m_gradientData = None
 
         # SET DEFAULT COLORS FOR BASE, TEXT and SHADOW
-        # --------------------------------------------------------------------------------
         palette = QPalette()
         palette.setBrush(QPalette.Base, QtCore.Qt.lightGray)
         palette.setColor(QPalette.Text, QtCore.Qt.magenta)
@@ -55,11 +54,9 @@ class QProgressWheel(QWidget):
         self.setBarStyle(QProgressWheel.BarStyle.PIE)
 
         # SET DEFAULT COLORS FOR COLOR WHEEL
-        # --------------------------------------------------------------------------------
         colorList = [QtCore.Qt.red, QtCore.Qt.darkRed, QtCore.Qt.yellow, QtCore.Qt.green, QtCore.Qt.darkGreen, QtCore.Qt.cyan, QtCore.Qt.blue]
         numColors = len(colorList)
         percentage = 1.0 / float(numColors)
-
         colorIndex = 0
         gradientPoints = []
         for color in colorList:
@@ -68,9 +65,7 @@ class QProgressWheel(QWidget):
         self.setDataColors(gradientPoints)
 
         # DEFAULT POSITION AND SIZE
-        # --------------------------------------------------------------------------------
         self.setGeometry(800, 400, 400, 400)
-
         self.move(QApplication.desktop().screen().rect().center() - self.rect().center())
 
         self.setWindowFlag(Qt.FramelessWindowHint, False)
@@ -81,14 +76,12 @@ class QProgressWheel(QWidget):
 
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
-
         self.setStyleSheet("background-color: white;")
 
-        # Optionally set the window to be always on top
-        if alwaysOnTop:
-            self.setAlwaysOnTop(True)
+        # Parent-based z-ordering: if a parent window is provided, Windows OS
+        # automatically keeps this window above its parent but below unrelated
+        # applications. No WindowStaysOnTopHint needed or used.
 
-        # Progress bar setup
         if title:
             self.setWindowTitle(title)
 
@@ -100,18 +93,8 @@ class QProgressWheel(QWidget):
             self.setValue(1)
 
     def setAlwaysOnTop(self, enable: bool):
-        # Retrieve the current window flags
-        flags = self.windowFlags()
-        if enable:
-            # Add the 'stay on top' flag
-            flags |= Qt.WindowStaysOnTopHint
-        else:
-            # Remove the 'stay on top' flag
-            flags &= ~Qt.WindowStaysOnTopHint
-        self.setWindowFlags(flags)
-        # Note: To see the effect, you might need to hide and re-show the widget.
-        self.show()
-
+        """Retained for API compatibility. Z-ordering is handled via parent window."""
+        pass
 
     # ENUMS ---------------------------------------------------------
     class BarStyle(Enum):
@@ -208,13 +191,11 @@ class QProgressWheel(QWidget):
             else:
                 self.m_value = val
             self.update()
-
         QApplication.processEvents()
 
     @pyqtSlot()
     def getValue(self):
-        return  self.m_value
-
+        return self.m_value
 
     # PAINTING ------------------------------------------------------
     def paintEvent(self, event: QPaintEvent):

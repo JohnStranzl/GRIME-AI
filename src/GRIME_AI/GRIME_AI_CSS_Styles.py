@@ -49,3 +49,30 @@ QPushButton:disabled {
   color: black;
 }
 """
+BUTTON_CSS_ORANGE = """
+QPushButton {
+  background-color: darkorange;
+  color: white;
+  border: 1px solid #b8600a;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #e8872a; }
+QPushButton:disabled {
+  background-color: gray;
+  color: black;
+}"""
+
+BUTTON_CSS_YELLOW = """
+QPushButton {
+  background-color: #f0c000;
+  color: black;
+  border: 1px solid #b89000;
+  padding: 6px 14px;
+  border-radius: 6px;
+}
+QPushButton:hover { background-color: #f5d030; }
+QPushButton:disabled {
+  background-color: gray;
+  color: black;
+}"""

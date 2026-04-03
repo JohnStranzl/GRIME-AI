@@ -13,6 +13,7 @@
 
 import os
 import numpy as np
+from fpdf import FPDF
 
 import matplotlib
 
@@ -68,24 +69,87 @@ class ModelTrainingVisualization:
     # ------------------------------------------------------------------------------------------------------------------
     # ✅ NEW: Helper method for consistent title generation
     # ------------------------------------------------------------------------------------------------------------------
-    def _make_title(self, base_title: str, site_name: str = None, lr: float = None) -> str:
+    def _make_title(self, base_title: str, site_name: str = None, lr: float = None, model_name: str = None) -> str:
         """
-        Generate consistent plot titles with optional site name and learning rate.
+        Generate consistent two-line plot titles.
+
+        Line 1: Site name
+        Line 2: Model name and metric label with optional learning rate
 
         Args:
-            base_title: Base title for the plot
-            site_name: Optional site name to prepend
-            lr: Optional learning rate to append
+            base_title:  Metric label, e.g. "Accuracy" or "Loss"
+            site_name:   Site identifier, e.g. "KOLA"
+            lr:          Learning rate
+            model_name:  Model name, e.g. "SAM2" or "SegFormer-LoRA"
 
         Returns:
             Formatted title string
         """
-        title = base_title
+        line2 = base_title
+        if model_name:
+            line2 = f"{model_name} — {base_title}"
         if site_name:
-            title = f"{site_name} {title}"
+            return f"{site_name}\n{line2}"
+        return line2
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ✅ NEW: Helper to draw a hyperparameter info box on any axes
+    # ------------------------------------------------------------------------------------------------------------------
+    def _add_info_box(
+            self,
+            ax,
+            lr: float = None,
+            epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
+            loc: str = "lower right",
+    ):
+        """
+        Draws a small hyperparameter info box in the lower-right corner of ax.
+        Only lines with non-None values are included.
+        """
+        lines = []
         if lr is not None:
-            title += f" (lr={lr:.5f})"
-        return title
+            lines.append(f"lr: {lr:.5f}")
+        if epochs is not None:
+            lines.append(f"Epochs: {epochs}")
+        if batch_size is not None:
+            lines.append(f"Batch size: {batch_size}")
+        if num_train_images is not None:
+            lines.append(f"No. train images: {num_train_images}")
+        if num_val_images is not None:
+            lines.append(f"No. val images: {num_val_images}")
+        if blob_radius_pct is not None:
+            lines.append(f"Blob radius: {blob_radius_pct:.1f}%")
+        if weight_decay is not None:
+            lines.append(f"Weight decay: {weight_decay}")
+        if lora_rank is not None:
+            lines.append(f"LoRA rank: {lora_rank}")
+        if lora_alpha is not None:
+            lines.append(f"LoRA alpha: {lora_alpha}")
+
+        if not lines:
+            return
+
+        text = "\n".join(lines)
+        x = 0.97 if "right" in loc else 0.03
+        y = 0.03 if "lower" in loc else 0.97
+        va = "bottom" if "lower" in loc else "top"
+        ha = "right" if "right" in loc else "left"
+        ax.text(
+            x, y, text,
+            transform=ax.transAxes,
+            fontsize=7,
+            verticalalignment=va,
+            horizontalalignment=ha,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.7, edgecolor="gray", linewidth=0.5),
+            family="monospace",
+        )
 
     # ------------------------------------------------------------------------------------------------------------------
     # ✅ FIXED: Added grid, standardized DPI, used title helper
@@ -97,7 +161,16 @@ class ModelTrainingVisualization:
             val_epochs: list[int],
             val_acc: list[float],
             site_name: str,
-            lr: float
+            lr: float,
+            model_name: str = None,
+            epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
     ):
         if not train_epochs or not train_acc or not val_epochs or not val_acc:
             return
@@ -114,8 +187,13 @@ class ModelTrainingVisualization:
 
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Accuracy")
-        ax.set_title(self._make_title("Accuracy", site_name, lr))  # ✅ Use helper
-        ax.legend(loc="best")
+        ax.set_title(self._make_title("Accuracy", site_name, lr, model_name))  # ✅ Use helper
+        ax.set_ylim(0, 1)  # ✅ Fixed y-axis for cross-model comparability
+        ax.legend(loc="lower left")
+        self._add_info_box(ax, lr=lr, epochs=epochs, batch_size=batch_size,
+                           num_train_images=num_train_images, num_val_images=num_val_images,
+                           blob_radius_pct=blob_radius_pct, weight_decay=weight_decay,
+                           lora_rank=lora_rank, lora_alpha=lora_alpha, loc="lower right")
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Added grid
 
         out_file = os.path.join(
@@ -136,7 +214,16 @@ class ModelTrainingVisualization:
             val_epochs: list[int],
             val_loss: list[float],
             site_name: str,
-            lr: float
+            lr: float,
+            model_name: str = None,
+            epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
     ):
         if not train_epochs or not train_loss or not val_epochs or not val_loss:
             return
@@ -165,8 +252,12 @@ class ModelTrainingVisualization:
 
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
-        ax.set_title(self._make_title("Loss", site_name, lr))  # ✅ Use helper
-        ax.legend(loc="best")
+        ax.set_title(self._make_title("Loss", site_name, lr, model_name))  # ✅ Use helper
+        ax.legend(loc="upper right")
+        self._add_info_box(ax, lr=lr, epochs=epochs, batch_size=batch_size,
+                           num_train_images=num_train_images, num_val_images=num_val_images,
+                           blob_radius_pct=blob_radius_pct, weight_decay=weight_decay,
+                           lora_rank=lora_rank, lora_alpha=lora_alpha, loc="lower left")
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Added grid
 
         out_file = os.path.join(
@@ -248,6 +339,7 @@ class ModelTrainingVisualization:
             y_scores,
             site_name=None,
             lr=None,
+            model_name=None,
             file_prefix=None
     ):
         # vectorize & cast
@@ -280,7 +372,7 @@ class ModelTrainingVisualization:
 
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(recall, precision, lw=1, color="tab:blue")
-        ax.set_title(self._make_title("Precision-Recall Curve", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("Precision-Recall Curve", site_name, lr, model_name))  # ✅ Use helper
         ax.set_xlabel("Recall")
         ax.set_ylabel("Precision")
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Added grid
@@ -303,6 +395,7 @@ class ModelTrainingVisualization:
             y_scores,
             site_name=None,
             lr=None,
+            model_name=None,
             file_prefix=None
     ):
         # vectorize & cast
@@ -337,7 +430,7 @@ class ModelTrainingVisualization:
         ax.plot(fpr, tpr, color="tab:blue", lw=1, label=f"AUC={roc_auc:.2f}")
         ax.plot([0, 1], [0, 1], color="gray", lw=1, linestyle="--", label="Random")
 
-        ax.set_title(self._make_title("ROC Curve", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("ROC Curve", site_name, lr, model_name))  # ✅ Use helper
         ax.set_xlabel("False Positive Rate")
         ax.set_ylabel("True Positive Rate")
         ax.legend(loc="lower right")
@@ -361,6 +454,7 @@ class ModelTrainingVisualization:
             y_scores,
             site_name: str = None,
             lr: float = None,
+            model_name: str = None,
             file_prefix: str = None
     ):
         y_true_arr = np.asarray(y_true)
@@ -401,7 +495,7 @@ class ModelTrainingVisualization:
             label=f"Max F1={best_f1:.2f} @thr={best_thr:.2f}"
         )
 
-        ax.set_title(self._make_title("F1 Score vs Threshold", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("F1 Score vs Threshold", site_name, lr, model_name))  # ✅ Use helper
         ax.set_xlabel("Threshold")
         ax.set_ylabel("F1 Score")
         ax.legend(loc="best")
@@ -425,7 +519,16 @@ class ModelTrainingVisualization:
             miou_values: list[float],
             site_name: str = None,
             lr: float = None,
-            file_prefix: str = "miou"
+            model_name: str = None,
+            file_prefix: str = "miou",
+            num_epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
     ):
         """
         Plots Mean IoU vs. epoch. Ensures x and y have the same length by
@@ -464,7 +567,12 @@ class ModelTrainingVisualization:
         ax.plot(ep, mi, color="tab:blue", lw=1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Mean IoU")
-        ax.set_title(self._make_title("Mean IoU over Epochs", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("Mean IoU over Epochs", site_name, lr, model_name))  # ✅ Use helper
+        ax.set_ylim(0, 1)  # ✅ Fixed y-axis for cross-model comparability
+        self._add_info_box(ax, lr=lr, epochs=num_epochs, batch_size=batch_size,
+                           num_train_images=num_train_images, num_val_images=num_val_images,
+                           blob_radius_pct=blob_radius_pct, weight_decay=weight_decay,
+                           lora_rank=lora_rank, lora_alpha=lora_alpha)
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Already present, now uses consistent alpha
         fig.tight_layout()
 
@@ -486,7 +594,16 @@ class ModelTrainingVisualization:
             dice_values: list[float],
             site_name: str = None,
             lr: float = None,
-            file_prefix: str = "dice"
+            model_name: str = None,
+            file_prefix: str = "dice",
+            num_epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
     ):
         if not epochs or not dice_values:
             print("Cannot plot Dice curve: empty inputs.")
@@ -509,7 +626,12 @@ class ModelTrainingVisualization:
         ax.plot(ep, dv, color="tab:purple", lw=1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Dice")
-        ax.set_title(self._make_title("Validation Dice over Epochs", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("Validation Dice over Epochs", site_name, lr, model_name))  # ✅ Use helper
+        ax.set_ylim(0, 1)  # ✅ Fixed y-axis for cross-model comparability
+        self._add_info_box(ax, lr=lr, epochs=num_epochs, batch_size=batch_size,
+                           num_train_images=num_train_images, num_val_images=num_val_images,
+                           blob_radius_pct=blob_radius_pct, weight_decay=weight_decay,
+                           lora_rank=lora_rank, lora_alpha=lora_alpha)
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Already present, now uses consistent alpha
         fig.tight_layout()
 
@@ -530,7 +652,16 @@ class ModelTrainingVisualization:
             iou_values: list[float],
             site_name: str = None,
             lr: float = None,
-            file_prefix: str = "iou"
+            model_name: str = None,
+            file_prefix: str = "iou",
+            num_epochs: int = None,
+            batch_size: int = None,
+            num_train_images: int = None,
+            num_val_images: int = None,
+            blob_radius_pct: float = None,
+            weight_decay: float = None,
+            lora_rank: int = None,
+            lora_alpha: float = None,
     ):
         if not epochs or not iou_values:
             print("Cannot plot IoU curve: empty inputs.")
@@ -553,7 +684,12 @@ class ModelTrainingVisualization:
         ax.plot(ep, iv, color="tab:green", lw=1)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("IoU")
-        ax.set_title(self._make_title("Validation IoU over Epochs", site_name, lr))  # ✅ Use helper
+        ax.set_title(self._make_title("Validation IoU over Epochs", site_name, lr, model_name))  # ✅ Use helper
+        ax.set_ylim(0, 1)  # ✅ Fixed y-axis for cross-model comparability
+        self._add_info_box(ax, lr=lr, epochs=num_epochs, batch_size=batch_size,
+                           num_train_images=num_train_images, num_val_images=num_val_images,
+                           blob_radius_pct=blob_radius_pct, weight_decay=weight_decay,
+                           lora_rank=lora_rank, lora_alpha=lora_alpha)
         ax.grid(True, alpha=self.grid_alpha)  # ✅ Already present, now uses consistent alpha
         fig.tight_layout()
 
@@ -564,3 +700,464 @@ class ModelTrainingVisualization:
             print(f"IoU plot saved to {filename}")
         else:
             plt.close(fig)  # ✅ Ensure cleanup
+    # ------------------------------------------------------------------------------------------------------------------
+    # ✅ NEW: Rule-based training diagnostics — fully offline, no AI API required
+    # ------------------------------------------------------------------------------------------------------------------
+    def analyze_training_results(
+            self,
+            train_acc: list[float],
+            val_acc: list[float],
+            train_loss: list[float],
+            val_loss: list[float],
+            site_name: str = "",
+            lr: float = None,
+            miou_values: list[float] = None,
+            dice_values: list[float] = None,
+            plateau_window: int = 5,
+            overfit_gap_threshold: float = 0.05,
+            underfit_threshold: float = 0.75,
+            instability_std_threshold: float = 0.015,
+            good_val_acc_threshold: float = 0.90,
+    ) -> dict:
+        """
+        Analyzes training curves and returns a structured diagnostic report.
+
+        Detects:
+          - Overfitting (persistent train/val accuracy gap)
+          - Underfitting (both curves plateau below acceptable threshold)
+          - Early plateau (val accuracy stops improving too soon)
+          - Training instability (high variance in val curve)
+          - Loss divergence (val loss increasing while train loss decreases)
+          - Good convergence (all checks pass)
+
+        Args:
+            train_acc:                Per-epoch train accuracy values.
+            val_acc:                  Per-epoch validation accuracy values.
+            train_loss:               Per-epoch train loss values.
+            val_loss:                 Per-epoch validation loss values.
+            site_name:                Site identifier for report labeling.
+            lr:                       Learning rate used during training.
+            miou_values:              Optional per-epoch mean IoU values.
+            dice_values:              Optional per-epoch Dice values.
+            plateau_window:           Epochs at end of training to check for plateau.
+            overfit_gap_threshold:    Train/val gap above which overfitting is flagged.
+            underfit_threshold:       Val accuracy below which underfitting is flagged.
+            instability_std_threshold: Std dev of val accuracy flagging instability.
+            good_val_acc_threshold:   Val accuracy above which convergence is good.
+
+        Returns:
+            dict with keys:
+              - 'severity':     'good' | 'warning' | 'critical'
+              - 'findings':     list of (severity, finding_text) tuples
+              - 'suggestions':  list of suggestion strings
+              - 'summary':      single human-readable summary string
+              - 'report_text':  full formatted report string
+        """
+        findings = []
+        suggestions = []
+
+        if not train_acc or not val_acc or not train_loss or not val_loss:
+            return {
+                "severity": "warning",
+                "findings": [("warning", "Insufficient data to analyze training results.")],
+                "suggestions": ["Ensure training ran for at least 2 epochs with validation enabled."],
+                "summary": "Insufficient data for analysis.",
+                "report_text": "No training data available for analysis."
+            }
+
+        tr_acc = np.asarray(train_acc)
+        vl_acc = np.asarray(val_acc)
+        tr_loss = np.asarray(train_loss)
+        vl_loss = np.asarray(val_loss)
+
+        n_epochs = len(vl_acc)
+        final_train_acc = float(tr_acc[-1])
+        final_val_acc = float(vl_acc[-1])
+        final_train_loss = float(tr_loss[-1])
+        final_val_loss = float(vl_loss[-1])
+
+        # 1. Overfitting
+        if n_epochs >= plateau_window:
+            mean_gap = float(np.mean(tr_acc[-plateau_window:] - vl_acc[-plateau_window:]))
+        else:
+            mean_gap = float(tr_acc[-1] - vl_acc[-1])
+
+        if mean_gap > overfit_gap_threshold * 2:
+            findings.append(("critical", f"Severe overfitting: train/val accuracy gap is {mean_gap:.3f} over the final {plateau_window} epochs."))
+            suggestions.append("Reduce training epochs or add regularization (increase weight decay or dropout).")
+            suggestions.append("Consider using more training images or stronger data augmentation.")
+        elif mean_gap > overfit_gap_threshold:
+            findings.append(("warning", f"Mild overfitting: train/val accuracy gap is {mean_gap:.3f} over the final {plateau_window} epochs."))
+            suggestions.append("If deploying, prefer the checkpoint with the best validation accuracy rather than the final epoch.")
+
+        # 2. Underfitting
+        max_val_acc = float(np.max(vl_acc))
+        if max_val_acc < underfit_threshold:
+            findings.append(("critical", f"Underfitting: peak validation accuracy is only {max_val_acc:.3f} (threshold: {underfit_threshold:.2f})."))
+            suggestions.append("Increase the number of training epochs.")
+            suggestions.append("Try a higher learning rate — current value may be too conservative.")
+            suggestions.append("Check annotation quality: low accuracy may indicate label errors.")
+            if lr is not None and lr < 1e-4:
+                suggestions.append(f"Learning rate {lr:.5f} may be too low — consider trying 3e-4 or 1e-3.")
+
+        # 3. Early plateau
+        if n_epochs >= plateau_window * 2:
+            midpoint = n_epochs // 2
+            early_max = float(np.max(vl_acc[:midpoint]))
+            late_max = float(np.max(vl_acc[midpoint:]))
+            if late_max - early_max < 0.005:
+                plateau_epoch = int(np.argmax(vl_acc)) + 1
+                findings.append(("warning", f"Validation accuracy plateaued at epoch {plateau_epoch} ({early_max:.3f}) with no meaningful improvement in the second half of training."))
+                suggestions.append(f"Consider stopping training at epoch {plateau_epoch} to save time.")
+                suggestions.append("A learning rate scheduler (e.g., ReduceLROnPlateau) may help break through the plateau.")
+
+        # 4. Instability
+        if n_epochs >= 5:
+            val_std = float(np.std(vl_acc))
+            if val_std > instability_std_threshold:
+                findings.append(("warning", f"Unstable validation accuracy detected (std dev: {val_std:.4f})."))
+                suggestions.append("Reduce the learning rate — instability often indicates the learning rate is too high.")
+                suggestions.append("Increase batch size if GPU memory allows.")
+
+        # 5. Loss divergence
+        if n_epochs >= plateau_window:
+            train_loss_trend = float(tr_loss[-1]) - float(tr_loss[-plateau_window])
+            val_loss_trend = float(vl_loss[-1]) - float(vl_loss[-plateau_window])
+            if train_loss_trend < -0.01 and val_loss_trend > 0.01:
+                findings.append(("critical", f"Loss divergence: train loss decreasing ({train_loss_trend:.4f}) while val loss increasing ({val_loss_trend:.4f})."))
+                suggestions.append("Stop training — the model is memorizing training data.")
+                suggestions.append("Use the checkpoint from the epoch with the lowest validation loss.")
+
+        # 6. mIoU check
+        if miou_values and len(miou_values) > 0:
+            max_miou = float(np.max(miou_values))
+            if max_miou < 0.5:
+                findings.append(("critical", f"Mean IoU is very low (peak: {max_miou:.3f}). Segmentation quality is poor."))
+                suggestions.append("Review mask annotations — very low mIoU may indicate annotation errors or class imbalance.")
+            elif max_miou < 0.70:
+                findings.append(("warning", f"Mean IoU is moderate (peak: {max_miou:.3f}). Further tuning may improve segmentation quality."))
+
+        # 7. Dice check
+        if dice_values and len(dice_values) > 0:
+            max_dice = float(np.max(dice_values))
+            if max_dice < 0.60:
+                findings.append(("critical", f"Dice score is low (peak: {max_dice:.3f}). Segmentation boundary quality is poor."))
+                suggestions.append("Consider increasing annotated images, particularly for difficult cases (shadows, glare, low water).")
+
+        # 8. Good convergence fallback
+        if not findings:
+            findings.append(("good", f"Good convergence: validation accuracy reached {final_val_acc:.3f} with a train/val gap of {mean_gap:.3f}."))
+
+        # Deduplicate suggestions
+        seen = set()
+        unique_suggestions = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique_suggestions.append(s)
+
+        # Overall severity
+        severities = [f[0] for f in findings]
+        if "critical" in severities:
+            overall_severity = "critical"
+        elif "warning" in severities:
+            overall_severity = "warning"
+        else:
+            overall_severity = "good"
+
+        # Build report text
+        report_lines = []
+        report_lines.append("=" * 70)
+        report_lines.append("  GRIME AI TRAINING DIAGNOSTIC REPORT")
+        report_lines.append("=" * 70)
+        report_lines.append(f"  Site:             {site_name}")
+        if lr is not None:
+            report_lines.append(f"  Learning Rate:    {lr:.5f}")
+        report_lines.append(f"  Epochs:           {n_epochs}")
+        report_lines.append(f"  Final Train Acc:  {final_train_acc:.4f}")
+        report_lines.append(f"  Final Val Acc:    {final_val_acc:.4f}")
+        report_lines.append(f"  Final Train Loss: {final_train_loss:.4f}")
+        report_lines.append(f"  Final Val Loss:   {final_val_loss:.4f}")
+        if miou_values:
+            report_lines.append(f"  Final mIoU:       {float(miou_values[-1]):.4f}")
+        if dice_values:
+            report_lines.append(f"  Final Dice:       {float(dice_values[-1]):.4f}")
+        report_lines.append("-" * 70)
+        report_lines.append(f"  Overall Status:   {overall_severity.upper()}")
+        report_lines.append("-" * 70)
+        report_lines.append("  FINDINGS:")
+        tags = {"good": "[OK]      ", "warning": "[WARNING] ", "critical": "[CRITICAL]"}
+        for sev, msg in findings:
+            report_lines.append(f"    {tags[sev]} {msg}")
+        if unique_suggestions:
+            report_lines.append("-" * 70)
+            report_lines.append("  SUGGESTIONS:")
+            for i, s in enumerate(unique_suggestions, 1):
+                report_lines.append(f"    {i}. {s}")
+        report_lines.append("=" * 70)
+        report_text = "\n".join(report_lines)
+
+        summary = f"[{overall_severity.upper()}] " + " | ".join(f[1] for f in findings[:2])
+
+        return {
+            "severity": overall_severity,
+            "findings": findings,
+            "suggestions": unique_suggestions,
+            "summary": summary,
+            "report_text": report_text,
+        }
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ✅ NEW: Save diagnostic report as a formatted PDF using fpdf2
+    # ------------------------------------------------------------------------------------------------------------------
+    def save_training_report(
+            self,
+            train_acc: list[float],
+            val_acc: list[float],
+            train_loss: list[float],
+            val_loss: list[float],
+            site_name: str = "",
+            lr: float = None,
+            miou_values: list[float] = None,
+            dice_values: list[float] = None,
+            graph_paths: list[str] = None,
+            # Model identity
+            model_type: str = None,           # e.g. "SAM2" or "SegFormer-LoRA"
+            # Dataset info
+            num_train_images: int = None,
+            num_val_images: int = None,
+            # SAM2-specific
+            blob_radius_pct: float = None,    # blob filter radius as % of image diagonal
+            weight_decay: float = None,        # optimizer weight decay
+            batch_size: int = None,            # batch size (SegFormer)
+            # Annotation info
+            categories: list[dict] = None,    # list of {"id": int, "name": str}
+            # Checkpoint info
+            best_epoch: int = None,           # epoch with best val accuracy/mIoU
+            best_val_acc: float = None,       # val accuracy at best epoch
+            early_stopped: bool = False,      # whether early stopping triggered
+            early_stop_epoch: int = None,     # epoch at which training stopped early
+    ) -> dict:
+        """
+        Runs analyze_training_results() and saves a formatted PDF report
+        in models_folder alongside the training graphs.
+
+        Args:
+            train_acc:          Per-epoch train accuracy values.
+            val_acc:            Per-epoch validation accuracy values.
+            train_loss:         Per-epoch train loss values.
+            val_loss:           Per-epoch validation loss values.
+            site_name:          Site identifier.
+            lr:                 Learning rate used.
+            miou_values:        Optional per-epoch mean IoU values.
+            dice_values:        Optional per-epoch Dice values.
+            graph_paths:        Optional list of PNG paths to embed in the PDF.
+            model_type:         Model name string, e.g. "SAM2" or "SegFormer-LoRA".
+            num_train_images:   Number of images used for training.
+            num_val_images:     Number of images used for validation.
+            blob_radius_pct:    SAM2 blob filter radius as % of image diagonal.
+            categories:         List of {"id": int, "name": str} annotation categories.
+            best_epoch:         Epoch number with best validation performance.
+            best_val_acc:       Validation accuracy at best epoch.
+            early_stopped:      True if early stopping triggered before max epochs.
+            early_stop_epoch:   Epoch at which early stopping triggered.
+
+        Returns:
+            dict with keys: severity, findings, suggestions, summary, report_text
+        """
+        result = self.analyze_training_results(
+            train_acc=train_acc,
+            val_acc=val_acc,
+            train_loss=train_loss,
+            val_loss=val_loss,
+            site_name=site_name,
+            lr=lr,
+            miou_values=miou_values,
+            dice_values=dice_values,
+        )
+
+        severity = result["severity"]
+        findings = result["findings"]
+        suggestions = result["suggestions"]
+
+        severity_colors = {
+            "good":     (34,  139, 34),
+            "warning":  (210, 140, 0),
+            "critical": (180, 30,  30),
+        }
+        banner_rgb = severity_colors[severity]
+
+        # ------------------------------------------------------------------
+        # Build PDF
+        # ------------------------------------------------------------------
+
+        def _safe(text: str) -> str:
+            """Replace non-latin-1 characters so Helvetica doesn't choke."""
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+
+        def _section_header(title: str):
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_fill_color(230, 230, 230)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(page_w, 7, _safe(title), border=0, ln=True, fill=True)
+            pdf.ln(2)
+
+        def _meta_table(rows: list[tuple[str, str]]):
+            col_w = page_w / 2
+            for i, (label, value) in enumerate(rows):
+                fill = i % 2 == 0
+                pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(col_w, 6, _safe(f"  {label}"), border=0, fill=fill)
+                pdf.set_font("Helvetica", "", 10)
+                pdf.cell(col_w, 6, _safe(str(value)), border=0, ln=True, fill=fill)
+            pdf.ln(6)
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_margins(15, 15, 15)
+        page_w = pdf.w - 30
+
+        # --- Header banner ---
+        pdf.set_fill_color(*banner_rgb)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(page_w, 12, _safe("GRIME AI  -  Training Diagnostic Report"), border=0, ln=True, align="C", fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+
+        # --- Status badge ---
+        pdf.set_fill_color(*banner_rgb)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(page_w, 8, _safe(f"Overall Status: {severity.upper()}"), border=0, ln=True, align="C", fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(6)
+
+        # --- Training Summary ---
+        _section_header("Training Summary")
+        meta_rows = [
+            ("Site",               site_name or "N/A"),
+            ("Model",              model_type or "N/A"),
+            ("Learning Rate",      f"{lr:.5f}" if lr is not None else "N/A"),
+            ("Epochs Completed",   str(len(val_acc))),
+            ("Final Train Accuracy", f"{train_acc[-1]:.4f}"),
+            ("Final Val Accuracy",   f"{val_acc[-1]:.4f}"),
+            ("Final Train Loss",     f"{train_loss[-1]:.4f}"),
+            ("Final Val Loss",       f"{val_loss[-1]:.4f}"),
+        ]
+        if miou_values:
+            meta_rows.append(("Final mIoU", f"{float(miou_values[-1]):.4f}"))
+        if dice_values:
+            meta_rows.append(("Final Dice", f"{float(dice_values[-1]):.4f}"))
+        if weight_decay is not None:
+            meta_rows.append(("Weight Decay", str(weight_decay)))
+        if batch_size is not None:
+            meta_rows.append(("Batch Size", str(batch_size)))
+        if best_epoch is not None:
+            meta_rows.append(("Best Checkpoint Epoch", str(best_epoch)))
+        if best_val_acc is not None:
+            meta_rows.append(("Best Val Accuracy",     f"{best_val_acc:.4f}"))
+        if early_stopped:
+            stop_ep = str(early_stop_epoch) if early_stop_epoch is not None else "unknown"
+            meta_rows.append(("Early Stopping",        f"Triggered at epoch {stop_ep}"))
+        _meta_table(meta_rows)
+
+        # --- Dataset Info ---
+        if num_train_images is not None or num_val_images is not None:
+            _section_header("Dataset")
+            ds_rows = []
+            if num_train_images is not None:
+                ds_rows.append(("Training Images", str(num_train_images)))
+            if num_val_images is not None:
+                ds_rows.append(("Validation Images", str(num_val_images)))
+            _meta_table(ds_rows)
+
+        # --- Model Parameters (SAM2-specific) ---
+        if blob_radius_pct is not None:
+            _section_header("Model Parameters")
+            param_rows = [("Blob Filter Radius", f"{blob_radius_pct:.1f}% of image diagonal")]
+            if blob_radius_pct < 5.0:
+                param_rows.append(("Blob Radius Warning",
+                    f"Radius {blob_radius_pct:.1f}% may be too aggressive "
+                    "and could discard valid detections. Recommended: 15-25%."))
+            _meta_table(param_rows)
+
+        # --- Annotation Labels ---
+        cats_to_show = categories if categories is not None else self.categories
+        if cats_to_show:
+            _section_header("Annotation Categories")
+            sorted_cats = sorted(cats_to_show, key=lambda c: c["id"])
+            label_rows = [(f"ID {c['id']}", c["name"]) for c in sorted_cats]
+            label_rows.insert(0, ("Total Categories", str(len(sorted_cats))))
+            _meta_table(label_rows)
+
+        # --- Findings ---
+        _section_header("Findings")
+        finding_colors = {
+            "good":     (34,  139, 34),
+            "warning":  (210, 140, 0),
+            "critical": (180, 30,  30),
+        }
+        badge_labels = {"good": "OK", "warning": "WARNING", "critical": "CRITICAL"}
+
+        for sev, msg in findings:
+            r, g, b = finding_colors[sev]
+            badge_w = 22
+            pdf.set_fill_color(r, g, b)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.cell(badge_w, 7, _safe(badge_labels[sev]), border=0, fill=True, align="C")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.multi_cell(page_w - badge_w, 7, _safe(f"  {msg}"), border=0)
+            pdf.ln(1)
+        pdf.ln(4)
+
+        # --- Suggestions ---
+        if suggestions:
+            _section_header("Suggestions")
+            pdf.set_font("Helvetica", "", 10)
+            for i, s in enumerate(suggestions, 1):
+                pdf.set_x(15)
+                pdf.multi_cell(page_w, 6, _safe(f"  {i}.  {s}"), border=0)
+                pdf.ln(1)
+            pdf.ln(4)
+
+        # --- Embedded graphs ---
+        if graph_paths:
+            valid_graphs = [p for p in graph_paths if p and os.path.isfile(p)]
+            if valid_graphs:
+                _section_header("Training Curves")
+                pdf.ln(2)
+                for img_path in valid_graphs:
+                    img_w = page_w
+                    img_h = img_w * 0.67
+                    if pdf.get_y() + img_h > pdf.h - 20:
+                        pdf.add_page()
+                    pdf.image(img_path, x=15, w=img_w, h=img_h)
+                    pdf.ln(6)
+
+        # --- Footer ---
+        pdf.set_y(-15)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(128, 128, 128)
+        pdf.cell(page_w, 5, _safe(
+            f"Generated by GRIME AI  |  {self.formatted_time}  |  Site: {site_name}"
+            + (f"  |  Model: {model_type}" if model_type else "")
+        ), align="C")
+
+        # --- Save PDF ---
+        lr_str = f"_lr{lr:.5f}" if lr is not None else ""
+        pdf_filename = f"{self.formatted_time}_{site_name}_TrainingReport{lr_str}.pdf"
+        pdf_path = os.path.join(self.models_folder, pdf_filename)
+
+        try:
+            pdf.output(pdf_path)
+            print(f"Training report saved to {pdf_path}")
+        except OSError as e:
+            print(f"[save_training_report] Could not write PDF: {e}")
+
+        return result
