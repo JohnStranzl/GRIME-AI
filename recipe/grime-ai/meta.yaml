@@ -52,6 +52,7 @@ requirements:
     - pycocotools 2.0.*
     - pyqt 5.*
     - pyqtwebengine 5.*
+    - fpdf2 2.8.*
 #    - pyside6 6.*
     - pywavelets 1.8.*
     - pywin32 311  # [win]
