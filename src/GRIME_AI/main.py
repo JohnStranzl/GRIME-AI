@@ -4435,7 +4435,10 @@ def my_main():
     # Segment parser
     segment_parser = subparsers.add_parser('segment', help='Segment a single image using a trained GRIME AI model')
     segment_parser.add_argument('--model',          required=True,  help='Path to trained model checkpoint (.torch)')
-    segment_parser.add_argument('--image',          required=True,  help='Path to input image')
+    segment_parser.add_argument('--image',          required=False, default=None,
+                                help='Path to a single input image')
+    segment_parser.add_argument('--folder',         required=False, default=None,
+                                help='Path to a folder of images')
     segment_parser.add_argument('--output',         required=True,  help='Output folder for results')
     segment_parser.add_argument('--mode',           required=True,  choices=['sam2', 'segformer'],
                                 help='Segmentation model type: sam2 or segformer')
@@ -4533,14 +4536,8 @@ def run_cli(args):
         from GRIME_AI.GRIME_AI_segment import run_sam2, run_segformer
 
         # Validate inputs
-        errors = []
         if not os.path.isfile(args.model):
-            errors.append(f"Model file not found: {args.model}")
-        if not os.path.isfile(args.image):
-            errors.append(f"Image file not found: {args.image}")
-        if errors:
-            for e in errors:
-                print(f"[ERROR] {e}", file=sys.stderr)
+            print(f"[ERROR] Model file not found: {args.model}", file=sys.stderr)
             sys.exit(1)
         os.makedirs(args.output, exist_ok=True)
 
