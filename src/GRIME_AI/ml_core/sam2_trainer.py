@@ -138,7 +138,8 @@ def unwrap_mask(m):
 class SAM2Trainer:
 
 
-    def __init__(self, cfg: DictConfig = None):
+    def __init__(self, cfg: DictConfig = None, parent_widget=None):
+        self.parent_widget = parent_widget
         # =========================================================================
         # TEST MODE CONFIGURATION
         # Set self.TEST_MODE = True to train on hardcoded water + sky for testing
@@ -407,6 +408,8 @@ class SAM2Trainer:
                 for lr in self.learning_rates:
                     print(f"\nTraining {category_name} with learning rate: {lr}")
                     self.reset_metrics()
+                    self.num_train_images = len(train_images)
+                    self.num_val_images = len(val_images)
                     self.train_sam(lr, self.weight_decay, train_images, val_images, 
                                  epochs=self.num_epochs, target_label=category_name)
                     self._plot_training_graphs(lr)
@@ -434,6 +437,8 @@ class SAM2Trainer:
                 for lr in self.learning_rates:
                     print(f"\nTraining {category_name} with learning rate: {lr}")
                     self.reset_metrics()
+                    self.num_train_images = len(train_images)
+                    self.num_val_images = len(val_images)
                     self.train_sam(lr, self.weight_decay, train_images, val_images,
                                      epochs=self.num_epochs, target_label=category_name)
                     self._plot_training_graphs(lr)
@@ -456,7 +461,8 @@ class SAM2Trainer:
 
         progressBar = QProgressWheel(
             title="Training in-progress...", total=total_iterations,
-            on_close=lambda: setattr(self, "progress_bar_closed", True)
+            on_close=lambda: setattr(self, "progress_bar_closed", True),
+            parent=self.parent_widget
         )
 
         # Set seeds for reproducibility
@@ -1266,8 +1272,10 @@ class SAM2Trainer:
                     overlay_color = cv2.applyColorMap(overlay, cv2.COLORMAP_JET)
                     alpha = 0.4
                     blended = cv2.addWeighted(img_vis, 1.0, overlay_color, alpha, 0.0)
+                    overlay_dir = os.path.join(self.model_output_folder, "validation_overlays")
+                    os.makedirs(overlay_dir, exist_ok=True)
                     out_path = os.path.join(
-                        self.model_output_folder,
+                        overlay_dir,
                         f"{self.formatted_time}_{self.site_name}_val_overlay_e{len(self.epoch_list)}_{val_idx}.png"
                     )
                     cv2.imwrite(out_path, cv2.cvtColor(blended, cv2.COLOR_RGB2BGR))
@@ -1474,7 +1482,8 @@ class SAM2Trainer:
         """
         progressBar = QProgressWheel(
             title="Generating graphs...", total=9,
-            on_close=lambda: setattr(self, "progress_bar_closed", True)
+            on_close=lambda: setattr(self, "progress_bar_closed", True),
+            parent=self.parent_widget
         )
 
         viz = ModelTrainingVisualization(
@@ -1492,7 +1501,13 @@ class SAM2Trainer:
             val_epochs=val_epochs,
             val_loss=self.val_loss_values,
             site_name=self.site_name,
-            lr=lr
+            lr=lr,
+            model_name="SAM2",
+            epochs=self.num_epochs,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            weight_decay=self.weight_decay,
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
         )
         progressBar.setValue(progressBar.getValue() + 1)
         progressBar.show()
@@ -1504,7 +1519,13 @@ class SAM2Trainer:
             val_epochs=val_epochs,
             val_acc=self.val_accuracy_values,
             site_name=self.site_name,
-            lr=lr
+            lr=lr,
+            model_name="SAM2",
+            epochs=self.num_epochs,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            weight_decay=self.weight_decay,
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
         )
         progressBar.setValue(progressBar.getValue() + 1)
         progressBar.show()
@@ -1560,7 +1581,13 @@ class SAM2Trainer:
             miou_values=self.miou_values,
             site_name=self.site_name,
             lr=lr,
-            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            model_name="SAM2",
+            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}",
+            num_epochs=self.num_epochs,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            weight_decay=self.weight_decay,
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
         )
         progressBar.setValue(progressBar.getValue() + 1)
         progressBar.show()
@@ -1570,7 +1597,13 @@ class SAM2Trainer:
             dice_values=self.val_dice_values,
             site_name=self.site_name,
             lr=lr,
-            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            model_name="SAM2",
+            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}",
+            num_epochs=self.num_epochs,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            weight_decay=self.weight_decay,
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
         )
         progressBar.setValue(progressBar.getValue() + 1)
         progressBar.show()
@@ -1580,12 +1613,45 @@ class SAM2Trainer:
             iou_values=self.val_iou_values,
             site_name=self.site_name,
             lr=lr,
-            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}"
+            model_name="SAM2",
+            file_prefix=f"{self.formatted_time}_{self.site_name}_lr{lr:.5f}",
+            num_epochs=self.num_epochs,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            weight_decay=self.weight_decay,
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
         )
         progressBar.setValue(progressBar.getValue() + 1)
         progressBar.show()
 
         progressBar.close()
+
+        # ── PDF Diagnostic Report ──────────────────────────────────────────
+        acc_png  = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}_AccuracyCurves_lr{lr:.5f}.png")
+        loss_png = os.path.join(self.model_output_folder, f"{self.formatted_time}_{self.site_name}_LossCurves_lr{lr:.5f}.png")
+        viz.save_training_report(
+            train_acc=self.train_accuracy_values,
+            val_acc=self.val_accuracy_values,
+            train_loss=self.loss_values,
+            val_loss=self.val_loss_values,
+            site_name=self.site_name,
+            lr=lr,
+            miou_values=self.miou_values,
+            dice_values=self.val_dice_values,
+            graph_paths=[acc_png, loss_png],
+            model_type="SAM2",
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            blob_radius_pct=round(self.blob_filter_radius * 100, 1),
+            weight_decay=self.weight_decay,
+            categories=self.categories,
+            best_epoch=self.epoch_list[int(
+                self.val_accuracy_values.index(max(self.val_accuracy_values))
+            )] if self.val_accuracy_values else None,
+            best_val_acc=max(self.val_accuracy_values) if self.val_accuracy_values else None,
+            early_stopped=getattr(self, "early_stopped", False),
+            early_stop_epoch=getattr(self, "early_stop_epoch", None),
+        )
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------

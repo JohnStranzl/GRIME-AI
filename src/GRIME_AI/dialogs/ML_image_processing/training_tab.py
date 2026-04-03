@@ -8,7 +8,7 @@ from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox
 
 from GRIME_AI import PROJECT_ROOT
-from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED
+from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED, BUTTON_CSS_YELLOW
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
@@ -26,56 +26,57 @@ from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfi
 # ===                        MODULE LEVEL HELPERS                          ===
 # ============================================================================
 # ============================================================================
-def _check_folder(folder: Path) -> Tuple[bool, List[str]]:
+def _check_folder(folder: Path) -> Tuple[bool, List[str], object]:
     """
     Validates a single folder by:
       1. Finding at least one .json COCO file and some .jpg/.jpeg images.
       2. Parsing the JSON’s "images" list of dicts to pull out file_name.
       3. Verifying every listed file_name exists in that folder.
 
-    Returns (is_valid, missing_files_list).
+    Returns (is_valid, missing_files_list, json_path).
+    json_path is the full Path of the JSON checked, or None if no JSON found.
     """
     # 1) List JSONs and JPGs via os.scandir
     jsons = [e.name for e in os.scandir(folder)
-             if e.is_file() and e.name.lower().endswith(".json")]
+             if e.is_file() and e.name.lower() == "instances_default.json"]
     jpgs = {e.name for e in os.scandir(folder)
             if e.is_file() and e.name.lower().endswith((".jpg", ".jpeg"))}
 
     print(f"Scanning `{folder}` -> JSONs: {jsons}, JPGs: {list(jpgs)[:5]}…")  # debug
 
     if not jsons or not jpgs:
-        return False, []
+        return False, [], None
 
     # 2) Load the first JSON file
     path_json = folder / jsons[0]
     try:
         data = json.loads(path_json.read_text(encoding="utf-8"))
     except Exception as e:
-        return False, [f"Cannot parse {jsons[0]}: {e}"]
+        return False, [f"Cannot parse {jsons[0]}: {e}"], path_json
 
     # 3) Extract expected filenames from COCO "images" list
     raw_images = data.get("images")
     if not isinstance(raw_images, list):
-        return False, [f"'images' key missing or not a list in {jsons[0]}"]
+        return False, [f"'images' key missing or not a list in {jsons[0]}"], path_json
 
     expected_files = []
     for item in raw_images:
         if isinstance(item, dict):
             fname = item.get("file_name") or item.get("filename")
             if not fname:
-                return False, [f"Missing 'file_name' in entry: {item}"]
+                return False, [f"Missing 'file_name' in entry: {item}"], path_json
             expected_files.append(Path(fname).name)
         elif isinstance(item, str):
             expected_files.append(item)
         else:
-            return False, [f"Unsupported image entry type: {type(item)}"]
+            return False, [f"Unsupported image entry type: {type(item)}"], path_json
 
     # 4) Compare against the actual JPGs on disk
     missing = [f for f in expected_files if f not in jpgs]
     if missing:
-        return False, missing
+        return False, missing, path_json
 
-    return True, []
+    return True, [], path_json
 
 def _iter_dirs(root: Path):
     """
@@ -165,6 +166,7 @@ class TrainingTab(QtWidgets.QWidget):
         self.transferred_items: Set[str] = set()
         self.original_folders = []
         self.categories_available = False
+        self._folder_validation_state: Dict[str, str] = {}  # folder name -> 'ok' | 'red' | 'yellow'
 
         # Detect optional labels list widget
         self._init_labels_widget_reference()
@@ -309,6 +311,8 @@ class TrainingTab(QtWidgets.QWidget):
         self.pushButton_reset.clicked.connect(self.reset_selection)
         self.pushButton_moveRight.clicked.connect(self.move_to_right)
         self.pushButton_moveLeft.clicked.connect(self.move_to_available)
+        self.pushButton_validate.clicked.connect(self.validate_label_consistency)
+        self.pushButton_validate.setStyleSheet(BUTTON_CSS_YELLOW)
         self.lineEdit_siteName.editingFinished.connect(self.save_site_name_to_json)
 
         self.pushButton_browse_model_training_images_folder.clicked.connect(self.browse_model_training_images_folder)
@@ -858,11 +862,55 @@ class TrainingTab(QtWidgets.QWidget):
                 GRIME_AI_QMessageBox.Ok,
                 icon=QMessageBox.Warning
             ).displayMsgBox()
-            return  # stop further execution until user provides a site name
+            return
 
-        # WRITE SETTINGS TO THE SITE_CONFIG.JSON
+        # LABEL CONSISTENCY GATE
+        state = self._check_label_consistency()
+        self._folder_validation_state = state
+        self._apply_folder_colors(state)
+
+        red_folders    = [n for n, s in state.items() if s == 'red']
+        yellow_folders = [n for n, s in state.items() if s == 'yellow']
+        unreadable     = [n for n, s in state.items() if s == 'unreadable']
+
+        # Hard block — mismatched IDs
+        if red_folders or unreadable:
+            lines = ["Training cannot proceed due to annotation errors:\n"]
+            if red_folders:
+                lines.append("❌  Label ID conflicts:")
+                for f in red_folders:
+                    lines.append(f"    • {f}")
+                lines.append("")
+            if unreadable:
+                lines.append("❌  Annotation file missing or unreadable:")
+                for f in unreadable:
+                    lines.append(f"    • {f}")
+            GRIME_AI_QMessageBox(
+                'Annotation Errors — Training Blocked',
+                "\n".join(lines),
+                GRIME_AI_QMessageBox.Ok,
+                icon=QMessageBox.Critical
+            ).displayMsgBox()
+            return
+
+        # Soft warning — missing categories, let user decide
+        if yellow_folders:
+            lines = ["⚠️  The following folders are missing some categories:\n"]
+            for f in yellow_folders:
+                lines.append(f"    • {f}")
+            lines.append("\nTraining can proceed, but results may be incomplete.\nContinue?")
+            reply = QMessageBox.question(
+                self,
+                "Missing Categories — Continue?",
+                "\n".join(lines),
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        # All valid — proceed silently
         self.update_model_config()
-
         print("\nTrain button clicked. Starting training process...")
         self.ml_train_signal.emit()
 
@@ -948,19 +996,19 @@ class TrainingTab(QtWidgets.QWidget):
         incomplete: Dict[str, List[str]] = {}
 
         # CHECK THE ROOT ITSELF
-        ok, missing = _check_folder(root)
+        ok, missing, json_path = _check_folder(root)
         if ok:
             valid.append(root)
         elif missing:
-            incomplete[str(root)] = missing
+            incomplete[str(root)] = (missing, json_path)
 
         # RECURSE INTO SUBFOLDERS (SAFE BECAUSE ROOT IS VALIDATED)
         for folder in _iter_dirs(root):
-            ok, missing = _check_folder(folder)
+            ok, missing, json_path = _check_folder(folder)
             if ok:
                 valid.append(folder)
             elif missing:
-                incomplete[str(folder)] = missing
+                incomplete[str(folder)] = (missing, json_path)
 
         # POPULATE OR ALERT “NO VALID”
         if valid:
@@ -978,8 +1026,9 @@ class TrainingTab(QtWidgets.QWidget):
         # INCOMPLETE SETS POPUP
         if incomplete:
             lines = ["Folders missing files:"]
-            for fld, miss in incomplete.items():
-                lines.append(f"\n{fld}\n  Missing:")
+            for fld, (miss, json_path) in incomplete.items():
+                json_label = f"\n  Annotation file: {json_path}" if json_path else ""
+                lines.append(f"\n{fld}{json_label}\n  Missing:")
                 lines += [f"    • {m}" for m in miss]
             QMessageBox.information(
                 self,
@@ -1029,6 +1078,9 @@ class TrainingTab(QtWidgets.QWidget):
         # COLLECT UNIQUE LABELS AND REPOPULATE COMBOBOX
         self.unique_training_labels = self.collect_unique_labels(self.annotation_list)
         self.populate_train_label_combobox(self.unique_training_labels)
+
+        # SILENTLY RE-COLOR SELECTED FOLDERS BASED ON LABEL CONSISTENCY
+        self.validate_label_consistency(silent=True)
 
     # ------------------------------------------------------------------------
     # Annotation helpers
@@ -1085,6 +1137,191 @@ class TrainingTab(QtWidgets.QWidget):
             all_labels.update(labels)
 
         return sorted(all_labels)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _load_categories(self, folder_path: str) -> Optional[List[Dict]]:
+        """
+        Load and return sorted categories from instances_default.json in folder_path.
+        Returns None if the file is missing or unreadable.
+        """
+        annotation_file = os.path.join(folder_path, "instances_default.json")
+        if not os.path.exists(annotation_file):
+            return None
+        try:
+            with open(annotation_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return sorted(data.get("categories", []), key=lambda c: c["id"])
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _check_label_consistency(self) -> Dict[str, str]:
+        """
+        Compare all selected folders against the gold standard (first entry in
+        listWidget_selectedFolders).
+
+        Returns a dict mapping folder display name -> status:
+            'ok'     : matches gold standard exactly
+            'yellow' : subset of gold standard (missing categories, no conflicts)
+            'red'    : ID/name mismatch against gold standard
+            'gold'   : this IS the gold standard (first folder)
+            'unreadable': annotation file missing or unparseable
+        """
+        base_path = self.lineEdit_model_training_images_path.text().strip()
+        count = self.listWidget_selectedFolders.count()
+        if count == 0:
+            return {}
+
+        state: Dict[str, str] = {}
+
+        # Collect folder names in order
+        folder_names = [
+            self.listWidget_selectedFolders.item(i).text()
+            for i in range(count)
+        ]
+
+        # Gold standard is always the first entry
+        gold_name = folder_names[0]
+        gold_path = os.path.normpath(os.path.join(base_path, gold_name))
+        gold_cats = self._load_categories(gold_path)
+
+        if gold_cats is None:
+            # Can't establish a gold standard — mark everything unreadable
+            for name in folder_names:
+                state[name] = 'unreadable'
+            return state
+
+        # Build gold standard lookup: name -> id
+        gold_by_name: Dict[str, int] = {c["name"]: c["id"] for c in gold_cats}
+        gold_schema = tuple((c["id"], c["name"]) for c in gold_cats)
+
+        state[gold_name] = 'gold'
+
+        for name in folder_names[1:]:
+            folder_path = os.path.normpath(os.path.join(base_path, name))
+            cats = self._load_categories(folder_path)
+
+            if cats is None:
+                state[name] = 'unreadable'
+                continue
+
+            folder_schema = tuple((c["id"], c["name"]) for c in cats)
+
+            if folder_schema == gold_schema:
+                state[name] = 'ok'
+                continue
+
+            # Check for any ID/name conflict vs gold standard
+            conflict = False
+            for c in cats:
+                if c["name"] in gold_by_name and gold_by_name[c["name"]] != c["id"]:
+                    conflict = True
+                    break
+                # Also check: same ID, different name
+                for gc in gold_cats:
+                    if gc["id"] == c["id"] and gc["name"] != c["name"]:
+                        conflict = True
+                        break
+                if conflict:
+                    break
+
+            if conflict:
+                state[name] = 'red'
+            else:
+                # No conflicts — this folder is a subset (missing some categories)
+                state[name] = 'yellow'
+
+        return state
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _apply_folder_colors(self, state: Dict[str, str]) -> None:
+        """
+        Apply red/yellow/normal text color to items in listWidget_selectedFolders
+        based on validation state.
+        """
+        from PyQt5.QtGui import QColor
+
+        color_map = {
+            'gold':        QColor('black'),
+            'ok':          QColor('black'),
+            'yellow':      QColor(180, 120, 0),   # dark yellow — readable on white
+            'red':         QColor('red'),
+            'unreadable':  QColor('red'),
+        }
+
+        for i in range(self.listWidget_selectedFolders.count()):
+            item = self.listWidget_selectedFolders.item(i)
+            name = item.text()
+            status = state.get(name, 'ok')
+            item.setForeground(color_map.get(status, QColor('black')))
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def validate_label_consistency(self, silent: bool = False) -> bool:
+        """
+        Run label consistency check, color the selected folders list, and
+        (unless silent=True) show a result dialog to the user.
+
+        Returns True if no red items exist (training may proceed).
+        """
+        state = self._check_label_consistency()
+        self._folder_validation_state = state
+        self._apply_folder_colors(state)
+
+        if not state:
+            if not silent:
+                GRIME_AI_QMessageBox(
+                    'Validate Labels',
+                    'No folders are selected.',
+                    GRIME_AI_QMessageBox.Ok,
+                    icon=QMessageBox.Information
+                ).displayMsgBox()
+            return True
+
+        red_folders   = [n for n, s in state.items() if s == 'red']
+        yellow_folders = [n for n, s in state.items() if s == 'yellow']
+        unreadable    = [n for n, s in state.items() if s == 'unreadable']
+
+        has_errors = bool(red_folders or unreadable)
+
+        if not silent:
+            base_path = self.lineEdit_model_training_images_path.text().strip()
+            gold_name = self.listWidget_selectedFolders.item(0).text() if self.listWidget_selectedFolders.count() > 0 else '(none)'
+
+            if not has_errors and not yellow_folders:
+                msg = "✅  All annotation files are valid."
+            else:
+                lines = []
+
+                if red_folders:
+                    lines.append("❌  Label ID conflicts (training blocked):")
+                    for f in red_folders:
+                        lines.append(f"    • {f}")
+                    lines.append("")
+
+                if unreadable:
+                    lines.append("❌  Annotation file missing or unreadable:")
+                    for f in unreadable:
+                        lines.append(f"    • {f}")
+                    lines.append("")
+
+                if yellow_folders:
+                    lines.append("⚠️  Missing categories (training allowed):")
+                    for f in yellow_folders:
+                        lines.append(f"    • {f}")
+
+                msg = "\n".join(lines)
+
+            icon = QMessageBox.Critical if has_errors else (
+                QMessageBox.Warning if yellow_folders else QMessageBox.Information
+            )
+            title = "Validate Labels — Issues Found" if (has_errors or yellow_folders) else "Validate Labels — All Clear"
+            GRIME_AI_QMessageBox(title, msg, GRIME_AI_QMessageBox.Ok, icon=icon).displayMsgBox()
+
+        return not has_errors
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------

@@ -4433,11 +4433,25 @@ def my_main():
                              help="(Optional) Override output JSON file path.")
 
     # Segment parser
-    segment_parser = subparsers.add_parser('segment', help='Segment images using a Hydra-configured model')
-    segment_parser.add_argument('--model_file',
-                                 help='Path to the model checkpoint file (e.g., ckpt.pth)')
-    segment_parser.add_argument('--images_folder', help='Directory containing images to segment')
-    segment_parser.add_argument('--overrides', nargs='*', help='Optional Hydra overrides (e.g. training.lr=1e-4)')
+    segment_parser = subparsers.add_parser('segment', help='Segment a single image using a trained GRIME AI model')
+    segment_parser.add_argument('--model',          required=True,  help='Path to trained model checkpoint (.torch)')
+    segment_parser.add_argument('--image',          required=True,  help='Path to input image')
+    segment_parser.add_argument('--output',         required=True,  help='Output folder for results')
+    segment_parser.add_argument('--mode',           required=True,  choices=['sam2', 'segformer'],
+                                help='Segmentation model type: sam2 or segformer')
+    segment_parser.add_argument('--category-id',   type=int, default=1,
+                                help='Label category ID to segment (default: 1)')
+    segment_parser.add_argument('--category-name', default='Vegetation',
+                                help='Label category name (default: Vegetation)')
+    segment_parser.add_argument('--model-cfg',     default='sam2.1_hiera_l.yaml',
+                                help='SAM2 model config YAML (default: sam2.1_hiera_l.yaml)')
+    segment_parser.add_argument('--threshold',     type=float, default=0.2,
+                                help='Probability threshold for SegFormer mask (default: 0.2)')
+    segment_parser.add_argument('--no-mask',       action='store_true',
+                                help='Skip saving binary mask PNG')
+    segment_parser.add_argument('--no-copy',       action='store_true',
+                                help='Skip copying original image to output folder')
+
 
     # Custom help handling
     if '-h' in sys.argv or '--help' in sys.argv:
@@ -4516,26 +4530,36 @@ def run_cli(args):
             generator = CocoGenerator(folder=folder, output_path=output_path)
         generator.generate_annotations()
     elif args.command == 'segment':
-        # 1. Point Hydra at your config directory
-        initialize(config_path=myconfig_path, job_name="segment_image_cli")
+        from GRIME_AI.GRIME_AI_segment import run_sam2, run_segformer
 
-        # 2. Gather any user-provided overrides
-        overrides = args.overrides or []
+        # Validate inputs
+        errors = []
+        if not os.path.isfile(args.model):
+            errors.append(f"Model file not found: {args.model}")
+        if not os.path.isfile(args.image):
+            errors.append(f"Image file not found: {args.image}")
+        if errors:
+            for e in errors:
+                print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(1)
+        os.makedirs(args.output, exist_ok=True)
 
-        # 3. Inject the model checkpoint path and the folder of images
-        overrides.extend([
-            f"model_file={args.model_file}",
-            f"images_folder={args.images_folder}"
-        ])
+        import torch
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        category = {"id": args.category_id, "name": args.category_name}
 
-        # 4. Build the DictConfig from base + overrides
-        cfg: DictConfig = compose(
-            config_name=myconfig_name,
-            overrides=overrides
-        )
+        print(f"[GRIME AI] Mode:      {args.mode.upper()}")
+        print(f"[GRIME AI] Model:     {args.model}")
+        print(f"[GRIME AI] Image:     {args.image}")
+        print(f"[GRIME AI] Output:    {args.output}")
+        print(f"[GRIME AI] Category:  {args.category_name} (ID: {args.category_id})")
 
-        # 5. Invoke the Hydra-decorated entry point
-        segment_main(cfg)
+        if args.mode == 'sam2':
+            run_sam2(args, device, category, progressBar=None)
+        elif args.mode == 'segformer':
+            run_segformer(args, device, category, progressBar=None)
+
+        print("[GRIME AI] Segmentation complete.")
     else:
         parser.print_help()
         sys.exit(1)
@@ -4612,7 +4636,7 @@ def train_main(cfg: DictConfig) -> None:
 
         # BEGIN TRAINING THE MODEL
         print("Instantiate MLModelTraining class...")
-        myML_Dispatcher = MLModelTraining(cfg)
+        myML_Dispatcher = MLModelTraining(cfg, parent_widget=hyperparameterDlg)
 
         print("Execute ML training...")
         trainer = myML_Dispatcher.Model_Training_Dispatcher(cfg=cfg, mode=selected_training_model)

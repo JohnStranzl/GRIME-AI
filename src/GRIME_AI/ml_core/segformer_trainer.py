@@ -20,6 +20,7 @@ from transformers import SegformerForSemanticSegmentation
 from GRIME_AI.ml_core.coco_segmentation_datasets import MultiCocoTargetDataset
 from GRIME_AI.ml_core.lora_segmentation_losses import BinaryDiceLoss, MultiClassDiceLoss
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
+from GRIME_AI.ml_core.model_training_visualization import ModelTrainingVisualization
 import torchvision.transforms.functional as TF
 
 # ======================================================================================================================
@@ -130,6 +131,15 @@ class SegFormerConfig:
     aug_brightness: float = 0.2       # Brightness adjustment range
     aug_contrast: float = 0.2         # Contrast adjustment range
 
+    # Timestamp — passed in from ml_model_training so graph filenames match output folder
+    formatted_time: str = ""
+
+    # Pixel sampling cap for ROC/PR/confusion matrix (matches SAM2)
+    max_pixel_samples: int = 10000
+
+    # Site name stored on cfg for convenience (also passed via train())
+    site_name: str = ""
+
 
 # ======================================================================================================================
 # ======================================================================================================================
@@ -141,8 +151,9 @@ class SegFormerTrainer:
     Pure SegFormer trainer: builds model, data loaders, runs training/eval, saves checkpoints/curves.
     No LoRA logic inside. If you want LoRA, wrap the model externally before calling train().
     """
-    def __init__(self, cfg: SegFormerConfig):
+    def __init__(self, cfg: SegFormerConfig, parent_widget=None):
         self.cfg = cfg
+        self.parent_widget = parent_widget
         self.best_iou = 0.0
         self.progressBar = None
         self._last_checkpoint_path = None
@@ -154,6 +165,19 @@ class SegFormerTrainer:
 
         # Checkpoint management
         self.best_checkpoints = []  # List of (val_iou, filepath) tuples
+
+        # Metric accumulators — mirrors SAM2 trainer structure
+        self.loss_values: List[float] = []           # train loss per epoch
+        self.val_loss_values: List[float] = []       # val loss per val epoch
+        self.train_accuracy_values: List[float] = [] # train pixel accuracy per epoch
+        self.val_accuracy_values: List[float] = []   # val pixel accuracy per val epoch
+        self.val_iou_values: List[float] = []        # val IoU per val epoch
+        self.miou_values: List[float] = []           # val mIoU per val epoch (same as IoU for single-class)
+        self.val_dice_values: List[float] = []       # val Dice per val epoch
+        self.val_true_list: List[int] = []           # sampled pixel true labels (for ROC/PR/CM)
+        self.val_pred_list: List[int] = []           # sampled pixel predictions
+        self.val_score_list: List[float] = []        # sampled pixel scores (target class prob)
+        self.epoch_list: List[int] = []              # val epoch numbers
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -211,40 +235,108 @@ class SegFormerTrainer:
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     @torch.no_grad()
-    def evaluate(self, model, val_loader):
+    def evaluate(self, model, val_loader, ce_loss, dice_loss, num_labels):
+        """
+        Run one validation epoch.
+        Returns (avg_val_loss, val_accuracy, mean_iou, avg_dice, avg_iou, metrics_dict)
+        and appends pixel samples to self.val_true_list / val_pred_list / val_score_list.
+        Mirrors SAM2's _validate_one_epoch structure.
+        """
         model.eval()
-        ious, precisions, recalls, f1s = [], [], [], []
+        ious, precisions, recalls, f1s, dices = [], [], [], [], []
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        n_batches = 0
+
         for imgs, masks in val_loader:
             imgs = imgs.to(self.cfg.device, non_blocking=True)
             masks = masks.to(self.cfg.device, non_blocking=True)
+            masks_long = masks.round().long()
+            masks_long[(masks_long < 0) | (masks_long > num_labels - 1)] = 255
 
             outputs = model(pixel_values=imgs)
             logits = outputs.logits
             logits = torch.nn.functional.interpolate(
                 logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
             )
-            
-            # Use threshold-based prediction (works for both binary and multi-class)
+
+            # Val loss — CE + Dice (same combo as training loss)
+            ce = ce_loss(logits, masks_long)
             probs = torch.softmax(logits, dim=1)
+            if num_labels == 2:
+                probs_dice = probs[:, 1:2]
+                masks_bin = (masks_long == 1).float().unsqueeze(1)
+                dice_l = dice_loss(probs_dice, masks_bin)
+            else:
+                dice_l = dice_loss(probs, masks_long)
+            val_loss += float((ce + dice_l).detach().cpu())
+            n_batches += 1
+
+            # Threshold-based predictions
             preds = (probs[:, self.cfg.target_class_id] > self.cfg.inference_threshold).long()
 
             for b in range(preds.size(0)):
                 pb = preds[b].cpu()
-                mb = (masks[b] == self.cfg.target_class_id).long().cpu()  # Convert mask to binary for target class
+                mb = (masks[b].cpu() == self.cfg.target_class_id).long()
+
+                # Pixel accuracy
+                val_correct += (pb == mb).sum().item()
+                val_total += mb.numel()
+
+                # Per-image metrics
                 iou = self.compute_iou(pb, mb)
                 prec, rec, f1 = self.compute_metrics(pb, mb)
-                ious.append(iou); precisions.append(prec); recalls.append(rec); f1s.append(f1)
+
+                # Dice coefficient
+                inter = ((pb == 1) & (mb == 1)).sum().item()
+                dice = (2 * inter) / (pb.sum().item() + mb.sum().item() + 1e-8)
+
+                ious.append(iou)
+                precisions.append(prec)
+                recalls.append(rec)
+                f1s.append(f1)
+                dices.append(dice)
+
+                # Pixel sampling for ROC/PR/confusion matrix — mirrors SAM2
+                true_flat = mb.numpy().flatten().astype(int)
+                score_flat = probs[b, self.cfg.target_class_id].cpu().numpy().flatten()
+                pred_flat = pb.numpy().flatten().astype(int)
+
+                total_pixels = len(true_flat)
+                max_samples = self.cfg.max_pixel_samples
+                if total_pixels > max_samples:
+                    sample_indices = np.random.choice(total_pixels, max_samples, replace=False)
+                    true_sampled = true_flat[sample_indices]
+                    pred_sampled = pred_flat[sample_indices]
+                    score_sampled = score_flat[sample_indices]
+                else:
+                    true_sampled = true_flat
+                    pred_sampled = pred_flat
+                    score_sampled = score_flat
+
+                self.val_true_list.extend(true_sampled.tolist())
+                self.val_pred_list.extend(pred_sampled.tolist())
+                self.val_score_list.extend(score_sampled.tolist())
 
             self._tick_progress()
 
         torch.use_deterministic_algorithms(True)
 
-        return {
-            "mean_iou": float(np.mean(ious)) if ious else 0.0,
+        avg_val_loss = val_loss / n_batches if n_batches > 0 else 0.0
+        val_accuracy = val_correct / val_total if val_total > 0 else 0.0
+        mean_iou = float(np.mean(ious)) if ious else 0.0
+        avg_dice = float(np.mean(dices)) if dices else 0.0
+        avg_iou = float(np.mean(ious)) if ious else 0.0
+
+        metrics_dict = {
+            "mean_iou": mean_iou,
             "precision": float(np.mean(precisions)) if precisions else 0.0,
             "recall": float(np.mean(recalls)) if recalls else 0.0,
             "f1": float(np.mean(f1s)) if f1s else 0.0,
         }
+
+        return avg_val_loss, val_accuracy, mean_iou, avg_dice, avg_iou, metrics_dict
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -299,25 +391,177 @@ class SegFormerTrainer:
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    def save_training_curves(self, train_losses, val_ious, val_precisions, val_recalls, val_f1s):
-        torch.use_deterministic_algorithms(True)
+    def _plot_training_graphs(self, site_name: str, lr: float):
+        """
+        Generate and save all training/validation plots using ModelTrainingVisualization.
+        Mirrors SAM2's _plot_training_graphs exactly — same 9 plots, same viz class.
+        """
+        progressBar = QProgressWheel(
+            title="Generating graphs...", total=9,
+            on_close=lambda: setattr(self, "progress_bar_closed", True),
+            parent=self.parent_widget
+        )
 
-        metrics_dict = {
-            "train_loss": train_losses,
-            "val_iou": val_ious,
-            "val_precision": val_precisions,
-            "val_recall": val_recalls,
-            "val_f1": val_f1s,
-        }
-        for name, values in metrics_dict.items():
-            plt.figure()
-            plt.plot(values)
-            plt.xlabel("Epoch"); plt.ylabel(name); plt.title(name)
-            save_path = os.path.join(self.cfg.output_dir, f"{name}.png")
-            plt.savefig(save_path); plt.close()
-            print(f"Saved {name} curve to {save_path}")
+        viz = ModelTrainingVisualization(
+            self.cfg.output_dir, self.cfg.formatted_time, self.cfg.categories
+        )
 
-        torch.use_deterministic_algorithms(False)
+        train_epochs = list(range(1, len(self.loss_values) + 1))
+        val_epochs = self.epoch_list
+
+        # 1) Loss curves
+        viz.plot_loss_curves(
+            train_epochs=train_epochs,
+            train_loss=self.loss_values,
+            val_epochs=val_epochs,
+            val_loss=self.val_loss_values,
+            site_name=site_name,
+            lr=lr,
+            model_name="SegFormer-LoRA",
+            epochs=self.cfg.num_epochs,
+            batch_size=self.cfg.batch_size,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 2) Accuracy curves
+        viz.plot_accuracy(
+            train_epochs=train_epochs,
+            train_acc=self.train_accuracy_values,
+            val_epochs=val_epochs,
+            val_acc=self.val_accuracy_values,
+            site_name=site_name,
+            lr=lr,
+            model_name="SegFormer-LoRA",
+            epochs=self.cfg.num_epochs,
+            batch_size=self.cfg.batch_size,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 3) Confusion matrix
+        viz.plot_confusion_matrix(
+            y_true=self.val_true_list,
+            y_pred=self.val_pred_list,
+            site_name=site_name,
+            lr=lr,
+            normalize=True,
+            file_prefix="Normalized"
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 4) ROC curve + AUC
+        viz.plot_roc_curve(
+            y_true=self.val_true_list,
+            y_scores=self.val_score_list,
+            site_name=site_name,
+            lr=lr,
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}"
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 5) Precision-Recall
+        viz.plot_precision_recall(
+            y_true=self.val_true_list,
+            y_scores=self.val_score_list,
+            site_name=site_name,
+            lr=lr,
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}"
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 6) F1 vs Threshold
+        viz.plot_f1_score(
+            y_true=self.val_true_list,
+            y_scores=self.val_score_list,
+            site_name=site_name,
+            lr=lr,
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}"
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 7) Mean IoU curve
+        viz.plot_miou_curve(
+            epochs=self.epoch_list,
+            miou_values=self.miou_values,
+            site_name=site_name,
+            lr=lr,
+            model_name="SegFormer-LoRA",
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}",
+            num_epochs=self.cfg.num_epochs,
+            batch_size=self.cfg.batch_size,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 8) Dice curve
+        viz.plot_dice_curve(
+            epochs=self.epoch_list,
+            dice_values=self.val_dice_values,
+            site_name=site_name,
+            lr=lr,
+            model_name="SegFormer-LoRA",
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}",
+            num_epochs=self.cfg.num_epochs,
+            batch_size=self.cfg.batch_size,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        # 9) IoU curve
+        viz.plot_iou_curve(
+            epochs=self.epoch_list,
+            iou_values=self.val_iou_values,
+            site_name=site_name,
+            lr=lr,
+            model_name="SegFormer-LoRA",
+            file_prefix=f"{self.cfg.formatted_time}_{site_name}_lr{lr:.5f}",
+            num_epochs=self.cfg.num_epochs,
+            batch_size=self.cfg.batch_size,
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+        )
+        progressBar.setValue(progressBar.getValue() + 1)
+        progressBar.show()
+
+        progressBar.close()
+
+        # ── PDF Diagnostic Report ──────────────────────────────────────────
+        acc_png  = os.path.join(self.cfg.output_dir, f"{self.cfg.formatted_time}_{site_name}_AccuracyCurves_lr{lr:.5f}.png")
+        loss_png = os.path.join(self.cfg.output_dir, f"{self.cfg.formatted_time}_{site_name}_LossCurves_lr{lr:.5f}.png")
+        viz.save_training_report(
+            train_acc=self.train_accuracy_values,
+            val_acc=self.val_accuracy_values,
+            train_loss=self.loss_values,
+            val_loss=self.val_loss_values,
+            site_name=site_name,
+            lr=lr,
+            miou_values=self.miou_values,
+            dice_values=self.val_dice_values,
+            graph_paths=[acc_png, loss_png],
+            model_type="SegFormer-LoRA",
+            num_train_images=getattr(self, "num_train_images", None),
+            num_val_images=getattr(self, "num_val_images", None),
+            categories=self.cfg.categories,
+            best_epoch=self.epoch_list[int(
+                self.val_accuracy_values.index(max(self.val_accuracy_values))
+            )] if self.val_accuracy_values else None,
+            best_val_acc=max(self.val_accuracy_values) if self.val_accuracy_values else None,
+            early_stopped=getattr(self, "early_stopped", False),
+            early_stop_epoch=getattr(self, "early_stop_epoch", None),
+        )
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -398,7 +642,8 @@ class SegFormerTrainer:
         self.progressBar = QProgressWheel(
             title="SegFormer Training in-progress...",
             total=self._progress_total,
-            on_close=lambda: setattr(self.cfg, "progress_bar_closed", True)
+            on_close=lambda: setattr(self.cfg, "progress_bar_closed", True),
+            parent=self.parent_widget
         )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -447,6 +692,8 @@ class SegFormerTrainer:
             worker_init_fn=_worker_init_fn, persistent_workers=(self.cfg.num_workers > 0),
         )
 
+        self.num_train_images = len(train_ds)
+        self.num_val_images = len(val_ds)
         self._init_progress(train_loader, val_loader)
 
         # BINARY SEGMENTATION
@@ -474,7 +721,19 @@ class SegFormerTrainer:
         scaler = torch.cuda.amp.GradScaler(enabled=self.cfg.amp)
 
         metrics_log_path = os.path.join(self.cfg.output_dir, "metrics.json")
-        train_losses, val_ious, val_precisions, val_recalls, val_f1s = [], [], [], [], []
+
+        # Clear all accumulators at the start of each training run
+        self.loss_values.clear()
+        self.val_loss_values.clear()
+        self.train_accuracy_values.clear()
+        self.val_accuracy_values.clear()
+        self.val_iou_values.clear()
+        self.miou_values.clear()
+        self.val_dice_values.clear()
+        self.val_true_list.clear()
+        self.val_pred_list.clear()
+        self.val_score_list.clear()
+        self.epoch_list.clear()
 
         last_completed_epoch = 0
 
@@ -482,6 +741,8 @@ class SegFormerTrainer:
             for epoch in range(1, self.cfg.num_epochs + 1):
                 model.train()
                 total_loss = 0.0
+                train_correct = 0
+                train_total = 0
 
                 for imgs, masks in train_loader:
                     # Apply augmentation to training data
@@ -494,7 +755,7 @@ class SegFormerTrainer:
                             augmented_masks.append(aug_mask)
                         imgs = torch.stack(augmented_imgs)
                         masks = torch.stack(augmented_masks)
-                    
+
                     imgs = imgs.to(self.cfg.device, non_blocking=True)
                     masks = masks.to(self.cfg.device, non_blocking=True)
                     masks = masks.round().long()
@@ -519,20 +780,14 @@ class SegFormerTrainer:
                             logits = torch.nn.functional.interpolate(
                                 logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
                             )
-                            # CE takes logits, Dice takes probabilities
                             ce = ce_loss(logits, masks)
-
-                            # Dice loss: handle binary vs multi-class
                             probs = torch.softmax(logits, dim=1)
                             if num_labels == 2:
-                                # Binary: slice foreground channel
-                                probs_dice = probs[:, 1:2]  # [B,1,H,W]
-                                masks_bin = (masks == 1).float().unsqueeze(1)  # [B,1,H,W]
+                                probs_dice = probs[:, 1:2]
+                                masks_bin = (masks == 1).float().unsqueeze(1)
                                 dice = dice_loss(probs_dice, masks_bin)
                             else:
-                                # Multi-class: use all channels
                                 dice = dice_loss(probs, masks)
-
                             loss = ce + dice
 
                         scaler.scale(loss).backward()
@@ -542,27 +797,45 @@ class SegFormerTrainer:
                         scaler.update()
 
                     total_loss += float(loss.detach().cpu())
+
+                    # Train pixel accuracy
+                    with torch.no_grad():
+                        preds = (torch.softmax(logits.detach(), dim=1)[:, self.cfg.target_class_id]
+                                 > self.cfg.inference_threshold).long()
+                        mb = (masks == self.cfg.target_class_id).long()
+                        train_correct += (preds == mb).sum().item()
+                        train_total += mb.numel()
+
                     self._tick_progress()
 
                 avg_loss = total_loss / max(1, len(train_loader))
-                train_losses.append(avg_loss)
+                train_accuracy = train_correct / train_total if train_total > 0 else 0.0
+                self.loss_values.append(avg_loss)
+                self.train_accuracy_values.append(train_accuracy)
                 last_completed_epoch = epoch
-                print(f"Epoch {epoch}/{self.cfg.num_epochs} | Train loss: {avg_loss:.4f}")
+                print(f"Epoch {epoch}/{self.cfg.num_epochs} | Train loss: {avg_loss:.4f} | Acc: {train_accuracy:.4f}")
 
                 # GPU memory cleanup after each epoch
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
                 if epoch % self.cfg.val_every == 0:
-                    metrics = self.evaluate(model, val_loader)
-                    val_ious.append(metrics['mean_iou'])
-                    val_precisions.append(metrics['precision'])
-                    val_recalls.append(metrics['recall'])
-                    val_f1s.append(metrics['f1'])
+                    avg_val_loss, val_accuracy, mean_iou, avg_dice, avg_iou, metrics = self.evaluate(
+                        model, val_loader, ce_loss, dice_loss, num_labels
+                    )
+
+                    self.epoch_list.append(epoch)
+                    self.val_loss_values.append(avg_val_loss)
+                    self.val_accuracy_values.append(val_accuracy)
+                    self.val_iou_values.append(avg_iou)
+                    self.miou_values.append(mean_iou)
+                    self.val_dice_values.append(avg_dice)
 
                     print(
-                        f"Epoch {epoch} | "
+                        f"Epoch {epoch} | Val Loss: {avg_val_loss:.4f} | "
+                        f"Acc: {val_accuracy:.4f} | "
                         f"IoU: {metrics['mean_iou']:.4f} | "
+                        f"Dice: {avg_dice:.4f} | "
                         f"Precision: {metrics['precision']:.4f} | "
                         f"Recall: {metrics['recall']:.4f} | "
                         f"F1: {metrics['f1']:.4f}"
@@ -570,7 +843,6 @@ class SegFormerTrainer:
 
                     # Save validation overlays
                     if self.cfg.save_val_overlays:
-                        # Get a batch from validation loader for overlay
                         val_iter = iter(val_loader)
                         sample_imgs, sample_masks = next(val_iter)
                         sample_imgs = sample_imgs.to(self.cfg.device)
@@ -583,10 +855,8 @@ class SegFormerTrainer:
                                 sample_logits, size=sample_masks.shape[-2:],
                                 mode="bilinear", align_corners=False
                             )
-                            # Use threshold-based prediction (works for both binary and multi-class)
                             sample_probs = torch.softmax(sample_logits, dim=1)
                             sample_preds = (sample_probs[:, self.cfg.target_class_id] > self.cfg.inference_threshold).long()
-                            # Convert masks to binary for target class
                             sample_masks_binary = (sample_masks == self.cfg.target_class_id).long()
 
                         self.save_validation_overlay(
@@ -600,11 +870,10 @@ class SegFormerTrainer:
                         self.best_val_iou = current_val_iou
                         self.patience_counter = 0
 
-                        # Save checkpoint with top-N management
                         self.save_checkpoint(
                             model, optimizer, scaler,
                             categories=self.cfg.categories,
-                            site_name=getattr(self.cfg, 'site_name', 'segformer'),
+                            site_name=site_name,
                             learnrate=self.cfg.lr,
                             epochs=epoch,
                             output_dir=self.cfg.output_dir,
@@ -622,13 +891,20 @@ class SegFormerTrainer:
                             break
 
                     with open(metrics_log_path, "a") as f:
-                        f.write(json.dumps({"epoch": epoch, "train_loss": avg_loss, **metrics}) + "\n")
+                        f.write(json.dumps({
+                            "epoch": epoch,
+                            "train_loss": avg_loss,
+                            "train_accuracy": train_accuracy,
+                            "val_loss": avg_val_loss,
+                            "val_accuracy": val_accuracy,
+                            "val_dice": avg_dice,
+                            **metrics
+                        }) + "\n")
 
         finally:
             if last_completed_epoch > 0:
                 print(f"Saving final checkpoint for epoch {last_completed_epoch}")
-
-            self.save_training_curves(train_losses, val_ious, val_precisions, val_recalls, val_f1s)
+            self._plot_training_graphs(site_name=site_name, lr=self.cfg.lr)
             self._close_progress()
 
         return model
