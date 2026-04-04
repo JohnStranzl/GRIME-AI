@@ -68,7 +68,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QListWidget" name="listWidget_availableFolders">
+        <widget class="QTreeWidget" name="listWidget_availableFolders">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
            <horstretch>1</horstretch>
@@ -84,6 +84,14 @@
          <property name="selectionMode">
           <enum>QAbstractItemView::ExtendedSelection</enum>
          </property>
+         <property name="headerHidden">
+          <bool>true</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>Folder</string>
+          </property>
+         </column>
         </widget>
        </item>
       </layout>
@@ -209,7 +217,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QListWidget" name="listWidget_selectedFolders">
+        <widget class="QTreeWidget" name="listWidget_selectedFolders">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
            <horstretch>1</horstretch>
@@ -222,6 +230,14 @@
            <pointsize>10</pointsize>
           </font>
          </property>
+         <property name="headerHidden">
+          <bool>true</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>Folder</string>
+          </property>
+         </column>
         </widget>
        </item>
       </layout>
