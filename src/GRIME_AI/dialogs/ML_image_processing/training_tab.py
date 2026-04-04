@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional, Tuple, Set
 import json
 
 from PyQt5 import QtWidgets, uic, QtCore
-from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox
+from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QAbstractItemView, QSizePolicy, QListWidget, QMessageBox, QTreeWidget, QTreeWidgetItem
 
 from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.GRIME_AI_CSS_Styles import BUTTON_CSS_STEEL_BLUE, BUTTON_CSS_DARK_RED, BUTTON_CSS_YELLOW
@@ -98,24 +98,38 @@ def _iter_dirs(root: Path):
 
 # ============================================================================
 # ============================================================================
-# ===                     class DraggableListWidget                        ===
+# ===                     class DraggableTreeWidget                        ===
 # ============================================================================
 # ============================================================================
-# Custom ListWidget classes with drag and drop support.
-class DraggableListWidget(QListWidget):
+# Custom TreeWidget classes with drag and drop support.
+# Only top-level (parent) nodes are draggable — child label nodes are not.
+class DraggableTreeWidget(QTreeWidget):
     def mimeData(self, items):
         mimeData = QtCore.QMimeData()
-        texts = "\n".join(sorted(set(item.text() for item in self.selectedItems())))
-        mimeData.setText(texts)
+        # Only drag top-level items (folder nodes), ignore children
+        top_level_texts = sorted(set(
+            item.text(0) for item in items if item.parent() is None
+        ))
+        mimeData.setText("\n".join(top_level_texts))
         return mimeData
 
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.pos())
+        # Only allow drag initiation on top-level items
+        if item is not None and item.parent() is not None:
+            # Child node — don't start a drag, just expand/collapse
+            self.setDragEnabled(False)
+        else:
+            self.setDragEnabled(True)
+        super().mousePressEvent(event)
+
 
 # ============================================================================
 # ============================================================================
-# ===                     class DroppableListWidget                        ===
+# ===                     class DroppableTreeWidget                        ===
 # ============================================================================
 # ============================================================================
-class DroppableListWidget(QListWidget):
+class DroppableTreeWidget(QTreeWidget):
     def dropEvent(self, event):
         if event.mimeData().hasText():
             text = event.mimeData().text()
@@ -123,16 +137,17 @@ class DroppableListWidget(QListWidget):
             dlg = self.parent()
             if dlg is not None:
                 for item_text in items_to_drop:
-                    # Remove matching item from available list.
+                    # Remove matching top-level item from available tree
                     available = dlg.listWidget_availableFolders
-                    for idx in range(available.count()):
-                        avail_item = available.item(idx)
-                        if avail_item.text() == item_text:
-                            available.takeItem(idx)
+                    root = available.invisibleRootItem()
+                    for idx in range(root.childCount()):
+                        avail_item = root.child(idx)
+                        if avail_item.text(0) == item_text:
+                            root.removeChild(avail_item)
                             break
-                    # Add the item if not already transferred.
+                    # Add to selected tree if not already there
                     if item_text not in dlg.transferred_items:
-                        self.addItem(item_text)
+                        dlg._add_folder_to_tree(self, item_text)
                         dlg.transferred_items.add(item_text)
                         print(f"Dragged '{item_text}' from available to selected folders via drop.")
                 dlg.listWidget_selectedFolders.repaint()
@@ -141,6 +156,40 @@ class DroppableListWidget(QListWidget):
             event.accept()
         else:
             event.ignore()
+
+
+# ============================================================================
+# ============================================================================
+# ===                       class ClickableLabel                           ===
+# ============================================================================
+# ============================================================================
+class ClickableLabel(QtWidgets.QLabel):
+    """
+    A QLabel that toggles expand/collapse on all items in a linked QTreeWidget
+    when clicked. Displays a chevron (▶ collapsed, ▼ expanded) appended to the
+    base text, and shows a tooltip hinting the action.
+    """
+    def __init__(self, base_text: str, tree: QTreeWidget, parent=None):
+        super().__init__(parent)
+        self._base_text = base_text
+        self._tree = tree
+        self._expanded = False  # start collapsed
+        self._refresh()
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+
+    def _refresh(self):
+        chevron = "▼" if self._expanded else "▶"
+        self.setText(f"{self._base_text}  {chevron}")
+        self.setToolTip("Collapse all" if self._expanded else "Expand all")
+
+    def mousePressEvent(self, event):
+        self._expanded = not self._expanded
+        if self._expanded:
+            self._tree.expandAll()
+        else:
+            self._tree.collapseAll()
+        self._refresh()
+        super().mousePressEvent(event)
 
 
 # ============================================================================
@@ -252,14 +301,15 @@ class TrainingTab(QtWidgets.QWidget):
                 if event.mimeData().hasText():
                     mime_text = event.mimeData().text()
                     dragged_items = [txt.strip() for txt in mime_text.splitlines() if txt.strip()]
+                    avail_root = self.listWidget_availableFolders.invisibleRootItem()
                     for txt in dragged_items:
-                        for idx in range(self.listWidget_availableFolders.count()):
-                            avail_item = self.listWidget_availableFolders.item(idx)
-                            if avail_item.text() == txt:
-                                self.listWidget_availableFolders.takeItem(idx)
+                        for idx in range(avail_root.childCount()):
+                            avail_item = avail_root.child(idx)
+                            if avail_item.text(0) == txt:
+                                avail_root.removeChild(avail_item)
                                 break
                         if txt not in self.transferred_items:
-                            self.listWidget_selectedFolders.addItem(txt)
+                            self._add_folder_to_tree(self.listWidget_selectedFolders, txt)
                             self.transferred_items.add(txt)
                             print(f"Dragged '{txt}' from available to selected folders via eventFilter.")
                 event.accept()
@@ -304,8 +354,39 @@ class TrainingTab(QtWidgets.QWidget):
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
+    def _install_clickable_labels(self) -> None:
+        """
+        Replace the plain QLabel headers above each tree with ClickableLabel
+        instances that toggle expand/collapse on their linked tree.
+        """
+        for label_name, base_text, tree in [
+            ("label_availableFolders", "Available Image Folders", self.listWidget_availableFolders),
+            ("label_selectedFolders",  "Selected Image Folders",  self.listWidget_selectedFolders),
+        ]:
+            old_label = getattr(self, label_name)
+            layout, index = self._find_container_layout_and_index(old_label)
+            if layout is None or index < 0:
+                print(f"Could not locate layout slot for {label_name}; skipping.")
+                continue
+
+            new_label = ClickableLabel(base_text, tree, old_label.parent())
+            new_label.setObjectName(label_name)
+            new_label.setAlignment(QtCore.Qt.AlignCenter)
+            new_label.setStyleSheet("font: bold 10pt;")
+
+            layout.insertWidget(index, new_label)
+            layout.removeWidget(old_label)
+            old_label.hide()
+            old_label.deleteLater()
+            setattr(self, label_name, new_label)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def setup_connections(self):
         """Connect signals with their slot methods."""
+
+        # Replace plain labels with ClickableLabel for expand/collapse toggle
+        self._install_clickable_labels()
 
         # Wire up signals
         self.pushButton_reset.clicked.connect(self.reset_selection)
@@ -355,12 +436,16 @@ class TrainingTab(QtWidgets.QWidget):
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
-    def handle_left_item_doubleclick(self, item):
+    def handle_left_item_doubleclick(self, item, column):
+        if item.parent() is not None:
+            return  # ignore double-click on child label nodes
         self.move_items_to_selected([item])
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
-    def handle_right_item_doubleclick(self, item):
+    def handle_right_item_doubleclick(self, item, column):
+        if item.parent() is not None:
+            return  # ignore double-click on child label nodes
         self.move_items_to_available([item])
 
     # ------------------------------------------------------------------------
@@ -419,14 +504,29 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     def reset_lists(self):
         """
-        Clear both list widgets and restore available folders from the original list.
+        Move all items from the selected tree back to the available tree (sorted).
+        Does not clear the available tree.
         """
-        self.listWidget_availableFolders.clear()
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
+
+        # Collect names from selected tree
+        moved_names = [
+            sel_root.child(i).text(0).lstrip('★ ')
+            for i in range(sel_root.childCount())
+        ]
+
         self.listWidget_selectedFolders.clear()
         self.transferred_items.clear()
-        for folder in self.original_folders:
-            self.listWidget_availableFolders.addItem(QListWidgetItem(folder))
 
+        # Merge with existing available names and rebuild sorted
+        existing = [avail_root.child(i).text(0).lstrip('★ ') for i in range(avail_root.childCount())]
+        all_names = sorted(set(existing + moved_names))
+        self.listWidget_availableFolders.clear()
+        for name in all_names:
+            self._add_folder_to_tree(self.listWidget_availableFolders, name)
+
+        self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
 
     # ------------------------------------------------------------------------
@@ -440,44 +540,56 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     def move_to_left(self):
         """
-        Move selected items back from the selected folders list to the available folders list,
-        then re-sort the available folders.
+        Move selected top-level items back from selected tree to available tree, then re-sort.
         """
-        selected_items = self.listWidget_selectedFolders.selectedItems()
-        for item in selected_items:
-            if item:
-                row = self.listWidget_selectedFolders.row(item)
-                self.listWidget_selectedFolders.takeItem(row)
-                if item.text() in self.transferred_items:
-                    self.transferred_items.remove(item.text())
-                available_items = [self.listWidget_availableFolders.item(i).text() for i in range(self.listWidget_availableFolders.count())]
-                available_items.append(item.text())
-                available_items.sort()
-                self.listWidget_availableFolders.clear()
-                for text in available_items:
-                    self.listWidget_availableFolders.addItem(text)
-                print(f"Moved '{item.text()}' from selected back to available folders (sorted, button).")
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
 
+        # Only move top-level (folder) items, not child label nodes
+        selected_items = [
+            item for item in self.listWidget_selectedFolders.selectedItems()
+            if item.parent() is None
+        ]
+        for item in selected_items:
+            name = item.text(0).lstrip('★ ')
+            sel_root.removeChild(item)
+            if name in self.transferred_items:
+                self.transferred_items.remove(name)
+            print(f"Moved '{name}' from selected back to available folders (sorted, button).")
+
+        # Rebuild available tree sorted
+        existing = [avail_root.child(i).text(0).lstrip('★ ') for i in range(avail_root.childCount())]
+        moved = [item.text(0).lstrip('★ ') for item in selected_items]
+        all_names = sorted(set(existing + moved))
+        self.listWidget_availableFolders.clear()
+        for name in all_names:
+            self._add_folder_to_tree(self.listWidget_availableFolders, name)
+
+        self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def move_items_to_available(self, items):
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
+
         for item in items:
-            name = item.text()
+            # Only act on top-level folder nodes
+            if item.parent() is not None:
+                continue
+            name = item.text(0).lstrip('★ ')
             if name in self.transferred_items:
                 self.transferred_items.remove(name)
-                available_items = [self.listWidget_availableFolders.item(i).text()
-                                   for i in range(self.listWidget_availableFolders.count())]
-                available_items.append(name)
-                available_items.sort()
+                sel_root.removeChild(item)
+
+                existing = [avail_root.child(i).text(0).lstrip('★ ') for i in range(avail_root.childCount())]
+                all_names = sorted(set(existing + [name]))
                 self.listWidget_availableFolders.clear()
-                for text in available_items:
-                    self.listWidget_availableFolders.addItem(text)
-                for i in range(self.listWidget_selectedFolders.count()):
-                    if self.listWidget_selectedFolders.item(i).text() == name:
-                        self.listWidget_selectedFolders.takeItem(i)
-                        break
+                for n in all_names:
+                    self._add_folder_to_tree(self.listWidget_availableFolders, n)
+
+        self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
 
     # ------------------------------------------------------------------------
@@ -558,9 +670,9 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def setup_custom_list_widgets(self):
-        """Replace default list widgets with custom draggable/droppable ones."""
-        self.listWidget_availableFolders.__class__ = DraggableListWidget
-        self.listWidget_selectedFolders.__class__ = DroppableListWidget
+        """Replace default tree widgets with custom draggable/droppable ones."""
+        self.listWidget_availableFolders.__class__ = DraggableTreeWidget
+        self.listWidget_selectedFolders.__class__ = DroppableTreeWidget
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -611,37 +723,66 @@ class TrainingTab(QtWidgets.QWidget):
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
+    def _add_folder_to_tree(self, tree: QTreeWidget, folder_name: str) -> QTreeWidgetItem:
+        """
+        Add a folder as a top-level parent node to a tree widget, with its
+        annotation labels as non-selectable child nodes beneath it.
+        Returns the created parent item.
+        """
+        from PyQt5.QtGui import QFont
+        parent_item = QTreeWidgetItem(tree, [folder_name])
+        parent_item.setFlags(parent_item.flags() | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsDragEnabled)
+
+        # Load labels and add as children
+        base_path = self.lineEdit_model_training_images_path.text().strip()
+        folder_path = os.path.normpath(os.path.join(base_path, folder_name))
+        cats = self._load_categories(folder_path)
+        if cats:
+            child_font = QFont()
+            child_font.setItalic(True)
+            for cat in cats:
+                label_text = f"{cat['name']} (ID={cat['id']})"
+                child_item = QTreeWidgetItem(parent_item, [label_text])
+                child_item.setFlags(QtCore.Qt.ItemIsEnabled)  # not selectable, not draggable
+                child_item.setFont(0, child_font)
+
+        tree.collapseItem(parent_item)
+        return parent_item
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _install_drag_drop_lists(self) -> None:
-        # Replace available list
+        # Replace available tree
         avail_layout, avail_index = self._find_container_layout_and_index(self.listWidget_availableFolders)
         if avail_layout is None or avail_index < 0:
             print("Could not locate layout slot for listWidget_availableFolders; aborting replacement.")
         else:
-            avail_dd = DraggableListWidget(self.listWidget_availableFolders.parent())
+            avail_dd = DraggableTreeWidget(self.listWidget_availableFolders.parent())
             avail_dd.setObjectName("listWidget_availableFolders")
             avail_dd.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-            # transfer any existing items
-            for i in range(self.listWidget_availableFolders.count()):
-                avail_dd.addItem(self.listWidget_availableFolders.item(i).text())
+            avail_dd.setHeaderHidden(True)
+            avail_dd.setDragEnabled(True)
+            avail_dd.setDragDropMode(QAbstractItemView.DragOnly)
 
             # Replace at the exact slot index
             avail_layout.insertWidget(avail_index, avail_dd)
-            old = avail_layout.itemAt(avail_index + 1).widget()  # the original now shifted right
+            old = avail_layout.itemAt(avail_index + 1).widget()
             avail_layout.removeWidget(old)
             old.hide()
             old.deleteLater()
             self.listWidget_availableFolders = avail_dd
 
-        # Replace selected list
+        # Replace selected tree
         sel_layout, sel_index = self._find_container_layout_and_index(self.listWidget_selectedFolders)
         if sel_layout is None or sel_index < 0:
             print("Could not locate layout slot for listWidget_selectedFolders; aborting replacement.")
         else:
-            sel_dd = DroppableListWidget(self.listWidget_selectedFolders.parent())
+            sel_dd = DroppableTreeWidget(self.listWidget_selectedFolders.parent())
             sel_dd.setObjectName("listWidget_selectedFolders")
             sel_dd.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-            for i in range(self.listWidget_selectedFolders.count()):
-                sel_dd.addItem(self.listWidget_selectedFolders.item(i).text())
+            sel_dd.setHeaderHidden(True)
+            sel_dd.setAcceptDrops(True)
+            sel_dd.setDragDropMode(QAbstractItemView.DropOnly)
 
             sel_layout.insertWidget(sel_index, sel_dd)
             old = sel_layout.itemAt(sel_index + 1).widget()
@@ -717,10 +858,10 @@ class TrainingTab(QtWidgets.QWidget):
         # Folder lists
         self.listWidget_availableFolders.clear()
         for p in cfg.get("available_folders", []):
-            self.listWidget_availableFolders.addItem(str(p))
+            self._add_folder_to_tree(self.listWidget_availableFolders, str(p))
         self.listWidget_selectedFolders.clear()
         for p in cfg.get("selected_folders", []):
-            self.listWidget_selectedFolders.addItem(str(p))
+            self._add_folder_to_tree(self.listWidget_selectedFolders, str(p))
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -776,10 +917,14 @@ class TrainingTab(QtWidgets.QWidget):
             "device": self.comboBox_device.currentText(),
             "blob_filter_radius": self._blob_pixels_to_fraction(),
             "segmentation_images_path": self.lineEdit_model_training_images_path.text().strip(),
-            "available_folders": [self.listWidget_availableFolders.item(i).text()
-                                  for i in range(self.listWidget_availableFolders.count())],
-            "selected_folders": [self.listWidget_selectedFolders.item(i).text()
-                                 for i in range(self.listWidget_selectedFolders.count())],
+            "available_folders": [
+                self.listWidget_availableFolders.invisibleRootItem().child(i).text(0).lstrip('★ ')
+                for i in range(self.listWidget_availableFolders.invisibleRootItem().childCount())
+            ],
+            "selected_folders": [
+                self.listWidget_selectedFolders.invisibleRootItem().child(i).text(0).lstrip('★ ')
+                for i in range(self.listWidget_selectedFolders.invisibleRootItem().childCount())
+            ],
             "train_model": {
                 "TRAINING_CATEGORIES": [
                     {
@@ -808,10 +953,11 @@ class TrainingTab(QtWidgets.QWidget):
         Collect selected folders from listWidget_selectedFolders and update values["Path"]
         with image and annotation paths.
         """
-        # 1. Gather selected folder names
+        # 1. Gather selected folder names (top-level nodes only)
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
         selected_folders = [
-            self.listWidget_selectedFolders.item(i).text()
-            for i in range(self.listWidget_selectedFolders.count())
+            sel_root.child(i).text(0).lstrip('★ ')
+            for i in range(sel_root.childCount())
         ]
 
         new_folders = []
@@ -928,10 +1074,14 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def move_to_selected(self):
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
         for item in self.listWidget_availableFolders.selectedItems():
-            self.listWidget_selectedFolders.addItem(item.text())
-            self.transferred_items.add(item.text())
-            self.listWidget_availableFolders.takeItem(self.listWidget_availableFolders.row(item))
+            if item.parent() is not None:
+                continue  # skip child nodes
+            name = item.text(0)
+            avail_root.removeChild(item)
+            self._add_folder_to_tree(self.listWidget_selectedFolders, name)
+            self.transferred_items.add(name)
         self.listWidget_selectedFolders.repaint()
         self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
@@ -939,21 +1089,38 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def move_to_right(self):
-        selected_items = self.listWidget_availableFolders.selectedItems()
+        selected_items = [
+            item for item in self.listWidget_availableFolders.selectedItems()
+            if item.parent() is None
+        ]
         self._move_items(selected_items)
         for item in selected_items:
-            print(f"Moved '{item.text()}' from available to selected folders (button).")
-
+            print(f"Moved '{item.text(0)}' from available to selected folders (button).")
         self.updateTrainButtonState()
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def move_to_available(self):
-        for item in self.listWidget_selectedFolders.selectedItems():
-            text = item.text()
-            self.listWidget_availableFolders.addItem(text)
-            self.transferred_items.discard(text)
-            self.listWidget_selectedFolders.takeItem(self.listWidget_selectedFolders.row(item))
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
+
+        items = [
+            item for item in self.listWidget_selectedFolders.selectedItems()
+            if item.parent() is None
+        ]
+        moved_names = []
+        for item in items:
+            name = item.text(0).lstrip('★ ')
+            sel_root.removeChild(item)
+            self.transferred_items.discard(name)
+            moved_names.append(name)
+
+        existing = [avail_root.child(i).text(0).lstrip('★ ') for i in range(avail_root.childCount())]
+        all_names = sorted(set(existing + moved_names))
+        self.listWidget_availableFolders.clear()
+        for name in all_names:
+            self._add_folder_to_tree(self.listWidget_availableFolders, name)
+
         self.listWidget_availableFolders.repaint()
         self._refresh_annotations_from_selection()
         self.updateTrainButtonState()
@@ -1015,7 +1182,7 @@ class TrainingTab(QtWidgets.QWidget):
             for vf in sorted(set(valid)):
                 rel = vf.relative_to(root)
                 display_name = str(rel)
-                self.listWidget_availableFolders.addItem(display_name)
+                self._add_folder_to_tree(self.listWidget_availableFolders, display_name)
         else:
             QMessageBox.information(
                 self,
@@ -1039,19 +1206,17 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def _move_items(self, items):
+        avail_root = self.listWidget_availableFolders.invisibleRootItem()
         for item in items:
-            name = item.text()
+            if item.parent() is not None:
+                continue  # skip child nodes
+            name = item.text(0)
             if name not in self.transferred_items:
-                self.listWidget_selectedFolders.addItem(name)
+                self._add_folder_to_tree(self.listWidget_selectedFolders, name)
                 self.transferred_items.add(name)
-
-            row = self.listWidget_availableFolders.row(item)
-
-            if row != -1:
-                self.listWidget_availableFolders.takeItem(row)
+            avail_root.removeChild(item)
 
         self._refresh_annotations_from_selection()
-
         self.updateTrainButtonState()
 
     # ------------------------------------------------------------------------
@@ -1068,9 +1233,12 @@ class TrainingTab(QtWidgets.QWidget):
         # BASE PATH (ROOT FOLDER OF TRAINING IMAGES)
         base_path = self.lineEdit_model_training_images_path.text().strip()
 
-        # CURRENT SELECTED FOLDERS (RELATIVE NAMES)
-        moved_names = [self.listWidget_selectedFolders.item(i).text()
-                       for i in range(self.listWidget_selectedFolders.count())]
+        # CURRENT SELECTED FOLDERS (TOP-LEVEL NODES ONLY)
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        moved_names = [
+            sel_root.child(i).text(0).lstrip('★ ')
+            for i in range(sel_root.childCount())
+        ]
 
         # BUILD ANNOTATION LIST FROM SELECTED FOLDERS
         self.annotation_list = self._build_annotation_list(base_path, moved_names)
@@ -1170,15 +1338,16 @@ class TrainingTab(QtWidgets.QWidget):
             'unreadable': annotation file missing or unparseable
         """
         base_path = self.lineEdit_model_training_images_path.text().strip()
-        count = self.listWidget_selectedFolders.count()
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        count = sel_root.childCount()
         if count == 0:
             return {}
 
         state: Dict[str, str] = {}
 
-        # Collect folder names in order
+        # Collect folder names in order (top-level nodes only), stripping any ★ prefix
         folder_names = [
-            self.listWidget_selectedFolders.item(i).text()
+            sel_root.child(i).text(0).lstrip('★ ')
             for i in range(count)
         ]
 
@@ -1239,24 +1408,80 @@ class TrainingTab(QtWidgets.QWidget):
     # ------------------------------------------------------------------------
     def _apply_folder_colors(self, state: Dict[str, str]) -> None:
         """
-        Apply red/yellow/normal text color to items in listWidget_selectedFolders
-        based on validation state.
+        Apply colors to top-level folder nodes in listWidget_selectedFolders.
+        - Gold standard: black text + ★ prefix
+        - OK: black text
+        - Yellow (missing categories): dark yellow text
+        - Red / unreadable: red text
+        Also highlights individual child label nodes red when their ID conflicts
+        with the gold standard.
         """
-        from PyQt5.QtGui import QColor
+        from PyQt5.QtGui import QColor, QFont
 
         color_map = {
             'gold':        QColor('black'),
             'ok':          QColor('black'),
-            'yellow':      QColor(180, 120, 0),   # dark yellow — readable on white
+            'yellow':      QColor(180, 120, 0),
             'red':         QColor('red'),
             'unreadable':  QColor('red'),
         }
 
-        for i in range(self.listWidget_selectedFolders.count()):
-            item = self.listWidget_selectedFolders.item(i)
-            name = item.text()
-            status = state.get(name, 'ok')
-            item.setForeground(color_map.get(status, QColor('black')))
+        # Build gold standard label lookup directly from gold parent's child nodes
+        sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+        gold_by_name: Dict[str, int] = {}  # label name -> ID from gold standard tree node
+        if sel_root.childCount() > 0:
+            gold_parent = sel_root.child(0)
+            for j in range(gold_parent.childCount()):
+                child_text = gold_parent.child(j).text(0)  # e.g. "water (ID=2)"
+                parts = child_text.split(" (ID=")
+                if len(parts) == 2:
+                    name = parts[0].strip()
+                    try:
+                        gid = int(parts[1].rstrip(')'))
+                        gold_by_name[name] = gid
+                    except ValueError:
+                        pass
+
+        child_normal_font = QFont()
+        child_normal_font.setItalic(True)
+
+        for i in range(sel_root.childCount()):
+            parent_item = sel_root.child(i)
+            raw_name = parent_item.text(0)
+            base_name = raw_name.lstrip('★ ')
+            status = state.get(base_name, 'ok')
+            color = color_map.get(status, QColor('black'))
+
+            # Apply color and ★ to parent node
+            if status == 'gold':
+                parent_item.setText(0, f"★ {base_name}")
+            else:
+                parent_item.setText(0, base_name)
+            parent_item.setForeground(0, color)
+
+            for j in range(parent_item.childCount()):
+                child = parent_item.child(j)
+                child.setFont(0, child_normal_font)
+                child.setForeground(0, QColor('black'))
+
+                if status == 'gold':
+                    continue  # gold standard children always normal
+
+                # Parse label name and ID directly from child text
+                child_text = child.text(0)
+                parts = child_text.split(" (ID=")
+                if len(parts) != 2:
+                    continue
+                label_name = parts[0].strip()
+                try:
+                    child_id = int(parts[1].rstrip(')'))
+                except ValueError:
+                    continue
+
+                gold_id = gold_by_name.get(label_name)
+                if gold_id is not None and child_id != gold_id:
+                    child.setForeground(0, QColor('red'))
+                    parent_item.setExpanded(True)
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -1289,7 +1514,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         if not silent:
             base_path = self.lineEdit_model_training_images_path.text().strip()
-            gold_name = self.listWidget_selectedFolders.item(0).text() if self.listWidget_selectedFolders.count() > 0 else '(none)'
+            sel_root = self.listWidget_selectedFolders.invisibleRootItem()
+            gold_name = sel_root.child(0).text(0) if sel_root.childCount() > 0 else '(none)'
 
             if not has_errors and not yellow_folders:
                 msg = "✅  All annotation files are valid."
@@ -1368,7 +1594,7 @@ class TrainingTab(QtWidgets.QWidget):
             missing.append("Model training images folder")
 
         # Selected folders
-        if self.listWidget_selectedFolders.count() == 0:
+        if self.listWidget_selectedFolders.invisibleRootItem().childCount() == 0:
             missing.append("Selected training folders")
 
         # Labels (if categories are available)
