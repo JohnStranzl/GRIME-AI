@@ -533,7 +533,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
         self.mainwin = win
         self.session = session
-        ui_path = os.path.join(os.path.dirname(__file__), "neonAIgui.ui")
+        ui_path = os.path.join(os.path.dirname(__file__), "resources", "ui", "neonAIgui.ui")
         uic.loadUi(ui_path, self)
 
         self.setWindowTitle("GRIME AI" + " " + SW_VERSION + " - John E. Stranzl Jr.")
