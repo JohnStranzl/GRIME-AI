@@ -50,6 +50,12 @@
       <property name="enabled">
        <bool>true</bool>
       </property>
+      <property name="font">
+       <font>
+        <family>Arial</family>
+        <pointsize>11</pointsize>
+       </font>
+      </property>
       <property name="mouseTracking">
        <bool>true</bool>
       </property>
@@ -106,6 +112,7 @@
                  <widget class="QLabel" name="labelNEONSites">
                   <property name="font">
                    <font>
+                    <family>Arial</family>
                     <pointsize>12</pointsize>
                     <weight>75</weight>
                     <bold>true</bold>
@@ -142,6 +149,7 @@
                  <widget class="QLabel" name="labelNEONSites_2">
                   <property name="font">
                    <font>
+                    <family>Arial</family>
                     <pointsize>12</pointsize>
                     <weight>75</weight>
                     <bold>true</bold>
@@ -217,6 +225,7 @@
                   </property>
                   <property name="font">
                    <font>
+                    <family>Arial</family>
                     <pointsize>12</pointsize>
                     <weight>75</weight>
                     <bold>true</bold>
@@ -280,6 +289,7 @@
                    <widget class="QLabel" name="labelSelectedProducts">
                     <property name="font">
                      <font>
+                      <family>Arial</family>
                       <pointsize>12</pointsize>
                       <weight>75</weight>
                       <bold>true</bold>
@@ -513,6 +523,8 @@
         </property>
         <property name="font">
          <font>
+          <family>Arial</family>
+          <pointsize>11</pointsize>
           <weight>50</weight>
           <bold>false</bold>
           <underline>false</underline>
@@ -532,6 +544,7 @@
          </property>
          <property name="font">
           <font>
+           <family>Arial</family>
            <pointsize>10</pointsize>
            <weight>50</weight>
            <bold>false</bold>
@@ -580,6 +593,8 @@
         </property>
         <property name="font">
          <font>
+          <family>Arial</family>
+          <pointsize>11</pointsize>
           <weight>75</weight>
           <bold>true</bold>
           <underline>false</underline>
@@ -787,6 +802,7 @@
                   <widget class="QLineEdit" name="edit_USGSSaveFilePath">
                    <property name="font">
                     <font>
+                     <family>Arial</family>
                      <pointsize>10</pointsize>
                     </font>
                    </property>
@@ -815,6 +831,8 @@
                 </property>
                 <property name="font">
                  <font>
+                  <family>Arial</family>
+                  <pointsize>11</pointsize>
                   <weight>75</weight>
                   <bold>true</bold>
                  </font>
@@ -871,6 +889,7 @@
            <widget class="QLabel" name="labelPhenocamImageTitle">
             <property name="font">
              <font>
+              <family>Arial</family>
               <pointsize>12</pointsize>
              </font>
             </property>
@@ -886,6 +905,7 @@
            <widget class="QLabel" name="labelPhenocamImageTitle">
             <property name="font">
              <font>
+              <family>Arial</family>
               <pointsize>12</pointsize>
              </font>
             </property>
@@ -1201,7 +1221,7 @@
       </widget>
       <widget class="QWidget" name="tab_GoogleMaps">
        <attribute name="title">
-        <string>Google Maps (Provisional)</string>
+        <string>Camera Site Locator (EXPERIMENTAL)</string>
        </attribute>
       </widget>
      </widget>
