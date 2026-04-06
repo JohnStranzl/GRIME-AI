@@ -16,7 +16,6 @@ import numpy as np
 
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 
 from PyQt5.QtGui import QImage, QPixmap
 
@@ -26,10 +25,14 @@ from PyQt5.QtGui import QImage, QPixmap
 # ======================================================================================================================
 # ======================================================================================================================
 class GRIME_AI_ROI_Analyzer:
-    def __init__(self, image_filename, mask_filename, clusters=3):
+    def __init__(self, image_filename, mask_filename, clusters=3, clustering_method='kmeans',
+                 bandwidth=None, quantile=0.2):
         self.image_filename = image_filename
         self.mask_filename = mask_filename
         self.clusters = clusters
+        self.clustering_method = clustering_method  # 'kmeans', 'gmm', or 'meanshift'
+        self.bandwidth = bandwidth    # None = auto-estimate using quantile
+        self.quantile = quantile if quantile is not None else 0.2
 
         self.image = None
         self.mask = None
@@ -200,16 +203,32 @@ class GRIME_AI_ROI_Analyzer:
 
 
     def extract_dominant_colors(self):
+        """Dispatch to the selected clustering algorithm."""
         hsv_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
         if len(self.mask.shape) != 2:
             mask_gray = cv2.cvtColor(self.mask, cv2.COLOR_BGR2GRAY)
         else:
             mask_gray = self.mask.copy()
         _, mask_bin_local = cv2.threshold(mask_gray, 1, 255, cv2.THRESH_BINARY)
-        masked_pixels = hsv_image[mask_bin_local > 0]
+        masked_pixels = hsv_image[mask_bin_local > 0].astype(np.float32)
+
         if masked_pixels.size == 0:
             print("Error: No pixels found under the provided mask.")
             sys.exit(1)
+
+        self.dominant_hsv_list = []
+        self.dominant_rgb_list = []
+        self.percentages_list = []
+
+        method = self.clustering_method.lower()
+        if method == 'gmm':
+            self._extract_gmm(masked_pixels)
+        elif method == 'meanshift':
+            self._extract_meanshift(masked_pixels)
+        else:
+            self._extract_kmeans(masked_pixels)
+
+    def _extract_kmeans(self, masked_pixels):
         clusters = self.clusters if masked_pixels.shape[0] >= self.clusters else 1
         kmeans = KMeans(n_clusters=clusters, random_state=42)
         kmeans.fit(masked_pixels)
@@ -218,21 +237,65 @@ class GRIME_AI_ROI_Analyzer:
         counts = np.bincount(labels)
         percentages = counts / float(np.sum(counts)) * 100
         sorted_indices = np.argsort(percentages)[::-1]
-
-        self.dominant_hsv_list = []
-        self.dominant_rgb_list = []
-        self.percentages_list = []
         for idx in sorted_indices:
-            center = cluster_centers[idx]
-            center_uint8 = np.clip(center, 0, 255).astype(np.uint8)
-            center_hsv = np.array([[center_uint8]])
-            center_rgb = cv2.cvtColor(center_hsv, cv2.COLOR_HSV2RGB)[0][0]
-            self.dominant_hsv_list.append(tuple(int(x) for x in center_uint8))
-            self.dominant_rgb_list.append(tuple(int(x) for x in center_rgb))
-            self.percentages_list.append(percentages[idx])
+            self._append_cluster(cluster_centers[idx], percentages[idx])
+
+    def _extract_gmm(self, masked_pixels):
+        from sklearn.mixture import GaussianMixture
+        n_components = self.clusters if masked_pixels.shape[0] >= self.clusters else 1
+        gmm = GaussianMixture(n_components=n_components, random_state=42, max_iter=200)
+        gmm.fit(masked_pixels)
+        labels = gmm.predict(masked_pixels)
+        counts = np.bincount(labels, minlength=n_components)
+        percentages = counts / float(np.sum(counts)) * 100
+        sorted_indices = np.argsort(percentages)[::-1]
+        for idx in sorted_indices:
+            self._append_cluster(gmm.means_[idx], percentages[idx])
+
+    def _extract_meanshift(self, masked_pixels):
+        from sklearn.cluster import MeanShift, estimate_bandwidth
+        # Subsample for speed on large masks (mean-shift is O(n²))
+        max_samples = 5000
+        if masked_pixels.shape[0] > max_samples:
+            rng = np.random.default_rng(42)
+            idx = rng.choice(masked_pixels.shape[0], max_samples, replace=False)
+            sample = masked_pixels[idx]
+        else:
+            sample = masked_pixels
+
+        if self.bandwidth is not None:
+            bw = self.bandwidth
+        else:
+            bw = estimate_bandwidth(sample, quantile=self.quantile,
+                                    n_samples=min(500, sample.shape[0]))
+            if bw <= 0:
+                bw = 10.0  # safe fallback
+
+        ms = MeanShift(bandwidth=bw, bin_seeding=True)
+        ms.fit(sample)
+
+        # Assign ALL masked pixels to nearest cluster center for accurate percentages
+        centers = ms.cluster_centers_
+        diffs = masked_pixels[:, np.newaxis, :] - centers[np.newaxis, :, :]
+        labels_all = np.argmin(np.sum(diffs ** 2, axis=2), axis=1)
+
+        counts = np.bincount(labels_all, minlength=len(centers))
+        percentages = counts / float(np.sum(counts)) * 100
+        sorted_indices = np.argsort(percentages)[::-1]
+        for idx in sorted_indices:
+            self._append_cluster(centers[idx], percentages[idx])
+
+    def _append_cluster(self, center_hsv, percentage):
+        """Convert an HSV cluster center to RGB and append to result lists."""
+        center_uint8 = np.clip(center_hsv, 0, 255).astype(np.uint8)
+        center_hsv_arr = np.array([[center_uint8]])
+        center_rgb = cv2.cvtColor(center_hsv_arr, cv2.COLOR_HSV2RGB)[0][0]
+        self.dominant_hsv_list.append(tuple(int(x) for x in center_uint8))
+        self.dominant_rgb_list.append(tuple(int(x) for x in center_rgb))
+        self.percentages_list.append(float(percentage))
 
 
-    def get_results_pixmap(self):
+    def get_results_pixmap(self, capture_date=None, capture_time=None):
         # 1) Prepare images
         orig_rgb = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         composite_rgba = cv2.cvtColor(self.composite, cv2.COLOR_BGRA2RGBA)
@@ -247,82 +310,95 @@ class GRIME_AI_ROI_Analyzer:
                 overlay_rgb = cv2.cvtColor(ov, cv2.COLOR_BGR2RGB)
                 break
 
-        # 3) Swatch sizing
-        swatch_count = len(self.dominant_rgb_list)
-        sw = int(100 * 0.75)  # 75×75 px
+        # 3) Layout: render at a fixed large DPI so images fill the label.
+        #    Use a wide figure (10" per col at 100 dpi = 1000px per col) and
+        #    derive height from the image aspect ratio so images aren't letterboxed.
+        img_h, img_w = orig_rgb.shape[:2]
+        aspect = img_w / max(img_h, 1)
+        ncols_img = 3 if overlay_rgb is not None else 2
 
-        # 4) Decide number of columns: 3 if overlay, else 2, but at least swatch_count
-        ncols = 3 if overlay_rgb is not None else 2
-        ncols = max(ncols, swatch_count)
+        dpi = 100
+        fig_w = 10.0 * ncols_img   # wide enough to fill a typical label
+        img_row_h = fig_w / (ncols_img * aspect)
+        swatch_row_h = 0.35
 
-        # 5) Build figure & GridSpec
-        #    – smaller canvas: width = 3″ per col, height = 4″ total
-        #    – row0 = 2.5× row1; wspace = 0.3
-        fig = plt.figure(figsize=(3 * ncols, 4))
+        # Reserve space at top for date/time suptitle if present
+        has_timestamp = capture_date or capture_time
+        top_margin = 0.94 if has_timestamp else 0.97
+        fig_h = img_row_h + swatch_row_h + (0.25 if has_timestamp else 0.0)
+
+        fig = plt.figure(figsize=(fig_w, fig_h), dpi=dpi)
         gs = fig.add_gridspec(
-            2, ncols,
-            height_ratios=[2.5, 1],
-            wspace=0.3
+            2, ncols_img,
+            height_ratios=[img_row_h, swatch_row_h],
+            hspace=0.06,
+            wspace=0.04,
         )
 
-        # --- Row 0: Original, ROI composite, (optional) overlay ---
-        axes = []
+        # --- Date/time suptitle ---
+        if has_timestamp:
+            parts = []
+            if capture_date and capture_date != 'n/a':
+                parts.append(capture_date)
+            if capture_time and capture_time != 'n/a':
+                parts.append(capture_time)
+            fig.suptitle("  ".join(parts), fontsize=9, y=0.99)
 
+        # --- Row 0: images ---
         ax0 = fig.add_subplot(gs[0, 0])
         ax0.imshow(orig_rgb)
-        ax0.set_title("Original")
-        axes.append(ax0)
+        ax0.set_title("Original", fontsize=8, pad=2)
+        ax0.axis('off')
 
         ax1 = fig.add_subplot(gs[0, 1])
         ax1.imshow(composite_rgba)
-        ax1.set_title(
-            f"ROI\n"
-            f"I:{self.roi_intensity:.1f} "
-            f"E:{self.roi_entropy:.1f}\n"
-            f"T:{self.roi_texture:.1f} "
-            f"GLI:{self.mean_gli:.2f} "
-            f"GCC:{self.mean_gcc:.2f}"
-        )
-        axes.append(ax1)
+        ax1.set_title("Extracted Features", fontsize=8, pad=2)
+        ax1.axis('off')
 
         if overlay_rgb is not None:
             ax2 = fig.add_subplot(gs[0, 2])
             ax2.imshow(overlay_rgb)
-            ax2.set_title("Overlay")
-            axes.append(ax2)
+            ax2.set_title("Overlay", fontsize=8, pad=2)
+            ax2.axis('off')
 
-        # 6) Draw square frames around each top‐row image
-        for ax in axes:
-            ax.axis('off')  # hide ticks/labels
-            rect = Rectangle(
-                (0, 0), 1, 1,
-                transform=ax.transAxes,
-                fill=False,
-                edgecolor='black',
-                linewidth=2
-            )
-            ax.add_patch(rect)
+        # --- Row 1: single proportional-width swatch strip spanning all columns ---
+        ax_sw = fig.add_subplot(gs[1, :])
+        ax_sw.axis('off')
 
-        # --- Row 1: Dominant-color swatches ---
-        for idx, rgb in enumerate(self.dominant_rgb_list):
-            ax = fig.add_subplot(gs[1, idx])
-            swatch = np.zeros((sw, sw, 3), dtype=np.uint8)
-            swatch[:] = rgb
-            ax.imshow(swatch)
-            ax.set_title(f"{rgb}\n{self.percentages_list[idx]:.1f}%")
-            ax.axis('off')
+        swatch_count = len(self.dominant_rgb_list)
+        if swatch_count > 0:
+            strip_w = 1000
+            strip = np.zeros((1, strip_w, 3), dtype=np.uint8)
+            x = 0
+            segments = []
+            for i, (rgb, pct) in enumerate(zip(self.dominant_rgb_list, self.percentages_list)):
+                w = int(round(strip_w * pct / 100.0))
+                if i == swatch_count - 1:
+                    w = strip_w - x  # absorb rounding remainder
+                w = max(w, 1)
+                strip[0, x:x + w] = rgb
+                segments.append((x / strip_w, (x + w) / strip_w, rgb, pct))
+                x += w
 
-        # 7) Tighten vertical spacing manually (no tight_layout)
-        fig.subplots_adjust(
-            top=0.98,  # pull top edge in
-            bottom=0.02,  # pull bottom edge in
-            hspace=0.02,  # only 2% of axes height between rows
-            wspace=0.3  # keep horizontal gap
-        )
+            ax_sw.imshow(strip, aspect='auto', extent=[0, 1, 0, 1])
 
-        # 8) Render to QPixmap and return
+            for (x0, x1, rgb, pct) in segments:
+                cx = (x0 + x1) / 2.0
+                lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+                txt_color = 'white' if lum < 128 else 'black'
+                ax_sw.text(
+                    cx, 0.5, f"{rgb}\n{pct:.1f}%",
+                    ha='center', va='center',
+                    fontsize=5, color=txt_color,
+                    transform=ax_sw.transAxes,
+                    clip_on=True,
+                )
+
+        fig.subplots_adjust(left=0.01, right=0.99, top=top_margin, bottom=0.01)
+
+        # 4) Render to QPixmap and return
         buf = BytesIO()
-        fig.savefig(buf, format='png', dpi=100)
+        fig.savefig(buf, format='png', dpi=dpi)
         plt.close(fig)
         buf.seek(0)
 

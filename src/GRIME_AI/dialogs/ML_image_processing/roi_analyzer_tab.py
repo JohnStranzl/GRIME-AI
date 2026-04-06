@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 from pathlib import Path
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QRect
 from PyQt5.QtWidgets import QWidget, QFileDialog, QListWidgetItem, QMessageBox
-from PyQt5.QtGui import QPixmap, QIcon, QImage, QPainter, QColor
+from PyQt5.QtGui import QPixmap, QIcon, QImage, QPainter, QColor, QFont
 
 from GRIME_AI import PROJECT_ROOT
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
@@ -45,7 +45,6 @@ class ROIAnalyzerTab(QWidget):
         # - self.lineEdit_GCC
         # - self.buttonBox_close  (optional; used to close in original dialog)
 
-        # Runtime state used by ROI Analyzer
         self._pairs = []
         self._pendingThumbnails = []
         self._batchSize = 10
@@ -53,13 +52,14 @@ class ROIAnalyzerTab(QWidget):
         self._loadToken = 0
         self.num_clusters = None
 
-        # Dataframes created during feature extraction and alignment
         self.roi_metrics_df = None
         self.related_csv_df = None
         self.aligned_df = None
 
-        # Preserve full-size canvas for resize scaling
-        self._full_canvas = None
+        self._analyzer     = None
+        self._capture_date = None
+        self._capture_time = None
+        self._raw_pixmaps  = []
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -108,22 +108,251 @@ class ROIAnalyzerTab(QWidget):
         # Filmstrip click
         self.listWidget_filmstrip.itemClicked.connect(self.on_filmstrip_item_clicked)
 
-        # Cluster count spin box
+        # Clustering method radio buttons
+        self.radioButton_kmeans.toggled.connect(self._on_clustering_method_changed)
+        self.radioButton_gmm.toggled.connect(self._on_clustering_method_changed)
+        self.radioButton_meanshift.toggled.connect(self._on_clustering_method_changed)
+
+        # Cluster count spin boxes
         self.num_clusters = self.spinBox_numClusters.value()
         self.spinBox_numClusters.valueChanged.connect(self._on_num_clusters_changed)
+        self.spinBox_numClusters_gmm.valueChanged.connect(self._on_num_clusters_changed)
+
+        # Mean-shift: auto-estimate checkbox toggles quantile/bandwidth fields
+        self.checkBox_autoEstimate.toggled.connect(self._on_auto_estimate_toggled)
+
+        # Mean-shift: re-run when quantile or bandwidth changes
+        self.doubleSpinBox_quantile.valueChanged.connect(self._on_meanshift_param_changed)
+        self.doubleSpinBox_bandwidth.valueChanged.connect(self._on_meanshift_param_changed)
+
+        # Button fonts
+        self.pushButton_browse_ROI_images_folder.setFont(QFont("Arial", 11))
+        self.pushButton_analyze.setFont(QFont("Arial", 11, QFont.Bold))
+        self.pushButton_extract_ROI_features.setFont(QFont("Arial", 11, QFont.Bold))
 
         # Optional close hook (matches original)
         if hasattr(self, "buttonBox_close") and self.buttonBox_close is not None:
             self.buttonBox_close.rejected.connect(self.reject)
+
+        # Splitter stretch factors and image label stretch
+        self.splitter_display.setStretchFactor(0, 4)
+        self.splitter_display.setStretchFactor(1, 1)
+        self.horizontalLayoutImages.setStretch(0, 1)
+        self.horizontalLayoutImages.setStretch(1, 1)
+        self.horizontalLayoutImages.setStretch(2, 1)
 
         # Populate folder from config (matches original behavior)
         roi_analyzer_image_folder = JsonEditor().getValue("ROI_Analyzer_Images_Folder")
         if roi_analyzer_image_folder:
             self.lineEdit_ROI_images_folder.setText(roi_analyzer_image_folder)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._pairs and self.listWidget_filmstrip.count() > 0:
+            if self._analyzer is None:
+                self.listWidget_filmstrip.setCurrentRow(0)
+                self.on_filmstrip_item_clicked(self.listWidget_filmstrip.item(0))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_images()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _refresh_images(self, *args):
+        if not self._raw_pixmaps:
+            return
+        labels = [self.label_image_original,
+                  self.label_image_features,
+                  self.label_image_overlay]
+        for label, pix in zip(labels, self._raw_pixmaps):
+            w, h = label.width(), label.height()
+            if w > 0 and h > 0:
+                label.setPixmap(pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _display_analysis(self, analyzer, capture_date=None, capture_time=None):
+        self._analyzer     = analyzer
+        self._capture_date = capture_date
+        self._capture_time = capture_time
+
+        def np_to_pixmap(arr):
+            c = arr if arr.flags['C_CONTIGUOUS'] else arr.copy()
+            h, w = c.shape[:2]
+            bpl = w * c.shape[2]
+            fmt = QImage.Format_RGBA8888 if c.shape[2] == 4 else QImage.Format_RGB888
+            return QPixmap.fromImage(QImage(c.data, w, h, bpl, fmt))
+
+        orig_rgb       = cv2.cvtColor(analyzer.image,     cv2.COLOR_BGR2RGB)
+        composite_rgba = cv2.cvtColor(analyzer.composite, cv2.COLOR_BGRA2RGBA)
+        pix_orig     = np_to_pixmap(orig_rgb)
+        pix_features = np_to_pixmap(composite_rgba)
+
+        base, _ = os.path.splitext(analyzer.image_filename)
+        pix_overlay = None
+        for ext in ('.png', '.jpg', '.jpeg'):
+            candidate = f"{base}_overlay{ext}"
+            if os.path.exists(candidate):
+                ov = cv2.imread(candidate)
+                pix_overlay = np_to_pixmap(cv2.cvtColor(ov, cv2.COLOR_BGR2RGB))
+                break
+
+        if pix_overlay:
+            self._raw_pixmaps = [pix_orig, pix_features, pix_overlay]
+            self.label_image_overlay.setVisible(True)
+        else:
+            self._raw_pixmaps = [pix_orig, pix_features]
+            self.label_image_overlay.setVisible(False)
+
+        self._refresh_images()
+        QTimer.singleShot(50, self._refresh_images)
+        self._set_swatch_pixmap()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _set_swatch_pixmap(self):
+        if not self._analyzer or not self._analyzer.dominant_rgb_list:
+            return
+        W, H = 900, 60
+        canvas = QPixmap(W, H)
+        painter = QPainter(canvas)
+        painter.setFont(QFont("Arial", 9))
+        rgb_list = self._analyzer.dominant_rgb_list
+        pct_list = self._analyzer.percentages_list
+        x, n = 0, len(rgb_list)
+        for i, (rgb, pct) in enumerate(zip(rgb_list, pct_list)):
+            seg_w = int(round(W * pct / 100.0))
+            if i == n - 1:
+                seg_w = W - x
+            seg_w = max(seg_w, 1)
+            painter.fillRect(x, 0, seg_w, H, QColor(*rgb))
+            lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+            painter.setPen(QColor(255, 255, 255) if lum < 128 else QColor(0, 0, 0))
+            painter.drawText(QRect(x, 0, seg_w, H), Qt.AlignCenter,
+                             f"{rgb}\n{pct:.1f}%")
+            x += seg_w
+        painter.end()
+        self.label_swatches.setPixmap(canvas)
+
+
     # ******************************************************************************************************************
-    # *   ROI ANALYZER LOGIC                                                                    *
-    # ******************************************************************************************************************
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _get_clustering_method(self):
+        """Return the currently selected clustering method string."""
+        if self.radioButton_gmm.isChecked():
+            return 'gmm'
+        if self.radioButton_meanshift.isChecked():
+            return 'meanshift'
+        return 'kmeans'
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_clustering_method_changed(self):
+        """Enable/disable per-method parameter widgets; re-run analysis on current image."""
+        is_kmeans = self.radioButton_kmeans.isChecked()
+        is_gmm = self.radioButton_gmm.isChecked()
+        is_meanshift = self.radioButton_meanshift.isChecked()
+
+        # K-Means controls
+        self.label_numClusters.setEnabled(is_kmeans)
+        self.spinBox_numClusters.setEnabled(is_kmeans)
+
+        # GMM controls
+        self.label_numClusters_gmm.setEnabled(is_gmm)
+        self.spinBox_numClusters_gmm.setEnabled(is_gmm)
+
+        # Mean-shift controls
+        self.checkBox_autoEstimate.setEnabled(is_meanshift)
+        auto = self.checkBox_autoEstimate.isChecked()
+        self.label_quantile.setEnabled(is_meanshift and auto)
+        self.doubleSpinBox_quantile.setEnabled(is_meanshift and auto)
+        self.label_bandwidth.setEnabled(is_meanshift and not auto)
+        self.doubleSpinBox_bandwidth.setEnabled(is_meanshift and not auto)
+
+        current = self.listWidget_filmstrip.currentItem()
+        if current:
+            self.on_filmstrip_item_clicked(current)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_auto_estimate_toggled(self, checked):
+        """Toggle quantile vs manual bandwidth fields; re-run analysis."""
+        self.label_quantile.setEnabled(checked)
+        self.doubleSpinBox_quantile.setEnabled(checked)
+        self.label_bandwidth.setEnabled(not checked)
+        self.doubleSpinBox_bandwidth.setEnabled(not checked)
+
+        current = self.listWidget_filmstrip.currentItem()
+        if current:
+            self.on_filmstrip_item_clicked(current)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_meanshift_param_changed(self):
+        """Re-run analysis when quantile or bandwidth value changes."""
+        if not self.radioButton_meanshift.isChecked():
+            return
+        current = self.listWidget_filmstrip.currentItem()
+        if current:
+            self.on_filmstrip_item_clicked(current)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _get_n_clusters(self):
+        """Return cluster count for the active method."""
+        if self.radioButton_gmm.isChecked():
+            return self.spinBox_numClusters_gmm.value()
+        return self.spinBox_numClusters.value()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _get_meanshift_kwargs(self):
+        """Return bandwidth kwargs dict for Mean-shift instantiation."""
+        if self.checkBox_autoEstimate.isChecked():
+            return {'bandwidth': None, 'quantile': self.doubleSpinBox_quantile.value()}
+        return {'bandwidth': self.doubleSpinBox_bandwidth.value(), 'quantile': None}
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _extract_datetime_from_path(self, filepath):
+        """
+        Try multiple datetime formats in filenames.
+        Returns (date_str, time_str) as 'YYYY-MM-DD' / 'HH:MM:SS', or 'n/a' for each part not found.
+        """
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        patterns = [
+            (r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                        f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+            (r'(\d{4})_(\d{2})_(\d{2})_(\d{2})(\d{2})(\d{2})',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                        f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+            (r'(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                        f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+            (r'(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                        f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+            (r'(\d{4})_(\d{2})_(\d{2})',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}", "n/a")),
+            (r'(\d{4})(\d{2})(\d{2})',
+             lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}", "n/a")),
+        ]
+        for pattern, extractor in patterns:
+            m = re.search(pattern, stem)
+            if m:
+                try:
+                    return extractor(m)
+                except Exception:
+                    continue
+        return "n/a", "n/a"
+
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
     def _on_num_clusters_changed(self, value):
@@ -149,11 +378,11 @@ class ROIAnalyzerTab(QWidget):
         orig_path, mask_path = self._pairs[idx]
 
         # grab the user-selected cluster count
-        n_clusters = self.spinBox_numClusters.value()
+        n_clusters = self._get_n_clusters()
 
         # Run analysis for this specific pair
         from GRIME_AI.GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
-        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters, clustering_method=self._get_clustering_method(), **self._get_meanshift_kwargs())
         analyzer.run_analysis()
 
         # ─── populate metric fields ───
@@ -163,14 +392,8 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
         self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
 
-        # Display composite+metrics plot
-        composite_pix = analyzer.get_results_pixmap()
-        self.label_displayImages.setPixmap(composite_pix)
-
-        # Overlay top-3 dominant color swatches
-        n_clusters = self.spinBox_numClusters.value()
-        swatches = analyzer.dominant_rgb_list[:n_clusters]
-        self._draw_color_swatches_on_label(swatches, swatch_size=100)
+        capture_date, capture_time = self._extract_datetime_from_path(orig_path)
+        self._display_analysis(analyzer, capture_date, capture_time)
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -299,31 +522,9 @@ class ROIAnalyzerTab(QWidget):
 
         # 2) analyze the first pair (index 0) by default
         orig_path, mask_path = pairs[0]
-        n_clusters = self.spinBox_numClusters.value()
-        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+        n_clusters = self._get_n_clusters()
+        analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters, clustering_method=self._get_clustering_method(), **self._get_meanshift_kwargs())
         analyzer.run_analysis()
-
-        # 3) try to get the composite+metrics pixmap
-        try:
-            comp_pix = analyzer.get_results_pixmap()
-        except Exception as e:
-            # fallback: load the original image manually
-            img = cv2.imread(orig_path)
-            if img is None or img.size == 0:
-                QMessageBox.warning(
-                    self,
-                    "ROI Analyzer",
-                    f"Could not generate results pixmap or load original:\n{e}"
-                )
-                return
-
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            h, w = rgb.shape[:2]
-            comp_pix = QPixmap.fromImage(
-                QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
-            )
-
-        self.label_displayImages.setPixmap(comp_pix)
 
         # ─── populate metric fields ───
         self.lineEdit_intensity.setText(f"{analyzer.roi_intensity:.2f}")
@@ -332,10 +533,8 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
         self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
 
-        # 4) overlay the top-3 swatches
-        n_clusters = self.spinBox_numClusters.value()
-        swatches = getattr(analyzer, "dominant_rgb_list", [])[:n_clusters]
-        self._draw_color_swatches_on_label(swatches, swatch_size=100)
+        capture_date, capture_time = self._extract_datetime_from_path(orig_path)
+        self._display_analysis(analyzer, capture_date, capture_time)
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -429,9 +628,9 @@ class ROIAnalyzerTab(QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     def extract_ROI_features(self):
         # GET SETTINGS FROM UI CONTROLS
-        n_clusters = self.spinBox_numClusters.value()
+        n_clusters = self._get_n_clusters()
 
-        # Regex pattern for datetime stamp in filenames, e.g., 2025-09-20T16-30-02Z
+        # Legacy pattern still used for output file prefix naming
         dt_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})Z")
 
         # 1) Get and validate output folder path
@@ -467,11 +666,27 @@ class ROIAnalyzerTab(QWidget):
         aligned_xlsx_path = os.path.join(output_folder, f"{file_dt_prefix}_aligned_results.xlsx")
 
         # 2) Prepare header and container for all rows
+        clustering_method = self._get_clustering_method()
+        meanshift_kwargs = self._get_meanshift_kwargs()
+
+        # Build a human-readable params string for the header
+        if clustering_method == 'kmeans':
+            clustering_params = f"clusters={n_clusters}"
+        elif clustering_method == 'gmm':
+            clustering_params = f"clusters={n_clusters}"
+        else:  # meanshift
+            if meanshift_kwargs['bandwidth'] is None:
+                clustering_params = f"auto=True, quantile={meanshift_kwargs['quantile']}"
+            else:
+                clustering_params = f"auto=False, bandwidth={meanshift_kwargs['bandwidth']}"
+
         header = [
             "Image Path",
             "Mask Path",
             "Capture Date",
             "Capture Time",
+            "Clustering Method",
+            "Clustering Params",
             "ROI Intensity",
             "ROI Entropy",
             "ROI Texture",
@@ -557,16 +772,10 @@ class ROIAnalyzerTab(QWidget):
 
                 # Extract datetime from image filename
                 filename = os.path.basename(orig_path)
-                match = dt_pattern.search(filename)
-                if match:
-                    capture_date = match.group(1)
-                    capture_time = match.group(2).replace("-", ":")
-                else:
-                    capture_date = ""
-                    capture_time = ""
+                capture_date, capture_time = self._extract_datetime_from_path(orig_path)
 
                 from GRIME_AI.GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
-                analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters)
+                analyzer = GRIME_AI_ROI_Analyzer(orig_path, mask_path, clusters=n_clusters, clustering_method=self._get_clustering_method(), **self._get_meanshift_kwargs())
 
                 try:
                     analyzer.run_analysis()
@@ -580,6 +789,8 @@ class ROIAnalyzerTab(QWidget):
                     mask_path,
                     capture_date,
                     capture_time,
+                    clustering_method,
+                    clustering_params,
                     f"{analyzer.roi_intensity:.2f}",
                     f"{analyzer.roi_entropy:.4f}",
                     f"{analyzer.roi_texture:.4f}",
@@ -647,6 +858,7 @@ class ROIAnalyzerTab(QWidget):
             for row_idx, data in enumerate(rows[1:], start=2):
                 (
                     orig_full, mask_full, capture_date, capture_time,
+                    method_name, method_params,
                     intensity, entropy, texture, gli, gcc,
                     pixel_count, pixel_area, image_height,
                     image_width, image_total_pixels, roi_area_percentage,
@@ -665,19 +877,21 @@ class ROIAnalyzerTab(QWidget):
 
                 ws.cell(row=row_idx, column=3, value=capture_date)
                 ws.cell(row=row_idx, column=4, value=capture_time)
-                ws.cell(row=row_idx, column=5, value=float(intensity))
-                ws.cell(row=row_idx, column=6, value=float(entropy))
-                ws.cell(row=row_idx, column=7, value=float(texture))
-                ws.cell(row=row_idx, column=8, value=float(gli))
-                ws.cell(row=row_idx, column=9, value=float(gcc))
-                ws.cell(row=row_idx, column=10, value=float(pixel_count))
-                ws.cell(row=row_idx, column=11, value=float(pixel_area))
-                ws.cell(row=row_idx, column=12, value=float(image_height))
-                ws.cell(row=row_idx, column=13, value=float(image_width))
-                ws.cell(row=row_idx, column=14, value=float(image_total_pixels))
-                ws.cell(row=row_idx, column=15, value=float(roi_area_percentage))
+                ws.cell(row=row_idx, column=5, value=method_name)
+                ws.cell(row=row_idx, column=6, value=method_params)
+                ws.cell(row=row_idx, column=7, value=float(intensity))
+                ws.cell(row=row_idx, column=8, value=float(entropy))
+                ws.cell(row=row_idx, column=9, value=float(texture))
+                ws.cell(row=row_idx, column=10, value=float(gli))
+                ws.cell(row=row_idx, column=11, value=float(gcc))
+                ws.cell(row=row_idx, column=12, value=float(pixel_count))
+                ws.cell(row=row_idx, column=13, value=float(pixel_area))
+                ws.cell(row=row_idx, column=14, value=float(image_height))
+                ws.cell(row=row_idx, column=15, value=float(image_width))
+                ws.cell(row=row_idx, column=16, value=float(image_total_pixels))
+                ws.cell(row=row_idx, column=17, value=float(roi_area_percentage))
 
-                for offset, value in enumerate(cluster_values, start=16):
+                for offset, value in enumerate(cluster_values, start=18):
                     ws.cell(row=row_idx, column=offset, value=float(value))
 
             wb.save(xlsx_path)
@@ -765,71 +979,5 @@ class ROIAnalyzerTab(QWidget):
             + ("\nRelated CSV loaded into self.related_csv_df" if self.related_csv_df is not None else "\nNo related CSV found")
         )
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # Display helpers (ported verbatim)
-    # ------------------------------------------------------------------------------------------------------------------
-    def display_color_swatches(self, rgb_list, swatch_size=100):
-        count = len(rgb_list)
-        if count == 0:
-            return
-
-        pixmap = QPixmap(swatch_size * count, swatch_size)
-        pixmap.fill(Qt.transparent)
-
-        painter = QPainter(pixmap)
-        for i, (r, g, b) in enumerate(rgb_list):
-            color = QColor(r, g, b)
-            painter.fillRect(i * swatch_size, 0, swatch_size, swatch_size, color)
-        painter.end()
-
-        self.label_displayImages.setPixmap(pixmap)
-
-    def _draw_color_swatches_on_label(self, rgb_list, swatch_size=100):
-        base = self.label_displayImages.pixmap()
-        if base:
-            base_w, base_h = base.width(), base.height()
-        else:
-            base_w, base_h = 0, 0
-
-        swatch_count = len(rgb_list)
-        swatches_w = swatch_count * swatch_size
-        total_w = max(base_w, swatches_w)
-        total_h = base_h + (swatch_size if swatch_count else 0)
-
-        canvas = QPixmap(total_w, total_h)
-        canvas.fill(Qt.transparent)
-
-        painter = QPainter(canvas)
-        if base:
-            painter.drawPixmap(0, 0, base)
-
-        for i, (r, g, b) in enumerate(rgb_list):
-            x = i * swatch_size
-            y = base_h
-            painter.fillRect(x, y, swatch_size, swatch_size, QColor(r, g, b))
-        painter.end()
-
-        self._full_canvas = canvas
-
-        scaled = self._full_canvas.scaled(
-            self.label_displayImages.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        self.label_displayImages.setPixmap(scaled)
-
-    # Preserve composite scaling on parent resize (matches original behavior)
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, "_full_canvas") and self._full_canvas is not None:
-            scaled = self._full_canvas.scaled(
-                self.label_displayImages.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            self.label_displayImages.setPixmap(scaled)
-
-    # Optional reject hook (wired if buttonBox_close exists)
     def reject(self):
-        # No special behavior beyond original; provided for compatibility with wiring
         pass

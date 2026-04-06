@@ -29,6 +29,7 @@ from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI.dialogs.ML_image_processing.training_tab import TrainingTab
 from GRIME_AI.dialogs.ML_image_processing.segment_images_tab import SegmentImagesTab
 from GRIME_AI.dialogs.ML_image_processing.roi_analyzer_tab import ROIAnalyzerTab
+from GRIME_AI.dialogs.ML_image_processing.correlation_analyzer_tab import CorrelationAnalyzerTab
 from GRIME_AI.dialogs.ML_image_processing.annotation_tab import AnnotationTab
 from GRIME_AI.dialogs.ML_image_processing.coco_generation import COCOGeneration
 from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
@@ -132,6 +133,17 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         self.coco_viewer_tab = CocoViewerTab(self)
 
         self.tabWidget.addTab(self.coco_viewer_tab, "COCO Viewer")
+
+        # --------------------------------------------------------------------------------------------------------------
+        #  CORRELATION ANALYZER TAB   ---   CORRELATION ANALYZER TAB   ---   CORRELATION ANALYZER TAB
+        # --------------------------------------------------------------------------------------------------------------
+        self.correlation_tab = CorrelationAnalyzerTab(self)
+
+        loadUi(ui_path("ML_image_processing/correlation_analyzer_tab.ui"), self.correlation_tab)
+
+        self.correlation_tab.wire_connections()
+
+        self.tabWidget.addTab(self.correlation_tab, "Correlation Analyzer (EXPERIMENTAL)")
 
         # --------------------------------------------------------------------------------------------------------------
         # LOAD CONFIGURATION SETTINGS THAT MAY BE REQUIRED FOR THE  TABS
