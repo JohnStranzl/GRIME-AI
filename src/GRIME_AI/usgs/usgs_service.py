@@ -266,6 +266,138 @@ class USGSService:
 
     # ------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------
+    def get_available_parameters(self, nwis_id: str) -> List[Dict]:
+        """
+        Query NWIS waterservices for all available time series parameters
+        at a given site.  Returns a list of dicts with keys:
+            'code'        - parameter code e.g. '00060'
+            'description' - human-readable name e.g. 'Discharge, cfs'
+            'ts_id'       - time series ID
+        Returns [] if nwis_id is None/empty or the request fails.
+        """
+        if not nwis_id:
+            print(f"[USGS] get_available_parameters: no nwis_id, returning []")
+            return []
+        url = (
+            f"https://waterservices.usgs.gov/nwis/iv/"
+            f"?format=json&sites={nwis_id}&siteStatus=all"
+        )
+        print(f"[USGS] Fetching parameters for nwis_id={nwis_id}")
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            params = []
+            for ts in data.get('value', {}).get('timeSeries', []):
+                var = ts.get('variable', {})
+                code = var.get('variableCode', [{}])[0].get('value', '')
+                desc = var.get('variableDescription', '')
+                ts_id = ts.get('name', '')
+                if code:
+                    params.append({
+                        'code': code,
+                        'description': desc,
+                        'ts_id': ts_id,
+                    })
+            print(f"[USGS] Found {len(params)} parameters for nwis_id={nwis_id}")
+            return params
+        except Exception as e:
+            print(f"[USGS] get_available_parameters error for nwis_id={nwis_id}: {e}")
+            return []
+
+    def midday_image(self, site_name: str, tz_str: Optional[str]) -> LatestImage:
+        """
+        Return the image whose timestamp is closest to 12:00 local time
+        for the most recent date that has any images.
+        Uses _collect_image_names with a 10:00-14:00 local time window.
+        Returns LatestImage(404, None) if no images are found.
+        """
+        # Resolve UTC offset
+        TZ_OFFSETS = {
+            'EST': -5, 'EDT': -4, 'CST': -6, 'CDT': -5,
+            'MST': -7, 'MDT': -6, 'PST': -8, 'PDT': -7,
+            'AKST': -9, 'AKDT': -8, 'HST': -10, 'UTC': 0,
+        }
+        PYTZ_OFFSETS = {
+            'US/EASTERN': -5, 'AMERICA/NEW_YORK': -5,
+            'US/CENTRAL': -6, 'AMERICA/CHICAGO': -6,
+            'US/MOUNTAIN': -7, 'AMERICA/DENVER': -7,
+            'US/PACIFIC': -8, 'AMERICA/LOS_ANGELES': -8,
+            'US/ALASKA': -9, 'AMERICA/ANCHORAGE': -9,
+            'US/HAWAII': -10, 'PACIFIC/HONOLULU': -10,
+            'UTC': 0,
+        }
+        tz_key = (tz_str or '').upper().strip().replace(' ', '_')
+        if tz_key in TZ_OFFSETS:
+            offset_h = TZ_OFFSETS[tz_key]
+        elif tz_key in PYTZ_OFFSETS:
+            offset_h = PYTZ_OFFSETS[tz_key]
+        else:
+            try:
+                import pytz
+                tz_obj = pytz.timezone(tz_str)
+                now_aware = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(tz_obj)
+                offset_h = now_aware.utcoffset().total_seconds() / 3600
+            except Exception:
+                offset_h = 0
+        utc_delta = timedelta(hours=offset_h)
+
+        # Today in local time
+        today_local = datetime.utcnow() + utc_delta
+        today_date  = today_local.date()
+
+        # Convert 10:00-14:00 local to UTC for _collect_image_names
+        win_start_utc = datetime.combine(today_date, time(10, 0, 0)) - utc_delta
+        win_end_utc   = datetime.combine(today_date, time(14, 0, 0)) - utc_delta
+
+        # _collect_image_names treats times as UTC
+        names = self._collect_image_names(
+            site_name,
+            win_start_utc.date(), win_end_utc.date(),
+            win_start_utc.time(), win_end_utc.time(),
+            progress=None
+        )
+
+        if not names:
+            print(f"[USGS midday] No images in window for {site_name}, falling back to latest")
+            return self.latest_image(site_name), False
+
+        print(f"[USGS midday] Got {len(names)} filenames. First: {names[0]}")
+
+        # Find the image closest to noon local time.
+        # Filename format: SITE_NAME___YYYY-MM-DDTHH-MM-SSZ.jpg  (timestamps are UTC)
+        noon_local = datetime.combine(today_date, time(12, 0, 0))
+        best_name  = None
+        best_delta = None
+
+        for name in names:
+            base = os.path.basename(name)
+            if '___' not in base:
+                continue
+            try:
+                ts_str = base.split('___')[1]
+                ts_str = ts_str.replace('.jpg', '').replace('.JPG', '')
+                dt_utc   = datetime.strptime(ts_str, '%Y-%m-%dT%H-%M-%SZ')
+                dt_local = dt_utc + utc_delta
+                delta    = abs((dt_local - noon_local).total_seconds())
+                if best_delta is None or delta < best_delta:
+                    best_delta = delta
+                    best_name  = name
+            except (ValueError, IndexError):
+                continue
+
+        if not best_name:
+            print(f"[USGS midday] Could not parse timestamp from any filename, falling back to latest")
+            return self.latest_image(site_name), False
+
+        print(f"[USGS midday] Best match: {best_name} (delta={best_delta}s from noon)")
+
+        url = f"{IMAGE_ENDPOINT}/{site_name}/{os.path.basename(best_name)}"
+        try:
+            content = urllib.request.urlopen(url, timeout=15).read()
+            return LatestImage(error_code=0, content=content), True
+        except Exception:
+            return self.latest_image(site_name), False
+
     def fetch_stage_and_discharge(self, nwis_id: str, site_name: str,
                                   start_date: date, end_date: date,
                                   start_time: time, end_time: time,

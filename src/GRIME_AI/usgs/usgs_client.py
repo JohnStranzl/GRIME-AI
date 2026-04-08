@@ -113,6 +113,29 @@ class USGSClient:
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
+    def get_available_parameters(self, cam_id: str) -> List[dict]:
+        """Return available NWIS time series parameters for the site."""
+        info: CameraInfo = self._svc.camera_info(cam_id)
+        return self._svc.get_available_parameters(info.nwis_id)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def get_midday_pixmap(self, site_name: str) -> Tuple[int, Optional[QPixmap], bool]:
+        """
+        Return (error_code, QPixmap, is_midday).
+        is_midday=True if a midday window image was found,
+        False if fell back to latest image.
+        """
+        info = self._svc.camera_info(site_name)
+        latest, is_midday = self._svc.midday_image(site_name, info.tz)
+        if latest.error_code == 404 or latest.content is None:
+            return 404, None, False
+        pix = QPixmap()
+        pix.loadFromData(latest.content)
+        return 0, pix, is_midday
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def fetch_stage_and_discharge(
         self,
         nwis_id,

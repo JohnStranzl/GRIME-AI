@@ -433,6 +433,41 @@ class NEONPreviewFetcher(QtCore.QThread):
             self.result.emit(None, f"Error: {e}")
 
 
+class USGSLatestImageFetcher(QtCore.QThread):
+    """Fetches the midday USGS camera image in a background thread."""
+    result = QtCore.pyqtSignal(int, object, bool)  # (error_code, QPixmap or None, is_midday)
+
+    def __init__(self, usgs_client, cam_id: str, parent=None):
+        super().__init__(parent)
+        self._usgs   = usgs_client
+        self._cam_id = cam_id
+
+    def run(self):
+        try:
+            code, pix, is_midday = self._usgs.get_midday_pixmap(self._cam_id)
+            self.result.emit(code, pix, is_midday)
+        except Exception:
+            self.result.emit(404, None, False)
+
+
+class NWISParameterFetcher(QtCore.QThread):
+    """
+    Fetches available NWIS time series parameters for a given nwisId
+    in a background thread so the UI remains responsive.
+    """
+    finished = QtCore.pyqtSignal(list, str)   # (params, cam_id)
+
+    def __init__(self, usgs_service, nwis_id: str, cam_id: str, parent=None):
+        super().__init__(parent)
+        self._svc    = usgs_service
+        self._nwis_id = nwis_id
+        self._cam_id  = cam_id
+
+    def run(self):
+        params = self._svc.get_available_parameters(self._nwis_id)
+        self.finished.emit(params, self._cam_id)
+
+
 # ======================================================================================================================
 #
 # ======================================================================================================================
@@ -698,6 +733,16 @@ class MainWindow(QMainWindow):
         self.USGS_labelLatestImage.setMinimumSize(0, 0)
         self.USGS_labelLatestImage.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
 
+        # Title label shown above the USGS image
+        self._usgs_image_title_label = QtWidgets.QLabel("", self.USGS_labelLatestImage.parent())
+        self._usgs_image_title_label.setAlignment(QtCore.Qt.AlignCenter)
+        self._usgs_image_title_label.setFont(QFont("Arial", 10, QFont.Bold))
+        parent_layout = self.USGS_labelLatestImage.parent().layout()
+        if parent_layout:
+            idx = parent_layout.indexOf(self.USGS_labelLatestImage)
+            if idx >= 0:
+                parent_layout.insertWidget(idx, self._usgs_image_title_label)
+
         self.NEON_labelLatestImage.resized.connect(self.NEON_DisplayLatestImage)
         self.USGS_labelLatestImage.resized.connect(self.USGS_DisplayLatestImage)
         self.splitter_NEON_Bottom.splitterMoved.connect(self._neon_splitter_moved)
@@ -720,6 +765,8 @@ class MainWindow(QMainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         self.usgs = USGSClient()
         self.usgs.initialize()
+        self._nwis_fetcher = None   # holds the active NWISParameterFetcher thread
+        self._usgs_image_fetcher = None  # holds the active USGSLatestImageFetcher thread
         self.USGS_listboxSites.itemClicked.connect(self._usgs_tree_item_clicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
@@ -757,7 +804,14 @@ class MainWindow(QMainWindow):
                     child = QTreeWidgetItem([line])
                     child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
                     site_item.addChild(child)
+                # Placeholder so the expand arrow appears and triggers itemExpanded
+                placeholder = QTreeWidgetItem(["  Time series: loading..."])
+                placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
+                placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
+                site_item.addChild(placeholder)
                 self.USGS_listboxSites.addTopLevelItem(site_item)
+
+            self.USGS_listboxSites.itemExpanded.connect(self._on_usgs_site_expanded)
 
             self.USGS_listboxSites.collapseAll()
 
@@ -1726,21 +1780,30 @@ class MainWindow(QMainWindow):
         strCamID = currentItem.data(0, QtCore.Qt.UserRole)
 
         try:
-            # Refresh children on the tree item
+            # Refresh camera info children
             currentItem.takeChildren()
             for line in self.usgs.get_camera_info_lines(strCamID):
                 child = QTreeWidgetItem([line])
                 child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
                 currentItem.addChild(child)
 
-            # Latest image
-            code, pix = self.usgs.get_latest_pixmap(strCamID)
-            if code == 404 or pix is None:
-                self.USGS_latestImage = []
-                self.USGS_labelLatestImage.setText("No Images Available")
-            else:
-                self.USGS_latestImage = pix
-                self.USGS_DisplayLatestImage()
+            # Re-add placeholder so _on_usgs_site_expanded will fetch NWIS params
+            placeholder = QTreeWidgetItem(["  Time series: loading..."])
+            placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
+            placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
+            currentItem.addChild(placeholder)
+
+            # Trigger fetch immediately since this site is now selected/visible
+            self._on_usgs_site_expanded(currentItem)
+
+            # Fetch latest image in background thread
+            self.USGS_labelLatestImage.setText("Loading midday image...")
+            if self._usgs_image_fetcher and self._usgs_image_fetcher.isRunning():
+                self._usgs_image_fetcher.quit()
+                self._usgs_image_fetcher.wait()
+            self._usgs_image_fetcher = USGSLatestImageFetcher(self.usgs, strCamID, parent=self)
+            self._usgs_image_fetcher.result.connect(self._on_usgs_latest_image_received)
+            self._usgs_image_fetcher.start()
 
             # Update table
             self.table_USGS_Sites.setItem(0, 0, QTableWidgetItem(strCamID))
@@ -1755,6 +1818,104 @@ class MainWindow(QMainWindow):
         self._neon_splitter_moved_flag = True
         self.NEON_DisplayLatestImage()
         self.NEON_DisplayLatestImage()
+
+    def _on_usgs_latest_image_received(self, code: int, pix, is_midday: bool):
+        if code == 404 or pix is None:
+            self.USGS_latestImage = []
+            self.USGS_labelLatestImage.setText("No Image Available")
+            if hasattr(self, '_usgs_image_title_label'):
+                self._usgs_image_title_label.setText("")
+        else:
+            self.USGS_latestImage = pix
+            if hasattr(self, '_usgs_image_title_label'):
+                self._usgs_image_title_label.setText(
+                    "Midday Image:" if is_midday else "Last Available Image:")
+            self.USGS_DisplayLatestImage()
+
+    def _on_usgs_site_expanded(self, item):
+        """
+        Fired when a USGS site item is expanded.  If the placeholder child
+        is still present, kick off a background NWIS parameter fetch.
+        """
+        if item.parent() is not None:
+            return  # only handle top-level items
+
+        # Check whether placeholder is still there
+        has_placeholder = False
+        for i in range(item.childCount()):
+            child = item.child(i)
+            if child.data(0, QtCore.Qt.UserRole) == "__nwis_placeholder__":
+                has_placeholder = True
+                break
+        if not has_placeholder:
+            return  # already fetched
+
+        cam_id = item.data(0, QtCore.Qt.UserRole)
+        info_lines = self.usgs.get_camera_info_lines(cam_id)
+        nwis_id = None
+        for line in info_lines:
+            if line.startswith("nwisId:"):
+                nwis_id = line.split(":", 1)[1].strip()
+                break
+
+        if not nwis_id:
+            # Replace placeholder with "no NWIS ID"
+            for i in range(item.childCount()):
+                child = item.child(i)
+                if child.data(0, QtCore.Qt.UserRole) == "__nwis_placeholder__":
+                    child.setText(0, "  No NWIS ID for this site")
+                    child.setData(0, QtCore.Qt.UserRole, None)
+                    break
+            return
+
+        # Cancel any running fetch and start a new one
+        if self._nwis_fetcher and self._nwis_fetcher.isRunning():
+            self._nwis_fetcher.quit()
+            self._nwis_fetcher.wait()
+
+        self._nwis_fetcher = NWISParameterFetcher(
+            self.usgs._svc, nwis_id, cam_id, parent=self)
+        self._nwis_fetcher.finished.connect(self._on_nwis_params_fetched)
+        self._nwis_fetcher.start()
+
+    def _on_nwis_params_fetched(self, params: list, cam_id: str):
+        """
+        Slot called when NWISParameterFetcher finishes.
+        Replaces the placeholder child with real time series data.
+        """
+        root = self.USGS_listboxSites.invisibleRootItem()
+        target = None
+        for i in range(root.childCount()):
+            item = root.child(i)
+            if item.data(0, QtCore.Qt.UserRole) == cam_id:
+                target = item
+                break
+        if target is None:
+            return
+
+        # Remove placeholder
+        for i in range(target.childCount()):
+            child = target.child(i)
+            if child.data(0, QtCore.Qt.UserRole) == "__nwis_placeholder__":
+                target.removeChild(child)
+                break
+
+        if params:
+            header = QTreeWidgetItem(["Time Series Available:"])
+            header.setFlags(header.flags() & ~QtCore.Qt.ItemIsSelectable)
+            font = header.font(0)
+            font.setBold(True)
+            header.setFont(0, font)
+            target.addChild(header)
+            for p in params:
+                label = f"  {p['code']} — {p['description']}"
+                ts_child = QTreeWidgetItem([label])
+                ts_child.setFlags(ts_child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                target.addChild(ts_child)
+        else:
+            no_ts = QTreeWidgetItem(["  No time series data available"])
+            no_ts.setFlags(no_ts.flags() & ~QtCore.Qt.ItemIsSelectable)
+            target.addChild(no_ts)
 
     def _usgs_vertical_splitter_moved(self):
         self._usgs_vertical_splitter_moved_flag = True
