@@ -726,24 +726,43 @@ class TrainingTab(QtWidgets.QWidget):
     def _add_folder_to_tree(self, tree: QTreeWidget, folder_name: str) -> QTreeWidgetItem:
         """
         Add a folder as a top-level parent node to a tree widget, with its
-        annotation labels as non-selectable child nodes beneath it.
+        annotation labels and image count as non-selectable child nodes beneath it.
         Returns the created parent item.
         """
         from PyQt5.QtGui import QFont
         parent_item = QTreeWidgetItem(tree, [folder_name])
         parent_item.setFlags(parent_item.flags() | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsDragEnabled)
 
-        # Load labels and add as children
+        # Load labels and image count from instances_default.json
         base_path = self.lineEdit_model_training_images_path.text().strip()
         folder_path = os.path.normpath(os.path.join(base_path, folder_name))
+
+        child_font = QFont()
+        child_font.setItalic(True)
+
+        # Image count child
+        annotation_file = os.path.join(folder_path, "instances_default.json")
+        if os.path.exists(annotation_file):
+            try:
+                with open(annotation_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                image_count = len(data.get("images", []))
+            except Exception:
+                image_count = 0
+        else:
+            image_count = 0
+
+        count_item = QTreeWidgetItem(parent_item, [f"Image count: {image_count}"])
+        count_item.setFlags(QtCore.Qt.ItemIsEnabled)
+        count_item.setFont(0, child_font)
+
+        # Label children
         cats = self._load_categories(folder_path)
         if cats:
-            child_font = QFont()
-            child_font.setItalic(True)
             for cat in cats:
                 label_text = f"{cat['name']} (ID={cat['id']})"
                 child_item = QTreeWidgetItem(parent_item, [label_text])
-                child_item.setFlags(QtCore.Qt.ItemIsEnabled)  # not selectable, not draggable
+                child_item.setFlags(QtCore.Qt.ItemIsEnabled)
                 child_item.setFont(0, child_font)
 
         tree.collapseItem(parent_item)
