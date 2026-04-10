@@ -74,6 +74,9 @@ requirements:
     - r-neonutilities 3.*
     - grime-ai-post 1.0.1.*
 
+  run_constrained:
+    - cudnn <=9.10*
+
 test:
   commands:
     - grime-ai --help
