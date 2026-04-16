@@ -2,13 +2,15 @@
 
 (
 echo.
-echo ***************************************************************
-echo * NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE:          *
-echo * Checkpoint files for SAM2 *must* be downloaded before       *
-echo * running GRIME-AI.  Please activate the environment and      *
-echo * run the command 'download-sam2-checkpoints' prior to using  *
-echo * GRIME-AI. This command will fetch the checkpoint files and  *
-echo * save them to the proper location.                           *
-echo ***************************************************************
+echo **************************************************************
+echo * NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE:         *
+echo * Checkpoint files for SAM2 and YOLO11 models *must* be      *
+echo * downloaded before running GRIME-AI. Please activate the    *
+echo * environment and run the commands                           *
+echo * 'download-sam2-checkpoints' followed by                    *
+echo * 'download-yolo-models' prior to using GRIME-AI. These      *
+echo * commands will fetch the needed files and save them to the  *
+echo * proper locations.                                          *
+echo **************************************************************
 echo.
 ) > %PREFIX%\.messages.txt
