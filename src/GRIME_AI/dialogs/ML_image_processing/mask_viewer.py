@@ -228,6 +228,25 @@ class CocoViewerTab(QtWidgets.QWidget):
         # combine everything into one message
         self.stats_label.setText(self.stats_label.text() + " | " + extra_info + " | " + seg_type_info)
 
+        # Warn if any images referenced in the JSON are missing from the folder
+        missing_files = [
+            img["file_name"]
+            for img in self.images.values()
+            if not os.path.isfile(os.path.join(self.folder, img["file_name"]))
+        ]
+        if missing_files:
+            missing_list = "\n".join(missing_files[:10])
+            if len(missing_files) > 10:
+                missing_list += f"\n... and {len(missing_files) - 10} more."
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing Image Files",
+                f"{len(missing_files)} image(s) referenced in the JSON were not found in:\n"
+                f"{self.folder}\n\n"
+                f"{missing_list}\n\n"
+                f"The JSON and image folder may not match."
+            )
+
         if self.image_ids:
             self.show_image()
         else:

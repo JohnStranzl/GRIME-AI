@@ -1254,7 +1254,7 @@ class MainWindow(QMainWindow):
 
                 segmentation = []
                 area = 0
-                bbox = None
+                all_x, all_y, all_x2, all_y2 = [], [], [], []
 
                 for cnt in contours:
                     if len(cnt) < 3:
@@ -1265,8 +1265,16 @@ class MainWindow(QMainWindow):
 
                     area += _cv2.contourArea(cnt)
                     x, y, w, h = _cv2.boundingRect(cnt)
-                    if bbox is None:
-                        bbox = [x, y, w, h]
+                    all_x.append(x)
+                    all_y.append(y)
+                    all_x2.append(x + w)
+                    all_y2.append(y + h)
+
+                bbox = None
+                if all_x:
+                    x_min = min(all_x)
+                    y_min = min(all_y)
+                    bbox = [x_min, y_min, max(all_x2) - x_min, max(all_y2) - y_min]
 
                 if not segmentation:
                     continue
