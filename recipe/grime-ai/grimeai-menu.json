@@ -53,6 +53,19 @@
             "desktop": true
             }
       }
+    },
+    {
+      "name": "Download YOLO11 model files ({{ ENV_NAME }})",
+      "description": "Model files must be downloaded before using GRIME-AI",
+      "command": ["download-yolo11-models","1"],
+      "icon": "{{ MENU_DIR }}/grimeai.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": true,
+      "platforms": {
+        "win": {
+            "desktop": true
+            }
+      }
     }
 
 
