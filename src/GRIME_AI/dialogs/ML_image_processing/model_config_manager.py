@@ -72,6 +72,8 @@ class ModelConfigManager:
             "copy_original_model_image": True,
             "num_clusters": 3,
             "validation_overlay_samples": 5,
+            "val_split": 0.2,
+            "yolo_base_weights": "",
             "SAM2_CHECKPOINT": "checkpoints/sam2.1_hiera_large.pt",
             "MODEL_CFG": "configs/sam2.1/sam2.1_hiera_l.yaml"
         }
@@ -139,6 +141,8 @@ class ModelConfigManager:
             "save_probability_maps": True,
             "num_clusters": 3,
             "validation_overlay_samples": 5,
+            "val_split": 0.2,
+            "yolo_base_weights": "",
             "load_model": {
                 "SAM2_CHECKPOINT": "checkpoints/sam2.1_hiera_large.pt",
                 "MODEL_CFG": "configs/sam2.1/sam2.1_hiera_l.yaml",
@@ -147,7 +151,7 @@ class ModelConfigManager:
                 "SAM2_MODEL": "",
                 "SAM3_MODEL": "",
                 "SEGFORMER_MODEL": "",
-                "MASKRCNN_MODEL": "",
+                "YOLO_MODEL": "",
                 "SEGMENTATION_CATEGORIES": []
             },
             "train_model": {

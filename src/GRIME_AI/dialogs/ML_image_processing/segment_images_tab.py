@@ -146,8 +146,8 @@ class SegmentImagesTab(QWidget):
             model_file = load_model_conf.get("SAM2_MODEL", "")
         elif model_type == "segformer":
             model_file = load_model_conf.get("SEGFORMER_MODEL", "")
-        elif model_type == "maskrcnn":
-            model_file = load_model_conf.get("MASKRCNN_MODEL", "")
+        elif model_type == "yolo":
+            model_file = load_model_conf.get("YOLO_MODEL", "")
         else:
             model_file = ""
 
@@ -175,13 +175,11 @@ class SegmentImagesTab(QWidget):
             self.radioButton_segment_model_sam2.setChecked(True)
         elif model_type == "segformer":
             self.radioButton_segment_model_segformer.setChecked(True)
-        elif model_type == "maskrcnn":
-            self.radioButton_segment_model_mask_rcnn.setChecked(True)
+        elif model_type == "yolo":
+            self.radioButton_segment_model_yolo.setChecked(True)
         else:
-            # If no model type is stored, clear all selections
-            self.radioButton_segment_model_sam2.setChecked(False)
-            self.radioButton_segment_model_segformer.setChecked(False)
-            self.radioButton_segment_model_mask_rcnn.setChecked(False)
+            # No model type stored — default to SAM2
+            self.radioButton_segment_model_sam2.setChecked(True)
 
         # Select items in the listbox based on SEGMENTATION_CATEGORIES
         stored_categories = load_model_conf.get("SEGMENTATION_CATEGORIES", [])
@@ -241,17 +239,23 @@ class SegmentImagesTab(QWidget):
         if self.radioButton_segment_model_sam2.isChecked():
             site_config["load_model"]["MODEL"] = "sam2"
             site_config["load_model"]["SAM2_MODEL"] = self.lineEdit_segmentation_model_file.text().strip()
+            site_config["load_model"]["SEGFORMER_MODEL"] = ""
+            site_config["load_model"]["YOLO_MODEL"] = ""
         elif self.radioButton_segment_model_segformer.isChecked():
             site_config["load_model"]["MODEL"] = "segformer"
+            site_config["load_model"]["SAM2_MODEL"] = ""
             site_config["load_model"]["SEGFORMER_MODEL"] = self.lineEdit_segmentation_model_file.text().strip()
-        elif self.radioButton_segment_model_mask_rcnn.isChecked():
-            site_config["load_model"]["MODEL"] = "maskrcnn"
-            site_config["load_model"]["MASKRCNN_MODEL"] = self.lineEdit_segmentation_model_file.text().strip()
-        else:
-            site_config["load_model"]["MODEL"] = ""  # fallback if none selected
+            site_config["load_model"]["YOLO_MODEL"] = ""
+        elif self.radioButton_segment_model_yolo.isChecked():
+            site_config["load_model"]["MODEL"] = "yolo"
             site_config["load_model"]["SAM2_MODEL"] = ""
             site_config["load_model"]["SEGFORMER_MODEL"] = ""
-            site_config["load_model"]["MASKRCNN_MODEL"] = ""
+            site_config["load_model"]["YOLO_MODEL"] = self.lineEdit_segmentation_model_file.text().strip()
+        else:
+            site_config["load_model"]["MODEL"] = ""
+            site_config["load_model"]["SAM2_MODEL"] = ""
+            site_config["load_model"]["SEGFORMER_MODEL"] = ""
+            site_config["load_model"]["YOLO_MODEL"] = ""
 
         return site_config
 
@@ -320,8 +324,8 @@ class SegmentImagesTab(QWidget):
         self.radioButton_segment_model_segformer.toggled.connect(lambda checked: self.set_segment_model("segformer", checked))
         self.radioButton_segment_model_segformer.toggled.connect(self.update_model_config)
 
-        self.radioButton_segment_model_mask_rcnn.toggled.connect(lambda checked: self.set_segment_model("maskrcnn", checked))
-        self.radioButton_segment_model_mask_rcnn.toggled.connect(self.update_model_config)
+        self.radioButton_segment_model_yolo.toggled.connect(lambda checked: self.set_segment_model("yolo", checked))
+        self.radioButton_segment_model_yolo.toggled.connect(self.update_model_config)
 
         # Buttons
         self.pushButton_Select_Model.clicked.connect(self.select_segmentation_model)
@@ -360,7 +364,23 @@ class SegmentImagesTab(QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     def set_segment_model(self, model_name: str, checked: bool):
         """Update selected_segment_model when a radio button is toggled on."""
-        if checked:  # only update when the button is checked, not unchecked
+        if checked:
+            if model_name == "yolo":
+                import importlib.util
+                if importlib.util.find_spec("ultralytics") is None:
+                    from PyQt5.QtWidgets import QMessageBox
+                    QMessageBox.warning(
+                        self,
+                        "ultralytics Not Installed",
+                        "The ultralytics package is required for YOLOv11-seg inference "
+                        "but is not installed in this environment.\n\n"
+                        "Install it with:\n"
+                        "  pip install ultralytics\n\n"
+                        "Reverting to SAM2. All other GRIME AI features remain available."
+                    )
+                    self.radioButton_segment_model_sam2.setChecked(True)
+                    return
+
             self.selected_segment_model = model_name
             print(f"Selected segment model: {self.selected_segment_model}")
 
@@ -375,7 +395,7 @@ class SegmentImagesTab(QWidget):
             self,
             "Select Segmentation Model",
             "",
-            "Torch Model Files (*.torch)"
+            "Model Files (*.torch *.pt)"
         )
 
         if model_file:

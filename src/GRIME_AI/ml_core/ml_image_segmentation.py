@@ -30,6 +30,7 @@ from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 # Engines
 from GRIME_AI.ml_core.sam2_inference_engine import SAM2InferenceEngine
 from GRIME_AI.ml_core.segformer_inference_engine import SegFormerInferenceEngine
+from GRIME_AI.ml_core.yolo_inference_engine import YOLOInferenceEngine
 from GRIME_AI.ml_core.ml_helpers import add_coco_entries
 
 
@@ -63,6 +64,7 @@ class MLImageSegmentation:
         self.SAM2_MODEL = os.path.normpath(self.config.get("SAM2_MODEL", ""))
         self.SAM3_MODEL = os.path.normpath(self.config.get("SAM3_MODEL", ""))
         self.SEGFORMER_MODEL = os.path.normpath(self.config.get("SEGFORMER_MODEL", ""))
+        self.YOLO_MODEL = os.path.normpath(self.config.get("YOLO_MODEL", ""))
 
         if self.SAM2_CHECKPOINT == "" or self.MODEL_CFG == "" or self.segmentation_images_path == "" or self.predictions_output_path == "" or (self.SAM2_MODEL == "" and self.SEGFORMER_MODEL == ""):
             print("ERROR: Configuration file missing items.")
@@ -73,7 +75,18 @@ class MLImageSegmentation:
     # ------------------------------------------------------------------------------------------------------------------
     def _check_for_required_files(self):
         nError = 0
-        paths_to_check = [("Input directory", self.segmentation_images_path), ("Trained model file", self.SAM2_MODEL)]
+        # Always check the input directory
+        # Check the model file that is actually configured — not always SAM2_MODEL
+        model_path = ""
+        for key in ("SAM2_MODEL", "SEGFORMER_MODEL", "YOLO_MODEL"):
+            val = getattr(self, key, "")
+            if val and val != os.path.normpath(""):
+                model_path = val
+                break
+        paths_to_check = [
+            ("Input directory",   self.segmentation_images_path),
+            ("Trained model file", model_path),
+        ]
         self.missing_items = [(name, path) for name, path in paths_to_check if not os.path.exists(path)]
         if self.missing_items:
             nError = -1
@@ -129,6 +142,28 @@ class MLImageSegmentation:
                 class_index=1		###JES - CHANGE THIS!!!
             )
             predictor = engine.run_segformer_inference(
+                copy_original_image, save_masks, selected_label_categories, progressBar
+            )
+
+        elif mode.lower() == "yolo":
+            if importlib.util.find_spec("ultralytics") is None:
+                QMessageBox.critical(
+                    None,
+                    "ultralytics Not Installed",
+                    "The ultralytics package is required for YOLOv11-seg inference "
+                    "but is not installed in this environment.\n\n"
+                    "Install it with:\n"
+                    "  pip install ultralytics\n\n"
+                    "All other GRIME AI features remain available."
+                )
+                return
+            engine = YOLOInferenceEngine(
+                device=device,
+                yolo_model_path=self.YOLO_MODEL,
+                input_dir=self.segmentation_images_path,
+                output_dir=self.predictions_output_path,
+            )
+            predictor = engine.run_yolo_inference(
                 copy_original_image, save_masks, selected_label_categories, progressBar
             )
 

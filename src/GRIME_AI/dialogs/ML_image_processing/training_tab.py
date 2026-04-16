@@ -238,6 +238,10 @@ class TrainingTab(QtWidgets.QWidget):
         # Start with LoRA controls disabled; they will be enabled only when LoRA is selected
         self._set_lora_enabled(False)
 
+        # Default selection — must be set before _populate_ui_from_config
+        # so _update_context_sensitive_ui knows which model is active
+        self.selected_training_model = "sam2"
+
         # Populate UI from config and initialize state
         self._populate_ui_from_config(self.site_config)
         #self.setup_custom_list_widgets()
@@ -252,8 +256,8 @@ class TrainingTab(QtWidgets.QWidget):
 
         self.updateTrainButtonState()
 
-        # Default selection
-        self.selected_training_model = "sam2"
+        # Apply context-sensitive UI for the initial model selection
+        self._update_context_sensitive_ui()
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -276,6 +280,17 @@ class TrainingTab(QtWidgets.QWidget):
         self.horizontalListLayout.setStretch(0, 1)
         self.horizontalListLayout.setStretch(1, 0)
         self.horizontalListLayout.setStretch(2, 1)
+
+        # Column stretch for Training Parameters grid (6 columns):
+        # col 0 = left labels (fixed), col 1 = left controls (fixed),
+        # col 2 = centre gap (stretches), col 3 = right labels (fixed),
+        # col 4 = right controls (fixed), col 5 = right gap (stretches)
+        self.gridLayout_2.setColumnStretch(0, 0)
+        self.gridLayout_2.setColumnStretch(1, 0)
+        self.gridLayout_2.setColumnStretch(2, 1)
+        self.gridLayout_2.setColumnStretch(3, 0)
+        self.gridLayout_2.setColumnStretch(4, 0)
+        self.gridLayout_2.setColumnStretch(5, 1)
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -424,10 +439,22 @@ class TrainingTab(QtWidgets.QWidget):
         # Blob filter radius — update companion label whenever value changes
         self.spinBox_blobFilterRadius.valueChanged.connect(self._update_blob_filter_pct_label)
 
+        # Train/val split — either spinbox drives the other, always sum to 100
+        self.spinBox_valSplit.valueChanged.connect(self._on_val_split_changed)
+        self.spinBox_trainSplit.valueChanged.connect(self._on_train_split_changed)
+
+        # YOLO base weights combobox
+        self._populate_yolo_weights_combobox()
+        self.pushButton_refreshYoloWeights.clicked.connect(self._populate_yolo_weights_combobox)
+        self.pushButton_refreshYoloWeights.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+        self.comboBox_yoloWeights.currentIndexChanged.connect(self.update_model_config)
+        self.comboBox_yoloWeights.currentIndexChanged.connect(self._update_train_button_state)
+
         # Connect signals
         self.radioButton_train_model_SAM2.toggled.connect(lambda checked: self.set_training_model("sam2", checked))
         self.radioButton_train_model_segformer.toggled.connect(lambda checked: self.set_training_model("segformer", checked))
-        self.radioButton_train_model_MaskRCNN.toggled.connect(lambda checked: self.set_training_model("maskrcnn", checked))
+        # [MASKRCNN] self.radioButton_train_model_MaskRCNN.toggled.connect(lambda checked: self.set_training_model("maskrcnn", checked))
+        self.radioButton_train_model_YOLO.toggled.connect(lambda checked: self.set_training_model("yolo", checked))
 
         # Default selection
         self.selected_training_model = self.get_selected_model()
@@ -499,6 +526,9 @@ class TrainingTab(QtWidgets.QWidget):
             self.comboBox_device.setCurrentIndex(idx)
 
         self.current_path = self.site_config.get("Path", None)
+
+        # Apply context-sensitive UI for the loaded model selection
+        self._update_context_sensitive_ui()
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -599,7 +629,8 @@ class TrainingTab(QtWidgets.QWidget):
         if checked:  # only update when the button is checked, not unchecked
             self.selected_training_model = model_name
             print(f"Selected training model: {self.selected_training_model}")
-            self._update_lora_ui_for_model() # Turn LoRA controls on/off depending on selected model
+            self._update_lora_ui_for_model()
+            self._update_context_sensitive_ui()
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -618,6 +649,41 @@ class TrainingTab(QtWidgets.QWidget):
         """
         is_lora = (getattr(self, "selected_training_model", "") == "segformer")
         self._set_lora_enabled(is_lora)
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _update_context_sensitive_ui(self):
+        """
+        Show/hide UI sections that are not applicable to the selected model.
+        Called whenever the model radio button changes.
+
+        YOLO trains on all annotated categories simultaneously — label
+        selection is not applicable and is hidden to avoid confusion.
+        All other models require explicit label selection and show it.
+
+        If YOLO is selected but ultralytics is not installed, warn the user
+        and revert to SAM2 so GRIME AI remains fully functional.
+        """
+        is_yolo = (getattr(self, "selected_training_model", "") == "yolo")
+
+        if is_yolo:
+            import importlib.util
+            if importlib.util.find_spec("ultralytics") is None:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self,
+                    "ultralytics Not Installed",
+                    "The ultralytics package is required for YOLOv11-seg training "
+                    "but is not installed in this environment.\n\n"
+                    "Install it with:\n"
+                    "  pip install ultralytics\n\n"
+                    "Reverting to SAM2. All other GRIME AI features remain available."
+                )
+                self.radioButton_train_model_SAM2.setChecked(True)
+                return  # set_training_model will re-fire and call this method again
+
+        self.groupBox_labelSelection.setVisible(not is_yolo)
+        self.widget_yoloWeightsRow.setVisible(is_yolo)
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -673,6 +739,52 @@ class TrainingTab(QtWidgets.QWidget):
         """Replace default tree widgets with custom draggable/droppable ones."""
         self.listWidget_availableFolders.__class__ = DraggableTreeWidget
         self.listWidget_selectedFolders.__class__ = DroppableTreeWidget
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _populate_yolo_weights_combobox(self):
+        """
+        Scan the ultralytics/assets folder for *-seg.pt files and populate
+        comboBox_yoloWeights. If none are found, show 'No weights installed.'
+        and disable the combobox.
+        """
+        import importlib.util
+        self.comboBox_yoloWeights.blockSignals(True)
+        self.comboBox_yoloWeights.clear()
+
+        weights_dir = None
+        try:
+            spec = importlib.util.find_spec('ultralytics')
+            if spec and spec.origin:
+                assets = Path(spec.origin).parent / 'assets'
+                if assets.is_dir():
+                    weights_dir = assets
+        except Exception:
+            pass
+
+        found = []
+        if weights_dir:
+            found = sorted(p.name for p in weights_dir.glob('*-seg.pt'))
+
+        if found:
+            for name in found:
+                self.comboBox_yoloWeights.addItem(name)
+            self.comboBox_yoloWeights.setEnabled(True)
+        else:
+            self.comboBox_yoloWeights.addItem('No weights installed.')
+            self.comboBox_yoloWeights.setEnabled(False)
+
+        self.comboBox_yoloWeights.blockSignals(False)
+        self._update_train_button_state()
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _update_train_button_state(self):
+        """Refresh train button state — delegates to existing updateTrainButtonState."""
+        try:
+            self.updateTrainButtonState()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -834,7 +946,7 @@ class TrainingTab(QtWidgets.QWidget):
         self.selected_training_model = model
         self.radioButton_train_model_SAM2.setChecked(model == "sam2")
         self.radioButton_train_model_segformer.setChecked(model == "segformer")
-        self.radioButton_train_model_MaskRCNN.setChecked(model == "maskrcnn")
+        # [MASKRCNN] self.radioButton_train_model_MaskRCNN.setChecked(model == "maskrcnn")
 
         # Labels/categories
         labels = cfg.get("train_model", {}).get("TRAINING_CATEGORIES", [])
@@ -874,6 +986,19 @@ class TrainingTab(QtWidgets.QWidget):
         # Always refresh the companion label
         self._update_blob_filter_pct_label()
 
+        # Train/val split — val_split stored as fraction (e.g. 0.2), displayed as integer percent
+        val_pct = int(round(float(cfg.get("val_split", 0.2)) * 100))
+        val_pct = max(10, min(40, val_pct))  # clamp to spinbox range
+        self.spinBox_valSplit.setValue(val_pct)
+        self.spinBox_trainSplit.setValue(100 - val_pct)
+
+        # YOLO base weights — select saved value in combobox if present
+        saved_weights = cfg.get("yolo_base_weights", "")
+        if saved_weights:
+            idx = self.comboBox_yoloWeights.findText(saved_weights)
+            if idx >= 0:
+                self.comboBox_yoloWeights.setCurrentIndex(idx)
+
         # Folder lists
         self.listWidget_availableFolders.clear()
         for p in cfg.get("available_folders", []):
@@ -891,7 +1016,8 @@ class TrainingTab(QtWidgets.QWidget):
         button_map = {
             self.radioButton_train_model_SAM2: "sam2",
             self.radioButton_train_model_segformer: "segformer",
-            self.radioButton_train_model_MaskRCNN: "maskrcnn",
+            # [MASKRCNN] self.radioButton_train_model_MaskRCNN: "maskrcnn",
+            self.radioButton_train_model_YOLO: "yolo",
         }
         for button, model in button_map.items():
             if button.isChecked():
@@ -935,6 +1061,11 @@ class TrainingTab(QtWidgets.QWidget):
             "patience": int(self.spinBox_patience.value()),
             "device": self.comboBox_device.currentText(),
             "blob_filter_radius": self._blob_pixels_to_fraction(),
+            "val_split": round(self.spinBox_valSplit.value() / 100.0, 2),
+            "yolo_base_weights": (
+                self.comboBox_yoloWeights.currentText()
+                if self.comboBox_yoloWeights.isEnabled() else ""
+            ),
             "segmentation_images_path": self.lineEdit_model_training_images_path.text().strip(),
             "available_folders": [
                 self.listWidget_availableFolders.invisibleRootItem().child(i).text(0).lstrip('★ ')
@@ -1632,7 +1763,8 @@ class TrainingTab(QtWidgets.QWidget):
         if not (
                 self.radioButton_train_model_SAM2.isChecked()
                 or self.radioButton_train_model_segformer.isChecked()
-                or self.radioButton_train_model_MaskRCNN.isChecked()
+                # [MASKRCNN] or self.radioButton_train_model_MaskRCNN.isChecked()
+                or self.radioButton_train_model_YOLO.isChecked()
         ):
             missing.append("Training model selection")
 
@@ -1676,6 +1808,12 @@ class TrainingTab(QtWidgets.QWidget):
         # Device
         if not self.comboBox_device.currentText().strip():
             missing.append("Device")
+
+        # YOLO base weights — required when YOLO is selected
+        if self.radioButton_train_model_YOLO.isChecked():
+            if (not self.comboBox_yoloWeights.isEnabled() or
+                    self.comboBox_yoloWeights.currentText() == "No weights installed."):
+                missing.append("YOLO base weights (run download_yolo_weights.py)")
 
         # Build message string
         if missing:
@@ -1760,6 +1898,36 @@ class TrainingTab(QtWidgets.QWidget):
         if diagonal and diagonal > 0:
             return fraction * diagonal
         return None
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _on_val_split_changed(self, val_pct: int) -> None:
+        """
+        When the user changes the validation spinbox, update training spinbox.
+        Guard flag prevents the reciprocal signal from re-entering.
+        """
+        if getattr(self, '_split_updating', False):
+            return
+        self._split_updating = True
+        try:
+            self.spinBox_trainSplit.setValue(100 - val_pct)
+        finally:
+            self._split_updating = False
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _on_train_split_changed(self, train_pct: int) -> None:
+        """
+        When the user changes the training spinbox, update validation spinbox.
+        Guard flag prevents the reciprocal signal from re-entering.
+        """
+        if getattr(self, '_split_updating', False):
+            return
+        self._split_updating = True
+        try:
+            self.spinBox_valSplit.setValue(100 - train_pct)
+        finally:
+            self._split_updating = False
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------

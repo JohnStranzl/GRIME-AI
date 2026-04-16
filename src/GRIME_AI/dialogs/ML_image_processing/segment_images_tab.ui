@@ -81,9 +81,9 @@
               </widget>
              </item>
              <item>
-              <widget class="QRadioButton" name="radioButton_segment_model_mask_rcnn">
+              <widget class="QRadioButton" name="radioButton_segment_model_yolo">
                <property name="enabled">
-                <bool>false</bool>
+                <bool>true</bool>
                </property>
                <property name="font">
                 <font>
@@ -91,11 +91,8 @@
                  <pointsize>11</pointsize>
                 </font>
                </property>
-               <property name="toolTip">
-                <string extracomment="This model is not yet fully implemented."/>
-               </property>
                <property name="text">
-                <string>Mask R-CNN</string>
+                <string>YOLOv11-seg</string>
                </property>
               </widget>
              </item>
