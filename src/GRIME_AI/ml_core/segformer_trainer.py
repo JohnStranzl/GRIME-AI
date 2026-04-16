@@ -561,6 +561,7 @@ class SegFormerTrainer:
             best_val_acc=max(self.val_accuracy_values) if self.val_accuracy_values else None,
             early_stopped=getattr(self, "early_stopped", False),
             early_stop_epoch=getattr(self, "early_stop_epoch", None),
+            training_time_seconds=getattr(self, "training_time_seconds", None),
         )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -673,6 +674,9 @@ class SegFormerTrainer:
         """
         self.set_seed()
         self.ensure_dir(self.cfg.output_dir)
+        import time as _time
+        _training_start = _time.perf_counter()
+        self.training_time_seconds = None
 
         train_ds = MultiCocoTargetDataset(image_dirs, ann_paths, self.cfg.target_category_name, self.cfg.image_size,
                                           split="train")
@@ -904,6 +908,7 @@ class SegFormerTrainer:
         finally:
             if last_completed_epoch > 0:
                 print(f"Saving final checkpoint for epoch {last_completed_epoch}")
+            self.training_time_seconds = _time.perf_counter() - _training_start
             self._plot_training_graphs(site_name=site_name, lr=self.cfg.lr)
             self._close_progress()
 

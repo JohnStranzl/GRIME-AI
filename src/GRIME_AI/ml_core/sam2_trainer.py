@@ -244,6 +244,7 @@ class SAM2Trainer:
         # Collect folders and annotations (flatten lists)
         self.all_folders = []
         self.all_annotations = []
+        self.training_time_seconds = None   # set after training loop completes
 
         paths = self.site_config.get('Path', [])
         for path in paths:
@@ -295,8 +296,13 @@ class SAM2Trainer:
             self.annotation_index = self.dataset_util.build_annotation_index(self.dataset)
 
 
-        # Split dataset
-        train_images, val_images = self.dataset_util.split_dataset(self.dataset)
+        # Split dataset — ratio is user-configured; default 0.2 if not present
+        val_split = float(self.site_config.get("val_split", 0.2))
+        val_split = max(0.10, min(0.40, val_split))  # clamp to valid range
+        train_split = round(1.0 - val_split, 2)
+        train_images, val_images = self.dataset_util.split_dataset(
+            self.dataset, train_split=train_split, val_split=val_split
+        )
         split_dataset_filename = os.path.join(
             self.model_output_folder,
             f"{self.formatted_time}_{self.site_name}training_and_validation_sets.json"
@@ -372,6 +378,9 @@ class SAM2Trainer:
 
         self.sam2_model = model.to(device).train()
 
+        import time as _time
+        _training_start = _time.perf_counter()
+
         if self.TEST_MODE:
             # === TEST MODE: Train on each test category separately ===
             for category_name in self.TEST_CATEGORIES:
@@ -412,6 +421,7 @@ class SAM2Trainer:
                     self.num_val_images = len(val_images)
                     self.train_sam(lr, self.weight_decay, train_images, val_images, 
                                  epochs=self.num_epochs, target_label=category_name)
+                    self.training_time_seconds = _time.perf_counter() - _training_start
                     self._plot_training_graphs(lr)
         else:
             # === NORMAL MODE: Train on ALL categories from TRAINING_CATEGORIES ===
@@ -441,9 +451,12 @@ class SAM2Trainer:
                     self.num_val_images = len(val_images)
                     self.train_sam(lr, self.weight_decay, train_images, val_images,
                                      epochs=self.num_epochs, target_label=category_name)
+                    self.training_time_seconds = _time.perf_counter() - _training_start
                     self._plot_training_graphs(lr)
 
 
+
+        self.training_time_seconds = _time.perf_counter() - _training_start
 
         config_file = os.path.join(
             self.model_output_folder,
@@ -1651,6 +1664,7 @@ class SAM2Trainer:
             best_val_acc=max(self.val_accuracy_values) if self.val_accuracy_values else None,
             early_stopped=getattr(self, "early_stopped", False),
             early_stop_epoch=getattr(self, "early_stop_epoch", None),
+            training_time_seconds=getattr(self, "training_time_seconds", None),
         )
 
     # ------------------------------------------------------------------------

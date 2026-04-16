@@ -237,6 +237,30 @@ class MLModelTraining:
             trainer = MaskRCNNTrainer(model, train_loader, val_loader, optimizer, device)
             trainer.train(cfg.epochs)
 
+        # --------------------------------------------------------------------
+        #      YOLO   ---   YOLO   ---   YOLO   ---   YOLO   ---   YOLO
+        # --------------------------------------------------------------------
+        elif mode.lower() == "yolo":
+            import importlib.util
+            if importlib.util.find_spec("ultralytics") is None:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.critical(
+                    None,
+                    "ultralytics Not Installed",
+                    "The ultralytics package is required for YOLOv11-seg training "
+                    "but is not installed in this environment.\n\n"
+                    "Install it with:\n"
+                    "  pip install ultralytics\n\n"
+                    "YOLO training has been cancelled. All other GRIME AI features "
+                    "remain available."
+                )
+                return
+
+            from GRIME_AI.ml_core.yolo_trainer import YOLOTrainer
+            myYOLO_pipeline = YOLOTrainer(self.cfg, parent_widget=self.parent_widget)
+            myYOLO_pipeline.run_training_pipeline()
+            return
+
         else:
             raise ValueError(f"Unknown training mode: {mode}")
 

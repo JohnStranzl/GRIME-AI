@@ -937,6 +937,7 @@ class ModelTrainingVisualization:
             best_val_acc: float = None,       # val accuracy at best epoch
             early_stopped: bool = False,      # whether early stopping triggered
             early_stop_epoch: int = None,     # epoch at which training stopped early
+            training_time_seconds: float = None,  # total wall-clock training time
     ) -> dict:
         """
         Runs analyze_training_results() and saves a formatted PDF report
@@ -1063,6 +1064,17 @@ class ModelTrainingVisualization:
         if early_stopped:
             stop_ep = str(early_stop_epoch) if early_stop_epoch is not None else "unknown"
             meta_rows.append(("Early Stopping",        f"Triggered at epoch {stop_ep}"))
+        if training_time_seconds is not None:
+            h = int(training_time_seconds // 3600)
+            m = int((training_time_seconds % 3600) // 60)
+            s = int(training_time_seconds % 60)
+            if h > 0:
+                time_str = f"{h}h {m}m {s}s"
+            elif m > 0:
+                time_str = f"{m}m {s}s"
+            else:
+                time_str = f"{s}s"
+            meta_rows.append(("Training Time", time_str))
         _meta_table(meta_rows)
 
         # --- Dataset Info ---

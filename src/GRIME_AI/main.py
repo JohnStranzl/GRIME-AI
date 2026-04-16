@@ -4719,7 +4719,7 @@ def run_cli(args):
 
         print("[GRIME AI] Segmentation complete.")
     else:
-        parser.print_help()
+        print(f"[ERROR] Unknown command: {args.command}", file=sys.stderr)
         sys.exit(1)
 
 # ======================================================================================================================
