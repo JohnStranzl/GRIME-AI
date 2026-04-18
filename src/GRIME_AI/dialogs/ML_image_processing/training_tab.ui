@@ -535,22 +535,7 @@
          </widget>
         </item>
 
-        <!-- Row 3: Loss Function | [combo] | (gap) | Early Stopping: | [checkbox] | (gap) -->
-        <item row="3" column="0">
-         <widget class="QLabel" name="label_lossFunction">
-          <property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property>
-          <property name="text"><string>Loss Function:</string></property>
-         </widget>
-        </item>
-        <item row="3" column="1">
-         <widget class="QComboBox" name="comboBox_lossFunction">
-          <property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property>
-          <property name="maximumSize"><size><width>130</width><height>16777215</height></size></property>
-          <item><property name="text"><string>IOU</string></property></item>
-          <item><property name="text"><string>MSE</string></property></item>
-          <item><property name="text"><string>CrossEntropy</string></property></item>
-         </widget>
-        </item>
+        <!-- Row 3: Early Stopping: | [checkbox] | (gap) -->
         <item row="3" column="3">
          <widget class="QLabel" name="label_earlyStopping">
           <property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property>
@@ -562,7 +547,6 @@
           <property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property>
          </widget>
         </item>
-
         <!-- Row 4: Weight Decay | [dspin] | (gap) | Patience: | [spin] | (gap) -->
         <item row="4" column="0">
          <widget class="QLabel" name="label_weightDecay">

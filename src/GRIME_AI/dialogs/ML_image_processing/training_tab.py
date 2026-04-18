@@ -26,15 +26,19 @@ from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfi
 # ===                        MODULE LEVEL HELPERS                          ===
 # ============================================================================
 # ============================================================================
-def _check_folder(folder: Path) -> Tuple[bool, List[str], object]:
+def _check_folder(folder: Path) -> Tuple[bool, List[str], object, List[str], List[str]]:
     """
     Validates a single folder by:
       1. Finding at least one .json COCO file and some .jpg/.jpeg images.
-      2. Parsing the JSON’s "images" list of dicts to pull out file_name.
+      2. Parsing the JSON images list of dicts to pull out file_name.
       3. Verifying every listed file_name exists in that folder.
+      4. Checking for annotations referencing image_ids not in the images list.
+      5. Checking for on-disk images with no entry in the JSON images list.
 
-    Returns (is_valid, missing_files_list, json_path).
-    json_path is the full Path of the JSON checked, or None if no JSON found.
+    Returns (is_valid, missing_files_list, json_path, orphan_annotations, unannotated_files).
+      - missing_files_list: JSON images not found on disk (hard error).
+      - orphan_annotations: annotation entries whose image_id has no matching image entry (hard error).
+      - unannotated_files: on-disk files not referenced in the JSON (warning only).
     """
     # 1) List JSONs and JPGs via os.scandir
     jsons = [e.name for e in os.scandir(folder)
@@ -42,41 +46,57 @@ def _check_folder(folder: Path) -> Tuple[bool, List[str], object]:
     jpgs = {e.name for e in os.scandir(folder)
             if e.is_file() and e.name.lower().endswith((".jpg", ".jpeg"))}
 
-    print(f"Scanning `{folder}` -> JSONs: {jsons}, JPGs: {list(jpgs)[:5]}…")  # debug
+    print(f"Scanning `{folder}` -> JSONs: {jsons}, JPGs: {list(jpgs)[:5]}")  # debug
 
     if not jsons or not jpgs:
-        return False, [], None
+        return False, [], None, [], []
 
     # 2) Load the first JSON file
     path_json = folder / jsons[0]
     try:
         data = json.loads(path_json.read_text(encoding="utf-8"))
     except Exception as e:
-        return False, [f"Cannot parse {jsons[0]}: {e}"], path_json
+        return False, [f"Cannot parse {jsons[0]}: {e}"], path_json, [], []
 
-    # 3) Extract expected filenames from COCO "images" list
+    # 3) Extract expected filenames and image_ids from COCO "images" list
     raw_images = data.get("images")
     if not isinstance(raw_images, list):
-        return False, [f"'images' key missing or not a list in {jsons[0]}"], path_json
+        return False, [f"'images' key missing or not a list in {jsons[0]}"], path_json, [], []
 
     expected_files = []
+    valid_image_ids = set()
     for item in raw_images:
         if isinstance(item, dict):
             fname = item.get("file_name") or item.get("filename")
             if not fname:
-                return False, [f"Missing 'file_name' in entry: {item}"], path_json
+                return False, [f"Missing 'file_name' in entry: {item}"], path_json, [], []
             expected_files.append(Path(fname).name)
+            if "id" in item:
+                valid_image_ids.add(item["id"])
         elif isinstance(item, str):
             expected_files.append(item)
         else:
-            return False, [f"Unsupported image entry type: {type(item)}"], path_json
+            return False, [f"Unsupported image entry type: {type(item)}"], path_json, [], []
 
-    # 4) Compare against the actual JPGs on disk
+    # 4) Check JSON images vs disk
     missing = [f for f in expected_files if f not in jpgs]
-    if missing:
-        return False, missing, path_json
 
-    return True, [], path_json
+    # 5) Check for orphan annotations (image_id not in images list)
+    raw_annotations = data.get("annotations", [])
+    orphan_ann_ids = [
+        ann.get("id", "?")
+        for ann in raw_annotations
+        if ann.get("image_id") not in valid_image_ids
+    ]
+    orphan_annotations = [f"annotation id={aid}" for aid in orphan_ann_ids]
+
+    # 6) Check for on-disk files not in JSON (warn only)
+    expected_set = set(expected_files)
+    unannotated_files = sorted(f for f in jpgs if f not in expected_set)
+
+    is_valid = not missing and not orphan_annotations
+    return is_valid, missing, path_json, orphan_annotations, unannotated_files
+
 
 def _iter_dirs(root: Path):
     """
@@ -506,11 +526,6 @@ class TrainingTab(QtWidgets.QWidget):
         idx = self.comboBox_optimizer.findText(optimizer)
         if idx >= 0:
             self.comboBox_optimizer.setCurrentIndex(idx)
-
-        loss_function = self.site_config.get("loss_function", "")
-        idx = self.comboBox_lossFunction.findText(loss_function)
-        if idx >= 0:
-            self.comboBox_lossFunction.setCurrentIndex(idx)
 
         self.doubleSpinBox_weightDecay.setValue(self.site_config.get("weight_decay", 0.0))
         self.spinBox_epochs.setValue(self.site_config.get("number_of_epochs", 0))
@@ -966,7 +981,6 @@ class TrainingTab(QtWidgets.QWidget):
         self.lineEdit_siteName.setText(cfg.get("siteName", ""))
         self.lineEdit_learningRates.setText(",".join(str(x) for x in cfg.get("learningRates", [0.0001])))
         self.comboBox_optimizer.setCurrentText(cfg.get("optimizer", "Adam"))
-        self.comboBox_lossFunction.setCurrentText(cfg.get("loss_function", "IOU"))
         self.doubleSpinBox_weightDecay.setValue(float(cfg.get("weight_decay", 0.01) or 0.01))
         self.spinBox_epochs.setValue(int(cfg.get("number_of_epochs", 20) or 20))
         self.spinBox_batchSize.setValue(int(cfg.get("batch_size", 32) or 32))
@@ -1051,7 +1065,6 @@ class TrainingTab(QtWidgets.QWidget):
             "siteName": self.lineEdit_siteName.text().strip(),
             "learningRates": learning_rates or [0.0001],
             "optimizer": self.comboBox_optimizer.currentText(),
-            "loss_function": self.comboBox_lossFunction.currentText(),
             "weight_decay": float(self.doubleSpinBox_weightDecay.value()),
             "number_of_epochs": int(self.spinBox_epochs.value()),
             "batch_size": int(self.spinBox_batchSize.value()),
@@ -1313,21 +1326,21 @@ class TrainingTab(QtWidgets.QWidget):
         incomplete: Dict[str, List[str]] = {}
 
         # CHECK THE ROOT ITSELF
-        ok, missing, json_path = _check_folder(root)
+        ok, missing, json_path, orphans, unannotated = _check_folder(root)
         if ok:
             valid.append(root)
-        elif missing:
-            incomplete[str(root)] = (missing, json_path)
+        elif missing or orphans:
+            incomplete[str(root)] = (missing, orphans, unannotated, json_path)
 
         # RECURSE INTO SUBFOLDERS (SAFE BECAUSE ROOT IS VALIDATED)
         for folder in _iter_dirs(root):
-            ok, missing, json_path = _check_folder(folder)
+            ok, missing, json_path, orphans, unannotated = _check_folder(folder)
             if ok:
                 valid.append(folder)
-            elif missing:
-                incomplete[str(folder)] = (missing, json_path)
+            elif missing or orphans:
+                incomplete[str(folder)] = (missing, orphans, unannotated, json_path)
 
-        # POPULATE OR ALERT “NO VALID”
+        # POPULATE OR ALERT "NO VALID"
         if valid:
             for vf in sorted(set(valid)):
                 rel = vf.relative_to(root)
@@ -1342,17 +1355,30 @@ class TrainingTab(QtWidgets.QWidget):
 
         # INCOMPLETE SETS POPUP
         if incomplete:
-            lines = ["Folders missing files:"]
-            for fld, (miss, json_path) in incomplete.items():
+            lines = ["Folders with annotation issues:"]
+            for fld, (miss, orphans, unannotated, json_path) in incomplete.items():
                 json_label = f"\n  Annotation file: {json_path}" if json_path else ""
-                lines.append(f"\n{fld}{json_label}\n  Missing:")
-                lines += [f"    • {m}" for m in miss]
+                lines.append(f"\n{fld}{json_label}")
+                if miss:
+                    lines.append(f"  Missing from disk ({len(miss)}):")
+                    lines += [f"    - {m}" for m in miss[:10]]
+                    if len(miss) > 10:
+                        lines.append(f"    ... and {len(miss) - 10} more.")
+                if orphans:
+                    lines.append(f"  Orphan annotations ({len(orphans)}) - image_id not in images list:")
+                    lines += [f"    - {a}" for a in orphans[:10]]
+                    if len(orphans) > 10:
+                        lines.append(f"    ... and {len(orphans) - 10} more.")
+                if unannotated:
+                    lines.append(f"  On-disk files with no JSON entry ({len(unannotated)}) - will be skipped during training:")
+                    lines += [f"    - {u}" for u in unannotated[:5]]
+                    if len(unannotated) > 5:
+                        lines.append(f"    ... and {len(unannotated) - 5} more.")
             QMessageBox.information(
                 self,
                 "Incomplete Training Sets",
                 "\n".join(lines)
             )
-
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def _move_items(self, items):
@@ -1390,6 +1416,43 @@ class TrainingTab(QtWidgets.QWidget):
             for i in range(sel_root.childCount())
         ]
 
+        # VALIDATE SELECTED FOLDERS: CHECK JSON vs DISK CONSISTENCY
+        root_folder = os.path.normpath(os.path.abspath(base_path)) if base_path else ""
+        invalid_folders = []
+        for folder_name in moved_names:
+            folder_path = Path(os.path.join(root_folder, folder_name))
+            ok, missing, json_path, orphans, unannotated = _check_folder(folder_path)
+            if not ok:
+                invalid_folders.append((folder_name, missing, orphans, unannotated, json_path))
+
+        if invalid_folders:
+            lines = ["The following selected folders have annotation issues that will cause training errors:\n"]
+            for folder_name, missing, orphans, unannotated, json_path in invalid_folders:
+                json_label = f"\n  JSON: {json_path}" if json_path else ""
+                lines.append(f"\n{folder_name}{json_label}")
+                if missing:
+                    lines.append(f"  Missing from disk ({len(missing)}):")
+                    for m in missing[:10]:
+                        lines.append(f"    - {m}")
+                    if len(missing) > 10:
+                        lines.append(f"    ... and {len(missing) - 10} more.")
+                if orphans:
+                    lines.append(f"  Orphan annotations ({len(orphans)}) - image_id not in images list:")
+                    for a in orphans[:10]:
+                        lines.append(f"    - {a}")
+                    if len(orphans) > 10:
+                        lines.append(f"    ... and {len(orphans) - 10} more.")
+                if unannotated:
+                    lines.append(f"  On-disk files with no JSON entry ({len(unannotated)}) - will be skipped during training:")
+                    for u in unannotated[:5]:
+                        lines.append(f"    - {u}")
+                    if len(unannotated) > 5:
+                        lines.append(f"    ... and {len(unannotated) - 5} more.")
+            QMessageBox.warning(
+                self,
+                "JSON / Image Mismatch in Selected Folders",
+                "\n".join(lines)
+            )
         # BUILD ANNOTATION LIST FROM SELECTED FOLDERS
         self.annotation_list = self._build_annotation_list(base_path, moved_names)
 
@@ -1778,9 +1841,6 @@ class TrainingTab(QtWidgets.QWidget):
             missing.append("Optimizer")
 
         # Loss function
-        if not self.comboBox_lossFunction.currentText().strip():
-            missing.append("Loss function")
-
         # Weight decay
         if self.doubleSpinBox_weightDecay.value() == 0.0:
             missing.append("Weight decay")

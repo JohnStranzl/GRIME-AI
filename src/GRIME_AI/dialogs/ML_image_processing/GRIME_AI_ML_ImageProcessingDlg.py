@@ -424,8 +424,10 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
             new_annotations = []
             for folder in selected_folders:
                 folder_fwd = os.path.normpath(folder)
-                new_folders = os.path.normpath(os.path.join(root_folder, folder_fwd))
-                new_annotations = os.path.normpath(os.path.join(root_folder, folder_fwd, "instances_default.json"))
+                folder_path = os.path.normpath(os.path.join(root_folder, folder_fwd))
+                annotation_path = os.path.normpath(os.path.join(root_folder, folder_fwd, "instances_default.json"))
+                new_folders.append(folder_path)
+                new_annotations.append(annotation_path)
             site_config["Path"] = [{
                 "siteName": "custom",
                 "directoryPaths": {
@@ -491,8 +493,16 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         site_config["patience"] = self.spinBox_patience.value()
         site_config["device"] = self.comboBox_device.currentText()
         site_config["folder_path"] = self.lineEdit_model_training_images_path.text()
-        site_config["available_folders"] = [self.listWidget_availableFolders.item(i).text() for i in range(self.listWidget_availableFolders.count())]
-        site_config["selected_folders"] = [self.listWidget_selectedFolders.item(i).text() for i in range(self.listWidget_selectedFolders.count())]
+        avail_root = self.training_tab.listWidget_availableFolders.invisibleRootItem()
+        site_config["available_folders"] = [
+            avail_root.child(i).text(0).lstrip('\u2605 ')
+            for i in range(avail_root.childCount())
+        ]
+        sel_root = self.training_tab.listWidget_selectedFolders.invisibleRootItem()
+        site_config["selected_folders"] = [
+            sel_root.child(i).text(0).lstrip('\u2605 ')
+            for i in range(sel_root.childCount())
+        ]
 
         return site_config
 

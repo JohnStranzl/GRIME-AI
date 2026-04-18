@@ -4171,6 +4171,9 @@ def DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start
 
     i = 1
     while start_date <= end_date:
+        if not progressBarDates or not progressBarDates.isVisible():
+            progressBarDates = None
+            break
         ymd = start_date.strftime("%Y-%d-%b")
         progressBarDates.setWindowTitle(ymd)
         progressBarDates.setValue(float(i) / float(delta.days + 1) * delta.days)
@@ -4194,7 +4197,8 @@ def DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start
 
         start_date += datetime.timedelta(days=1)
 
-    progressBarDates.close()
+    if progressBarDates and progressBarDates.isVisible():
+        progressBarDates.close()
 
     gWebImageCount = len(dailyImagesList.getVisibleList())
     return dailyImagesList.getVisibleList()
