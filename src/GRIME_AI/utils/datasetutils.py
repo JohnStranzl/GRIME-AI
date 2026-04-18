@@ -1,4 +1,3 @@
-
 import os
 import random
 from pycocotools import mask as coco_mask
@@ -10,127 +9,153 @@ import json
 # ------------------------------------------------------------------------
 # ------------------------------------------------------------------------
 def get_category_id(annotations: dict, target_label: str) -> int:
-    # Normalize the input label
     target = target_label.strip().lower()
-
-    # Build a name -> id map (normalized)
     name_to_id = {
         str(cat.get("name", "")).strip().lower(): int(cat.get("id"))
         for cat in annotations.get("categories", [])
         if "id" in cat and "name" in cat
     }
-
     if target not in name_to_id:
         available = [cat.get("name") for cat in annotations.get("categories", [])]
         raise ValueError(
             f"Label '{target_label}' not found in annotations categories. "
             f"Available: {available}"
         )
-
     return name_to_id[target]
 
 
 class DatasetUtils:
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def __init__(self):
         self.image_shape_cache = {}
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def load_images_and_annotations(self, folders, annotation_files, target_label):
         """
         Load images and annotations from multiple folder/annotation pairs.
+        Each folder is processed independently and stored under its normalized
+        path to prevent basename collisions between folders with identical filenames.
 
-        Parameters
-        ----------
-        folders : list[str]
-            List of folder paths containing images.
-        annotation_files : list[str]
-            List of JSON annotation file paths.
-
-        Returns
-        -------
-        dict
-            Mapping from folder path -> {"images": [...], "annotations": {...}}
+        Returns dict: normalized_folder_path -> {"images": [...], "annotations": {...}}
         """
         dataset = {}
 
-        # iterate each folder/annotation pair
         for folder, annotation_file in zip(folders, annotation_files):
-            # normalize folder path
             folder = os.path.normpath(folder)
+            annotation_file = os.path.normpath(annotation_file)
 
-            # collect images
-            images = [
-                f for f in os.listdir(folder)
-                if f.lower().endswith((".jpg", ".jpeg"))
+            try:
+                disk_files = [
+                    f for f in os.listdir(folder)
+                    if f.lower().endswith((".jpg", ".jpeg"))
+                ]
+            except OSError as e:
+                raise OSError(f"Cannot list folder '{folder}': {e}")
+
+            try:
+                with open(annotation_file, "r", encoding="utf-8") as f:
+                    annotations = json.load(f)
+            except OSError as e:
+                raise OSError(f"Cannot open annotation file '{annotation_file}': {e}")
+
+            # Validate target label exists
+            get_category_id(annotations, target_label)
+
+            # Build set of JSON-referenced filenames
+            json_filenames = {
+                os.path.basename(img.get("file_name", ""))
+                for img in annotations.get("images", [])
+                if isinstance(img, dict)
+            }
+
+            disk_set = set(disk_files)
+
+            # Only train on files present both on disk AND in JSON
+            matched_files = [f for f in disk_files if f in json_filenames]
+            skipped = len(disk_files) - len(matched_files)
+            if skipped > 0:
+                print(f"[DatasetUtils] {folder}: {skipped} on-disk file(s) not in JSON - skipped.")
+
+            missing = [f for f in json_filenames if f not in disk_set]
+            if missing:
+                print(f"[DatasetUtils] {folder}: {len(missing)} JSON-referenced file(s) not on disk.")
+                for m in missing[:5]:
+                    print(f"  missing: {m}")
+                if len(missing) > 5:
+                    print(f"  ... and {len(missing) - 5} more.")
+
+            full_paths = [
+                os.path.normpath(os.path.join(folder, f))
+                for f in matched_files
             ]
 
-            # load annotations JSON
-            with open(annotation_file, "r", encoding="utf-8") as f:
-                annotations = json.load(f)
-
-            # Validate that target_label exists (but keep ALL annotations!)
-            category_id = get_category_id(annotations, target_label)
-
-            if category_id is None:
-                raise ValueError(f"Category '{target_label}' not found in {annotation_file}.")
-
-            # KEEP ALL ANNOTATIONS - don't filter by category!
-            # This allows negative prompting to work during training
-            all_annotations = annotations.get("annotations", [])
-
-            # store in dataset with ALL annotations
             dataset[folder] = {
-                "images": [os.path.join(folder, img) for img in images],
+                "images": full_paths,
                 "annotations": {
                     "images": annotations.get("images", []),
-                    "annotations": all_annotations,  # ALL categories!
+                    "annotations": annotations.get("annotations", []),
                 },
             }
 
         return dataset
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def build_annotation_index(self, dataset):
         """
-        Build and return a mapping from image file basenames to their corresponding annotation data.
+        Build a mapping from FULL NORMALIZED IMAGE PATH to its annotation entry.
+
+        Keying by full path (not basename) prevents collisions when multiple
+        folders contain identically named files.
         """
         annotation_index = {}
         for folder, data in dataset.items():
+            ann_data = data["annotations"]
+            # basename -> image_info for this folder's JSON
+            basename_to_info = {
+                os.path.basename(img.get("file_name", "")): img
+                for img in ann_data.get("images", [])
+                if isinstance(img, dict)
+            }
             for image_path in data["images"]:
-                base_name = os.path.basename(image_path)
-                annotation_index[base_name] = data["annotations"]
+                norm_path = os.path.normpath(image_path)
+                base = os.path.basename(norm_path)
+                image_info = basename_to_info.get(base)
+                if image_info is None:
+                    print(f"[DatasetUtils] Warning: no JSON entry for {norm_path} - skipping.")
+                    continue
+                annotation_index[norm_path] = {
+                    "image_info": image_info,
+                    "annotations": ann_data.get("annotations", []),
+                }
         return annotation_index
 
-    # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
     def load_true_mask(self, image_file, annotation_index, mode="binary", target_id=None):
         """
         Loads a mask for an image using COCO-style annotations.
-
-        mode:
-          - "binary": returns a 0/1 mask. If target_id is provided, only masks of that category are included.
-                      If target_id is None, all categories are merged into foreground (1).
-          - "categorical": returns a mask with category_id per pixel (background=0). target_id is ignored.
+        Looks up by full normalized path to prevent cross-folder contamination.
 
         Returns:
-          - If mode == "binary": (mask: np.ndarray[np.uint8], found_target: bool)
-          - If mode == "categorical": mask: np.ndarray[np.uint8]
+          binary mode: (mask: np.ndarray, found_target: bool)
+          categorical mode: mask: np.ndarray
         """
-        base_name = os.path.basename(image_file)
-        if base_name not in annotation_index:
-            raise ValueError(f"Image file {image_file} not found in the annotation index.")
+        norm_path = os.path.normpath(image_file)
 
-        annotation_data = annotation_index[base_name]
-        image_info = next((img for img in annotation_data["images"] if img["file_name"] == base_name), None)
-        if image_info is None:
-            raise ValueError(f"Image file {image_file} not found in annotations.")
+        if norm_path not in annotation_index:
+            raise ValueError(
+                f"Image not in annotation index: {norm_path}\n"
+                f"Index has {len(annotation_index)} entries."
+            )
 
-        image_id, height, width = image_info["id"], image_info["height"], image_info["width"]
-        anns = [ann for ann in annotation_data["annotations"] if ann["image_id"] == image_id]
+        entry = annotation_index[norm_path]
+        image_info = entry["image_info"]
+        all_anns = entry["annotations"]
+
+        image_id = image_info["id"]
+        height = image_info["height"]
+        width = image_info["width"]
+
+        anns = [ann for ann in all_anns if ann["image_id"] == image_id]
 
         if not anns:
             if mode == "binary":
@@ -140,56 +165,45 @@ class DatasetUtils:
         if mode == "binary":
             combined = np.zeros((height, width), dtype=np.uint8)
             found_target = False
-
             for ann in anns:
                 if target_id is not None and ann["category_id"] != target_id:
                     continue
-
                 rle = coco_mask.frPyObjects(ann["segmentation"], height, width)
                 mask = coco_mask.decode(rle)
                 if mask.ndim == 3:
                     mask = np.any(mask, axis=2)
-
                 combined = np.logical_or(combined, mask).astype(np.uint8)
                 if target_id is not None and ann["category_id"] == target_id:
                     found_target = True
-
-            return combined
+            return combined, found_target
 
         elif mode == "categorical":
             categorical = np.zeros((height, width), dtype=np.uint8)
-
             for ann in anns:
                 rle = coco_mask.frPyObjects(ann["segmentation"], height, width)
                 mask = coco_mask.decode(rle)
                 if mask.ndim == 3:
                     mask = np.any(mask, axis=2)
-
-                # Write category_id into pixels covered by this annotation
                 categorical[mask.astype(bool)] = ann["category_id"]
-
             return categorical
 
         else:
             raise ValueError(f"Unsupported mode: {mode}. Use 'binary' or 'categorical'.")
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def split_dataset(self, dataset_dict, train_split=0.9, val_split=0.1):
+        """
+        Collect all image paths from all folders and split into train/val.
+        Paths are already normalized full paths from load_images_and_annotations.
+        """
         all_images = []
         for data in dataset_dict.values():
-            # normalize here so every path in all_images is clean
             for img in data["images"]:
-                if isinstance(img, dict) and "path" in img:
-                    all_images.append(os.path.normpath(img["path"]))
-                else:
-                    all_images.append(os.path.normpath(str(img)))
+                all_images.append(os.path.normpath(str(img)))
 
         random.shuffle(all_images)
 
-        num_images = len(all_images)
-        train_size = int(train_split * num_images)
-
+        train_size = int(train_split * len(all_images))
         train_images = all_images[:train_size]
         val_images = all_images[train_size:]
         print(f"Train: {len(train_images)} images, Validation: {len(val_images)} images")
@@ -197,17 +211,13 @@ class DatasetUtils:
         return train_images, val_images
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def save_split_dataset(self, train_images, val_images, output_file):
         """
-        Save metadata-only split: no image copying.
-        Writes train/val image paths to splits.json in out_dir.
+        Save metadata-only split to a JSON file.
         """
-        import json, os
         from pathlib import Path
 
-        out_dir = os.path.dirname(output_file)
-        out_dir = Path(out_dir)
+        out_dir = Path(os.path.dirname(output_file))
         out_dir.mkdir(parents=True, exist_ok=True)
 
         def extract_paths(images):
@@ -224,70 +234,42 @@ class DatasetUtils:
         print(f"[split] Saved metadata-only split to {output_file}")
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
     def get_image_size(self, image_path: str) -> tuple[int, int]:
-        """
-        Returns (height, width) of the image.
-        """
         img = cv2.imread(image_path)
         if img is None:
             raise FileNotFoundError(f"Image not found: {image_path}")
         return img.shape[:2]
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
-    def get_annotations_for_image(
-        self,
-        image_path: str,
-        annotation_index: dict
-    ) -> list[dict]:
+    def get_annotations_for_image(self, image_path: str, annotation_index: dict) -> list[dict]:
         """
-        Returns the list of COCO‐style annotation dicts for this image.
-        Assumes annotation_index maps image_path (or stem) to a list of anns.
+        Returns annotation dicts for this image. Looks up by full normalized path.
         """
-        # If your index keys are full paths, use image_path directly;
-        # if they are stems/IDs you may need Path(image_path).stem
-        return annotation_index.get(image_path, [])
+        norm_path = os.path.normpath(image_path)
+        entry = annotation_index.get(norm_path)
+        if entry is None:
+            return []
+        image_id = entry["image_info"]["id"]
+        return [ann for ann in entry["annotations"] if ann["image_id"] == image_id]
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
-    def rasterize_polygon(
-        self,
-        segmentation: list,
-        image_shape: tuple[int, int]
-    ) -> np.ndarray:
-        """
-        Given a COCO‐style polygon (list of [x0,y0,x1,y1,...]), rasterize into
-        a H×W binary mask.
-        """
+    def rasterize_polygon(self, segmentation: list, image_shape: tuple[int, int]) -> np.ndarray:
         h, w = image_shape
         mask = np.zeros((h, w), dtype=np.uint8)
-        # segmentation may be a list of lists
         if isinstance(segmentation, list):
             for poly in segmentation:
                 pts = np.array(poly, dtype=np.int32).reshape(-1, 2)
                 cv2.fillPoly(mask, [pts], color=1)
         else:
-            # if it's RLE or other, extend here
             raise ValueError("Unsupported segmentation format")
         return mask
 
     # ------------------------------------------------------------------------
-    # ------------------------------------------------------------------------
-    def load_all_true_masks(
-        self,
-        image_path: str,
-        annotation_index: dict
-    ) -> dict[int, np.ndarray]:
+    def load_all_true_masks(self, image_path: str, annotation_index: dict) -> dict[int, np.ndarray]:
         """
-        Returns a dict mapping category_id -> H×W binary mask for every annotation
-        in this image. Categories missing from the image (e.g. snow) simply won't
-        appear in the dict.
+        Returns dict mapping category_id -> H×W binary mask for all annotations in this image.
         """
-        # 1) get all annotations for this image
         anns = self.get_annotations_for_image(image_path, annotation_index)
-
-        # 2) get image size
         h, w = self.get_image_size(image_path)
 
         all_masks: dict[int, np.ndarray] = {}
@@ -296,7 +278,6 @@ class DatasetUtils:
             seg = ann.get("segmentation")
             if cid is None or seg is None:
                 continue
-
             mask = self.rasterize_polygon(seg, (h, w))
             if mask.sum() > 0:
                 all_masks[cid] = mask

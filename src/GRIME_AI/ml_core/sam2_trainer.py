@@ -199,7 +199,7 @@ class SAM2Trainer:
         self.site_name = self.site_config['siteName']
         self.learning_rates = self.site_config['learningRates']
         self.optimizer_type = self.site_config['optimizer']
-        self.loss_function = self.site_config['loss_function']
+        self.loss_function = self.site_config.get('loss_function', 'BCE + Dice + Score')
         self.weight_decay = self.site_config['weight_decay']
         self.num_epochs = self.site_config['number_of_epochs']
         self.save_model_frequency = self.site_config['save_model_frequency']
@@ -251,7 +251,11 @@ class SAM2Trainer:
             directory_path = path['directoryPaths']
             folders = directory_path.get('folders', [])
             annotations = directory_path.get('annotations', [])
-            # extend directly with the lists of strings
+            # Handle both list and legacy single-string values
+            if isinstance(folders, str):
+                folders = [folders]
+            if isinstance(annotations, str):
+                annotations = [annotations]
             self.all_folders.extend(folders)
             self.all_annotations.extend(annotations)
 
@@ -308,6 +312,18 @@ class SAM2Trainer:
             f"{self.formatted_time}_{self.site_name}training_and_validation_sets.json"
         )
         self.dataset_util.save_split_dataset(train_images, val_images, split_dataset_filename)
+
+        # Preflight: verify all image files exist before training starts
+        missing_files = [f for f in train_images + val_images if not os.path.isfile(f)]
+        if missing_files:
+            missing_list = "\n  ".join(missing_files[:20])
+            if len(missing_files) > 20:
+                missing_list += f"\n  ... and {len(missing_files) - 20} more."
+            raise FileNotFoundError(
+                f"[Preflight] {len(missing_files)} image file(s) referenced in the dataset "
+                f"do not exist on disk. Training aborted.\n\n  {missing_list}\n\n"
+                f"The COCO JSON and the image folder may not match."
+            )
 
         stats_train = self.summarize_mask_imbalance(train_images)
         stats_val = self.summarize_mask_imbalance(val_images)
@@ -533,6 +549,10 @@ class SAM2Trainer:
         divergence_threshold = 1e3
         last_completed_epoch = 0
 
+        # VRAM trend tracking
+        _prev_train_vram_mb = None
+        self._prev_val_vram_mb = None
+
         # Get target_label - use parameter if provided (TEST_MODE), otherwise get from config
         if target_label is None:
             # Normal mode: get from config
@@ -584,6 +604,16 @@ class SAM2Trainer:
                 # Clear GPU cache after training to prevent memory accumulation
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
+                    cur_mb = torch.cuda.memory_allocated() / 1024 ** 2
+                    res_mb = torch.cuda.memory_reserved() / 1024 ** 2
+                    trend = ""
+                    if _prev_train_vram_mb is not None:
+                        delta = cur_mb - _prev_train_vram_mb
+                        trend = f"  delta={delta:+.1f} MB"
+                        if delta > 50:
+                            trend += "  <<< VRAM INCREASING - possible leak"
+                    print(f"[VRAM] Epoch {epoch + 1} post-train: allocated={cur_mb:.1f} MB  reserved={res_mb:.1f} MB{trend}")
+                    _prev_train_vram_mb = cur_mb
 
                 if math.isnan(avg_epoch_loss) or avg_epoch_loss > divergence_threshold:
                     print("Training diverged. Aborting early.")
@@ -870,6 +900,12 @@ class SAM2Trainer:
                 true_mask = true_mask[..., 0]
             true_mask = true_mask.astype(np.uint8)
 
+            if not os.path.isfile(image_file):
+                # File missing at training time despite passing preflight.
+                # Most likely cause: antivirus, indexer, or sync service locking the file.
+                # Log and skip rather than crash.
+                print(f"[WARNING] Image file inaccessible at epoch {epoch}, index {idx} - skipping: {image_file}")
+                continue
             image = np.array(Image.open(image_file).convert("RGB"))
             predictor.set_image(image)
 
@@ -917,11 +953,12 @@ class SAM2Trainer:
                 neg_id = neg_category["id"]
                 
                 # Load mask for this negative category
-                neg_mask = self.dataset_util.load_true_mask(
+                neg_result = self.dataset_util.load_true_mask(
                     image_file, self.annotation_index, 
                     mode="binary", target_id=neg_id
                 )
-                
+                neg_mask = neg_result[0] if isinstance(neg_result, tuple) else neg_result
+
                 # Skip if no annotation for this category in this image
                 if neg_mask is None or neg_mask.sum() == 0:
                     continue
@@ -1089,10 +1126,19 @@ class SAM2Trainer:
             epoch_loss += loss.item()
             processed_count += 1
 
+            # Periodically clear GPU cache to prevent VRAM fragmentation
+            if processed_count % 20 == 0 and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             pred_binary = (prd_mask_probs > 0.5).cpu().numpy()
             true_binary = gt_mask.cpu().numpy()
             train_correct += np.sum(pred_binary == true_binary)
             train_total += np.prod(true_binary.shape)
+
+            # Explicitly free tensors to prevent VRAM accumulation across iterations
+            del loss, prd_mask_logits, prd_mask_probs, prd_mask_binary, gt_mask, seg_loss, dice_loss, score_loss
+            del point_coords, point_labels, sparse_embeddings, dense_embeddings
+            del low_res_masks, prd_scores, prd_masks, high_res_features, iou
 
             if not self.progress_bar_closed:  # ✅ ISSUE #8 FIX: Direct attribute access
                 progressBar.setValue(progressBar.getValue() + 1)
@@ -1124,6 +1170,11 @@ class SAM2Trainer:
         val_correct, val_total = 0, 0
         n_items = 0
 
+        # Clear per-epoch pixel lists to prevent unbounded memory growth across epochs
+        self.val_true_list.clear()
+        self.val_pred_list.clear()
+        self.val_score_list.clear()
+
         self.sam2_model.eval()
         progressBar.setWindowTitle("Validation in-progress")
 
@@ -1138,6 +1189,15 @@ class SAM2Trainer:
                 if self.progress_bar_closed:
                     self._terminate_validation(progressBar)
                     return None, None, None, None, None
+
+                # Initialize all per-image tensors to None so del is always safe
+                # even if the image is skipped via continue
+                iou_actual = None
+                logit_tensor = None
+                logit_upsampled = None
+                prob_upsampled = None
+                pred_binary = None
+                val_true_mask_tensor = None
 
                 val_image = np.array(Image.open(val_image_file).convert("RGB"))
 
@@ -1293,6 +1353,9 @@ class SAM2Trainer:
                     )
                     cv2.imwrite(out_path, cv2.cvtColor(blended, cv2.COLOR_RGB2BGR))
 
+                # Free validation tensors to prevent VRAM accumulation
+                del logit_tensor, logit_upsampled, prob_upsampled, pred_binary, val_true_mask_tensor, iou_actual
+
                 progressBar.setValue(progressBar.getValue() + 1)
 
         # Compute averages
@@ -1305,6 +1368,16 @@ class SAM2Trainer:
         # Clear GPU cache after validation to prevent memory accumulation
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            cur_mb = torch.cuda.memory_allocated() / 1024 ** 2
+            res_mb = torch.cuda.memory_reserved() / 1024 ** 2
+            trend = ""
+            if self._prev_val_vram_mb is not None:
+                delta = cur_mb - self._prev_val_vram_mb
+                trend = f"  delta={delta:+.1f} MB"
+                if delta > 50:
+                    trend += "  <<< VRAM INCREASING - possible leak"
+            print(f"[VRAM] Post-validation: allocated={cur_mb:.1f} MB  reserved={res_mb:.1f} MB{trend}")
+            self._prev_val_vram_mb = cur_mb
 
         return avg_val_loss, val_accuracy, miou, avg_val_dice, avg_val_iou
 
@@ -1686,7 +1759,8 @@ class SAM2Trainer:
         
         target_id = next((c["id"] for c in self.categories if c["name"] == target_label), None)
         for img in images:
-            m = self.dataset_util.load_true_mask(img, self.annotation_index, mode="binary", target_id=target_id)
+            m_result = self.dataset_util.load_true_mask(img, self.annotation_index, mode="binary", target_id=target_id)
+            m = m_result[0] if isinstance(m_result, tuple) else m_result
             if m is None:
                 continue
 
