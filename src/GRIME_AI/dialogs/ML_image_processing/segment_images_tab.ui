@@ -206,7 +206,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QGroupBox" name="groupBox_Select_Images_Folder">
+      <widget class="QGroupBox" name="groupBox_Output_Folder">
        <property name="font">
         <font>
          <family>Arial</family>
@@ -214,11 +214,11 @@
         </font>
        </property>
        <property name="title">
-        <string>Select Folder with Images</string>
+        <string>Output Folder</string>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayoutSelectImagesFolder">
+       <layout class="QHBoxLayout" name="horizontalLayoutOutputFolder">
         <item>
-         <widget class="QLineEdit" name="lineEdit_segmentation_images_folder">
+         <widget class="QLineEdit" name="lineEdit_output_folder">
           <property name="font">
            <font>
             <family>Arial</family>
@@ -226,12 +226,15 @@
            </font>
           </property>
           <property name="toolTip">
-           <string>You must select a folder containing the images that you want to segment.</string>
+           <string>Select the folder where segmentation predictions will be saved.</string>
+          </property>
+          <property name="placeholderText">
+           <string>Select output folder for predictions...</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_Select_Images_Folder">
+         <widget class="QPushButton" name="pushButton_Select_Output_Folder">
           <property name="font">
            <font>
             <family>Arial</family>
@@ -240,6 +243,106 @@
           </property>
           <property name="text">
            <string>Browse</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="groupBox_Select_Images_Folder">
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>11</pointsize>
+        </font>
+       </property>
+       <property name="title">
+        <string>Image Folders</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayoutImageFolders">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutFolderButtons">
+          <item>
+           <widget class="QPushButton" name="pushButton_Add_Folder">
+            <property name="font">
+             <font>
+              <family>Arial</family>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>Add Folder</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_Add_Folder_Recursive">
+            <property name="font">
+             <font>
+              <family>Arial</family>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>Add Folder (Recursive)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_Remove_Folder">
+            <property name="font">
+             <font>
+              <family>Arial</family>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>Remove Selected</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_Clear_Folders">
+            <property name="font">
+             <font>
+              <family>Arial</family>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>Clear All</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QListWidget" name="listWidget_image_folders">
+          <property name="font">
+           <font>
+            <family>Arial</family>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
+          <property name="toolTip">
+           <string>Add one or more folders containing images to segment. Use "Add Folder" for a flat folder or "Add Folder (Recursive)" to include all subfolders.</string>
+          </property>
+          <property name="selectionMode">
+           <enum>QAbstractItemView::SingleSelection</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_folder_image_count">
+          <property name="font">
+           <font>
+            <family>Arial</family>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>No folders selected</string>
           </property>
          </widget>
         </item>
@@ -316,80 +419,85 @@
     </layout>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupBox_labels">
-     <property name="font">
-      <font>
-       <family>Arial</family>
-       <pointsize>11</pointsize>
-       <weight>75</weight>
-       <bold>true</bold>
-      </font>
+    <widget class="QSplitter" name="splitter_right_panel">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
      </property>
-     <property name="title">
-      <string>Labels</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_labels">
-      <item>
-       <widget class="QListWidget" name="listWidget_labels">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>11</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="selectionMode">
-         <enum>QAbstractItemView::ExtendedSelection</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label_modelMetadata">
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>11</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="text">
-         <string>Model Metadata</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QListWidget" name="listWidget_modelMetadata">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>11</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="alternatingRowColors">
-         <bool>true</bool>
-        </property>
-        <property name="selectionMode">
-         <enum>QAbstractItemView::NoSelection</enum>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <widget class="QGroupBox" name="groupBox_labels">
+      <property name="font">
+       <font>
+        <family>Arial</family>
+        <pointsize>11</pointsize>
+        <weight>75</weight>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="title">
+       <string>Labels</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_labels">
+       <item>
+        <widget class="QListWidget" name="listWidget_labels">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="font">
+          <font>
+           <family>Arial</family>
+           <pointsize>11</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="selectionMode">
+          <enum>QAbstractItemView::ExtendedSelection</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_modelMetadata">
+      <property name="font">
+       <font>
+        <family>Arial</family>
+        <pointsize>11</pointsize>
+        <weight>75</weight>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="title">
+       <string>Model Metadata</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_modelMetadata">
+       <item>
+        <widget class="QListWidget" name="listWidget_modelMetadata">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="font">
+          <font>
+           <family>Arial</family>
+           <pointsize>11</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="alternatingRowColors">
+          <bool>true</bool>
+         </property>
+         <property name="selectionMode">
+          <enum>QAbstractItemView::NoSelection</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>

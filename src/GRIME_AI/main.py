@@ -4840,7 +4840,7 @@ def segment_main(cfg: DictConfig) -> None:
         except Exception:
             pass
 
-        mySegmentation = MLImageSegmentation(cfg)
+        mySegmentation = MLImageSegmentation(cfg, parent_widget=hyperparameterDlg)
         mySegmentation.ML_Segmentation_Dispatcher(copy_original_image, save_masks, selected_label_categories, mode=selected_segment_model)
 
         # Re-enable Segment button

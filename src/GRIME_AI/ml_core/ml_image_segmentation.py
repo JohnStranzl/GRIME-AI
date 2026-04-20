@@ -10,6 +10,7 @@
 # MLImageSegmentation.py
 
 import os
+from pathlib import Path
 import sys
 import json
 import shutil
@@ -40,9 +41,10 @@ from GRIME_AI.ml_core.ml_helpers import add_coco_entries
 # ======================================================================================================================
 # ======================================================================================================================
 class MLImageSegmentation:
-    def __init__(self, cfg: DictConfig = None):
+    def __init__(self, cfg: DictConfig = None, parent_widget=None):
         self.className = "MLImageSegmentation"
         self.progress_bar_closed = False
+        self.parent_widget = parent_widget
 
         # Load config (same as before)
         if cfg is None or "load_model" not in cfg:
@@ -60,6 +62,12 @@ class MLImageSegmentation:
 
         self.segmentation_images_path = os.path.normpath(self.config.get("segmentation_images_path", ""))
         self.predictions_output_path = os.path.normpath(self.config.get("predictions_output_path", ""))
+
+        # Multi-folder support: list of {"path": str, "recursive": bool} — each entry is already a flat folder
+        self.segmentation_image_folders = self.config.get("segmentation_image_folders", [])
+        if not self.segmentation_image_folders and self.segmentation_images_path:
+            # Fall back to single-folder mode for backwards compatibility
+            self.segmentation_image_folders = [{"path": self.segmentation_images_path, "recursive": False}]
 
         self.SAM2_MODEL = os.path.normpath(self.config.get("SAM2_MODEL", ""))
         self.SAM3_MODEL = os.path.normpath(self.config.get("SAM3_MODEL", ""))
@@ -109,71 +117,236 @@ class MLImageSegmentation:
             return
 
         self.progress_bar_closed = False
-        progressBar = QProgressWheel(
-            title="Segmenting images...", total=1,
-            on_close=lambda: setattr(self, "progress_bar_closed", True)
-        )
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.num_classes = len(selected_label_categories) + 1  # +1 for background
 
+        # Compute common root once for output mirroring
+        all_paths = [os.path.normpath(e["path"]) for e in self.segmentation_image_folders]
+        common_root = os.path.commonpath(all_paths) if len(all_paths) > 1 else os.path.dirname(all_paths[0])
+
+        # Accumulated stats across all folders
+        total_found = 0
+        total_not_found = 0
+        total_processed = 0
+        target_category_name = "unknown"
+        final_predictor = None
+        user_cancelled = False
+
+        # Single progress bar for the entire run
+        self.progress_bar_closed = False
+        progressBar = QProgressWheel(
+            title="Segmenting images...", total=1,
+            on_close=lambda: setattr(self, "progress_bar_closed", True),
+            parent=self.parent_widget
+        )
+
+        # Load model once before the loop
+        engine = None
+        predictor = None
         if mode.lower() == "sam2":
-            # Pass INPUT_DIR and OUTPUT_DIR
             engine = SAM2InferenceEngine(
                 device=torch.device("cuda"),
-                model_cfg="sam2.1_hiera_l.yaml",            # self.MODEL_CFG
+                model_cfg="sam2.1_hiera_l.yaml",
                 trained_checkpoint_path=self.SAM2_MODEL,
                 input_dir=self.segmentation_images_path,
                 output_dir=self.predictions_output_path
             )
+            # Validate categories before starting
+            predictor = engine.load_sam2_model()
+            if not self._validate_sam2_categories(engine, selected_label_categories, progressBar):
+                return None
 
-            predictor = engine.run_sam2_inference(
-                copy_original_image, save_masks, selected_label_categories, progressBar
-            )
+        for folder_entry in self.segmentation_image_folders:
+            input_dir = os.path.normpath(folder_entry["path"])
+            if not os.path.isdir(input_dir):
+                print(f"[MLImageSegmentation] Skipping missing folder: {input_dir}")
+                continue
 
-        elif mode.lower() == "segformer":
-            # Pass INPUT_DIR and OUTPUT_DIR
-            engine = SegFormerInferenceEngine(
-                device,
-                self.SEGFORMER_MODEL,
-                self.segmentation_images_path,
-                self.predictions_output_path,
-                class_index=1		###JES - CHANGE THIS!!!
-            )
-            predictor = engine.run_segformer_inference(
-                copy_original_image, save_masks, selected_label_categories, progressBar
-            )
-
-        elif mode.lower() == "yolo":
-            if importlib.util.find_spec("ultralytics") is None:
-                QMessageBox.critical(
-                    None,
-                    "ultralytics Not Installed",
-                    "The ultralytics package is required for YOLOv11-seg inference "
-                    "but is not installed in this environment.\n\n"
-                    "Install it with:\n"
-                    "  pip install ultralytics\n\n"
-                    "All other GRIME AI features remain available."
+            # Mirror subfolder structure under predictions_output_path
+            # Use the folder's own name as the subdirectory under predictions_output_path.
+            # This avoids broken paths from relpath when the output folder is unrelated
+            # to the input folders (user-specified output location).
+            if len(self.segmentation_image_folders) == 1:
+                output_dir = self.predictions_output_path
+            else:
+                output_dir = os.path.normpath(
+                    os.path.join(self.predictions_output_path, Path(input_dir).name)
                 )
-                return
-            engine = YOLOInferenceEngine(
-                device=device,
-                yolo_model_path=self.YOLO_MODEL,
-                input_dir=self.segmentation_images_path,
-                output_dir=self.predictions_output_path,
-            )
-            predictor = engine.run_yolo_inference(
-                copy_original_image, save_masks, selected_label_categories, progressBar
-            )
 
-        elif mode.lower() == "maskrcnn":
-            predictor = self.load_maskrcnn_model(device, selected_label_categories)
+            print(f"[MLImageSegmentation] Segmenting: {input_dir}")
+            print(f"[MLImageSegmentation] Output:     {output_dir}")
 
+            result = None
+
+            if mode.lower() == "sam2":
+                result = engine.run_inference_on_folder(
+                    predictor, input_dir, output_dir,
+                    copy_original_image, save_masks, selected_label_categories, progressBar
+                )
+
+            elif mode.lower() == "segformer":
+                engine = SegFormerInferenceEngine(
+                    device,
+                    self.SEGFORMER_MODEL,
+                    input_dir,
+                    output_dir,
+                    class_index=1		###JES - CHANGE THIS!!!
+                )
+                result = engine.run_segformer_inference(
+                    copy_original_image, save_masks, selected_label_categories, progressBar
+                )
+
+            elif mode.lower() == "yolo":
+                if importlib.util.find_spec("ultralytics") is None:
+                    QMessageBox.critical(
+                        None,
+                        "ultralytics Not Installed",
+                        "The ultralytics package is required for YOLOv11-seg inference "
+                        "but is not installed in this environment.\n\n"
+                        "Install it with:\n"
+                        "  pip install ultralytics\n\n"
+                        "All other GRIME AI features remain available."
+                    )
+                    try:
+                        progressBar.close()
+                    except Exception:
+                        pass
+                    return
+                engine = YOLOInferenceEngine(
+                    device=device,
+                    yolo_model_path=self.YOLO_MODEL,
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                )
+                result = engine.run_yolo_inference(
+                    copy_original_image, save_masks, selected_label_categories, progressBar
+                )
+
+            elif mode.lower() == "maskrcnn":
+                final_predictor = self.load_maskrcnn_model(device, selected_label_categories)
+                continue
+
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
+
+            # Accumulate stats from this folder
+            if isinstance(result, dict):
+                final_predictor = result.get("predictor")
+                total_found += result.get("images_found", 0)
+                total_not_found += result.get("images_not_found", 0)
+                total_processed += result.get("images_processed", 0)
+                target_category_name = result.get("target_category_name", target_category_name)
+                if result.get("cancelled"):
+                    user_cancelled = True
+            else:
+                final_predictor = result
+
+            # Print GPU memory usage after each folder
+            if torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated() / 1024**2
+                reserved  = torch.cuda.memory_reserved()  / 1024**2
+                print(f"[GPU Memory] After '{os.path.basename(input_dir)}': "
+                      f"allocated={allocated:.1f} MB, reserved={reserved:.1f} MB")
+            else:
+                print(f"[GPU Memory] CUDA not available — running on CPU")
+
+            # Stop if user closed the progress bar
+            if self.progress_bar_closed:
+                user_cancelled = True
+                break
+
+        # Final cleanup — model loaded once, released once
+        try:
+            del predictor
+        except Exception:
+            pass
+        try:
+            del engine
+        except Exception:
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+        # Close progress bar
+        try:
+            if progressBar is not None and progressBar.isVisible():
+                progressBar.close()
+        except Exception:
+            pass
+
+        # Show one combined summary dialog
+        if user_cancelled:
+            QMessageBox.warning(
+                None, "Inference Cancelled",
+                f"Segmentation was cancelled by user.\n\n"
+                f"Results for '{target_category_name}':\n"
+                f"- Images processed: {total_processed}\n"
+                f"- Category found in: {total_found} images\n"
+                f"- Category not found in: {total_not_found} images"
+            )
+        elif total_processed == 0:
+            QMessageBox.warning(None, "No Images Processed",
+                                "No images were found in the selected folders.")
+        elif total_not_found == 0 and total_found == total_processed:
+            QMessageBox.information(
+                None, "Inference Complete",
+                f"Category '{target_category_name}' was found in all {total_processed} images."
+            )
+        elif total_found == 0:
+            QMessageBox.warning(
+                None, "No Segmentations Found",
+                f"Category '{target_category_name}' was not found in any of the {total_processed} images processed."
+            )
         else:
-            raise ValueError(f"Unknown mode: {mode}")
+            QMessageBox.information(
+                None, "Inference Complete",
+                f"Segmentation results for '{target_category_name}':\n\n"
+                f"- Category found in: {total_found} images\n"
+                f"- Category not found in: {total_not_found} images\n"
+                f"- Total processed: {total_processed} images"
+            )
 
-        return predictor
+        return final_predictor
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _validate_sam2_categories(self, engine, selected_label_categories, progressBar):
+        """
+        Validate that the requested category exists in the loaded model.
+        Returns True if valid, False if not (and closes progress bar + shows dialog).
+        Extracted from run_sam2_inference to avoid repeating per-folder.
+        """
+        if engine.TEST_MODE or not selected_label_categories:
+            return True
+        requested_category = selected_label_categories[0]
+        requested_id = requested_category.get("id")
+        requested_name = requested_category.get("name", "unknown")
+        if int(requested_id) not in engine.category_centroids:
+            try:
+                if progressBar is not None and progressBar.isVisible():
+                    progressBar.close()
+            except Exception:
+                pass
+            available_msg = (f"This model was trained on: '{engine.target_category_name}'"
+                             if engine.target_category_name
+                             else f"Available category IDs: {list(engine.category_centroids.keys())}")
+            QMessageBox.critical(None, "Category Not Found in Model",
+                                 f"Category '{requested_name}' (ID: {requested_id}) not found in model.\n\n"
+                                 f"{available_msg}")
+            return False
+        if not engine.category_centroids.get(int(requested_id)):
+            try:
+                if progressBar is not None and progressBar.isVisible():
+                    progressBar.close()
+            except Exception:
+                pass
+            QMessageBox.critical(None, "No Training Data for Category",
+                                 f"Category '{requested_name}' has no centroid data in this model.")
+            return False
+        return True
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------

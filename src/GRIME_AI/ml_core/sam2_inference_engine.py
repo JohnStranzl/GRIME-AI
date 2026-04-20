@@ -438,6 +438,22 @@ class SAM2InferenceEngine:
     
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
+    def run_inference_on_folder(self, predictor, input_dir, output_dir,
+                                copy_original_image, save_masks,
+                                selected_label_categories, progressBar):
+        """
+        Run inference using an already-loaded predictor on a specific folder.
+        Avoids reloading the model for each folder in multi-folder segmentation.
+        """
+        self.segmentation_images_path = input_dir
+        self.predictions_output_path = output_dir
+        return self._run_normal_inference(
+            predictor, copy_original_image, save_masks,
+            selected_label_categories, progressBar
+        )
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def _run_normal_inference(self, predictor, copy_original_image, save_masks, 
                              selected_label_categories, progressBar):
         """Normal inference mode - processes single category."""
@@ -472,10 +488,6 @@ class SAM2InferenceEngine:
                     cancelled = True
                     break
                 # If progress bar is closed/hidden, treat as cancellation
-                if not progressBar.isVisible():
-                    print("Inference stopped - progress bar closed")
-                    cancelled = True
-                    break
 
             image_path = os.path.join(self.segmentation_images_path, image)
 
@@ -594,8 +606,6 @@ class SAM2InferenceEngine:
             if torch.cuda.is_available() and img_index % 10 == 0:
                 torch.cuda.empty_cache()
 
-        if progressBar is not None and progressBar.isVisible():
-            progressBar.close()
         
         # Final GPU cleanup
         if torch.cuda.is_available():
@@ -603,46 +613,16 @@ class SAM2InferenceEngine:
 
         save_coco_json(coco_data, self.predictions_output_path)
 
-        # Show summary dialog
-        if cancelled:
-            # Inference was cancelled
-            QMessageBox.warning(
-                None,
-                "Inference Cancelled",
-                f"Inference was cancelled by user.\n\n"
-                f"Results for '{target_category_name}':\n"
-                f"- Total images in folder: {total_images_in_folder}\n"
-                f"- Images processed: {images_processed}\n"
-                f"- Category found in: {images_found} images\n"
-                f"- Category not found in: {images_not_found} images"
-            )
-        elif images_not_found == 0 and images_found == images_processed:
-            # All processed images successfully segmented
-            QMessageBox.information(
-                None,
-                "Inference Complete",
-                f"Category '{target_category_name}' was found in all {images_processed} images."
-            )
-        elif images_found == 0:
-            # No images found
-            QMessageBox.warning(
-                None,
-                "No Segmentations Found",
-                f"The category '{target_category_name}' was not found in any of the {images_processed} images processed.\n\n"
-                f"This may indicate the model was not trained on this category."
-            )
-        else:
-            # Partial success
-            QMessageBox.information(
-                None,
-                "Inference Complete",
-                f"Segmentation results for '{target_category_name}':\n\n"
-                f"- Category found in: {images_found} images\n"
-                f"- Category not found in: {images_not_found} images\n"
-                f"- Total processed: {images_processed} images"
-            )
-
-        return predictor
+        # Return stats dict — caller (MLImageSegmentation) shows the final summary
+        return {
+            "predictor": predictor,
+            "cancelled": cancelled,
+            "target_category_name": target_category_name,
+            "total_images_in_folder": total_images_in_folder,
+            "images_processed": images_processed,
+            "images_found": images_found,
+            "images_not_found": images_not_found,
+        }
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -666,10 +646,6 @@ class SAM2InferenceEngine:
                     print("Inference cancelled by user")
                     break
                 # If progress bar is closed/hidden, treat as cancellation
-                if not progressBar.isVisible():
-                    print("Inference stopped - progress bar closed")
-                    break
-
             image_path = os.path.join(self.segmentation_images_path, image)
 
             try:
@@ -754,8 +730,6 @@ class SAM2InferenceEngine:
             if torch.cuda.is_available() and img_index % 10 == 0:
                 torch.cuda.empty_cache()
 
-        if progressBar is not None and progressBar.isVisible():
-            progressBar.close()
         
         # Final GPU cleanup
         if torch.cuda.is_available():
