@@ -85,8 +85,7 @@ class QProgressWheel(QWidget):
         if title:
             self.setWindowTitle(title)
 
-        if on_close is not None:
-            self.destroyed.connect(lambda _: on_close())
+        self._on_close_callback = on_close
 
         if total is not None:
             self.setRange(0, total)
@@ -349,5 +348,8 @@ class QProgressWheel(QWidget):
         self.setPalette(p)
 
     def closeEvent(self, event):
-        self.deleteLater()  # Schedule the widget for deletion
+        if self._on_close_callback is not None:
+            self._on_close_callback()
+            self._on_close_callback = None  # prevent double-fire
+        self.deleteLater()
         event.accept()

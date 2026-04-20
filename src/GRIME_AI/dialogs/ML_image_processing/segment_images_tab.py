@@ -98,16 +98,18 @@ class SegmentImagesTab(QWidget):
 
         # Preserve dialog-level state expected by methods copied from the original dialog
         self.transferred_items = set()
-        self.original_folders = []
         self.selected_label_categories = []
         self.categories_available = False
+
+        # Multi-folder state: list of dicts {"path": str, "recursive": bool}
+        self.image_folders = []
 
         # Default selection
         self.selected_segment_model = "sam2"
 
         layout = self.horizontalLayoutSegmentImages
         layout.setStretch(0, 4)  # left content area
-        layout.setStretch(1, 1)  # right 'Labels' group box
+        layout.setStretch(1, 1)  # right splitter panel
 
         settings_folder = Path(GRIME_AI_Save_Utils().get_settings_folder()).resolve()
         config_file = (settings_folder / "site_config.json").resolve()
@@ -158,12 +160,17 @@ class SegmentImagesTab(QWidget):
         else:
             self.lineEdit_segmentation_model_file.clear()
 
-        # Images folder path
-        input_dir = load_model_conf.get("segmentation_images_path", "")
-        if input_dir:
-            self.lineEdit_segmentation_images_folder.setText(input_dir)
+        # Image folders list
+        saved_folders = load_model_conf.get("segmentation_image_folders", [])
+        self.image_folders = saved_folders if isinstance(saved_folders, list) else []
+        self._refresh_folder_list_widget()
+
+        # Output folder
+        output_folder = load_model_conf.get("output_folder", "")
+        if output_folder:
+            self.lineEdit_output_folder.setText(output_folder)
         else:
-            self.lineEdit_segmentation_images_folder.clear()
+            self.lineEdit_output_folder.clear()
 
         # Checkboxes (default to True if missing)
         self.checkBox_save_predicted_masks.setChecked(load_model_conf.get("save_model_masks", True))
@@ -217,14 +224,20 @@ class SegmentImagesTab(QWidget):
         site_config["copy_original_model_image"] = self.checkBox_copyOriginalModelImage.isChecked()
         site_config["save_probability_maps"] = self.checkBox_save_probability_maps.isChecked()
 
-        # _____ Load model section ___________________________________________
         site_config.setdefault("load_model", {})
 
-        segmentation_images_path = self.lineEdit_segmentation_images_folder.text().strip()
-        if segmentation_images_path:
-            site_config["load_model"]["segmentation_images_path"] = segmentation_images_path
+        # Save the full folder list
+        site_config["load_model"]["segmentation_image_folders"] = self.image_folders
 
-            predictions_output_path = os.path.normpath(os.path.join(segmentation_images_path, f"{timestamp}_predictions"))
+        # segmentation_images_path: always the first folder — inference engine expects a single directory
+        first_folder = self.image_folders[0]["path"] if self.image_folders else ""
+        site_config["load_model"]["segmentation_images_path"] = first_folder
+
+        # Output folder — user-specified, with timestamped subfolder
+        output_folder = self.lineEdit_output_folder.text().strip()
+        site_config["load_model"]["output_folder"] = output_folder
+        if output_folder:
+            predictions_output_path = os.path.normpath(os.path.join(output_folder, f"{timestamp}_predictions"))
             site_config["load_model"]["predictions_output_path"] = predictions_output_path
 
         # Selected segmentation categories from listbox
@@ -269,8 +282,8 @@ class SegmentImagesTab(QWidget):
         # Ensure attributes expected by other methods exist
         if not hasattr(self, "transferred_items"):
             self.transferred_items = set()
-        if not hasattr(self, "original_folders"):
-            self.original_folders = []
+        if not hasattr(self, "image_folders"):
+            self.image_folders = []
         if not hasattr(self, "selected_label_categories"):
             self.selected_label_categories = []
         if not hasattr(self, "categories_available"):
@@ -302,7 +315,11 @@ class SegmentImagesTab(QWidget):
 
         try:
             self.listWidget_labels.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            self.listWidget_labels.setMinimumHeight(200)
+        except Exception:
+            pass
+
+        try:
+            self.splitter_right_panel.setSizes([1000, 1000])  # equal initial split
         except Exception:
             pass
 
@@ -331,8 +348,20 @@ class SegmentImagesTab(QWidget):
         self.pushButton_Select_Model.clicked.connect(self.select_segmentation_model)
         self.pushButton_Select_Model.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
-        self.pushButton_Select_Images_Folder.clicked.connect(self.select_segmentation_images_folder)
-        self.pushButton_Select_Images_Folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+        self.pushButton_Select_Output_Folder.clicked.connect(self.select_output_folder)
+        self.pushButton_Select_Output_Folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+
+        self.pushButton_Add_Folder.clicked.connect(self.add_folder_flat)
+        self.pushButton_Add_Folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+
+        self.pushButton_Add_Folder_Recursive.clicked.connect(self.add_folder_recursive)
+        self.pushButton_Add_Folder_Recursive.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+
+        self.pushButton_Remove_Folder.clicked.connect(self.remove_selected_folder)
+        self.pushButton_Remove_Folder.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
+
+        self.pushButton_Clear_Folders.clicked.connect(self.clear_all_folders)
+        self.pushButton_Clear_Folders.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
 
         self.pushButton_Segment.clicked.connect(self.segment_images)
         self.pushButton_Segment.setStyleSheet(BUTTON_CSS_STEEL_BLUE)
@@ -340,9 +369,6 @@ class SegmentImagesTab(QWidget):
         # Line edits and checkboxes → flush config on change
         self.lineEdit_segmentation_model_file.textChanged.connect(self.onModelPathChanged)
         self.lineEdit_segmentation_model_file.textChanged.connect(self.update_model_config)
-
-        self.lineEdit_segmentation_images_folder.textChanged.connect(self.updateSegmentButtonState)
-        self.lineEdit_segmentation_images_folder.textChanged.connect(self.update_model_config)
 
         self.checkBox_save_predicted_masks.toggled.connect(self.on_save_predicted_masks_toggled)
         self.checkBox_save_predicted_masks.toggled.connect(self.update_model_config)
@@ -422,11 +448,129 @@ class SegmentImagesTab(QWidget):
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    def select_segmentation_images_folder(self):
-        """Open directory dialog to choose images folder."""
+    def select_output_folder(self):
+        """Open directory dialog to choose predictions output folder."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder for Predictions")
+        if folder:
+            self.lineEdit_output_folder.setText(folder.replace("\\", "/"))
+            self.updateSegmentButtonState()
+            self.update_model_config()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def add_folder_flat(self):
+        """Open directory dialog and add as a flat (non-recursive) folder."""
         folder = QFileDialog.getExistingDirectory(self, "Select Images Folder")
         if folder:
-            self.lineEdit_segmentation_images_folder.setText(folder)
+            folder = folder.replace("\\", "/")
+            if not any(f["path"] == folder for f in self.image_folders):
+                self.image_folders.append({"path": folder, "recursive": False})
+                self._refresh_folder_list_widget()
+                self.updateSegmentButtonState()
+                self.update_model_config()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def add_folder_recursive(self):
+        """
+        Open directory dialog, walk the entire tree, and add each subfolder
+        that directly contains images as an individual flat entry.
+        This allows the inference engine (which expects a single flat folder)
+        to process each folder without modification.
+        """
+        root = QFileDialog.getExistingDirectory(self, "Select Root Images Folder (Recursive)")
+        if not root:
+            return
+        root = root.replace("\\", "/")
+        image_extensions = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+        import re as _re
+        _predictions_pattern = _re.compile(r'\d{8}_\d{6}_predictions', _re.IGNORECASE)
+        added = 0
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirpath = dirpath.replace("\\", "/")
+            # Skip any predictions output folder (e.g. 20260419_164239_predictions (sam2))
+            folder_name = Path(dirpath).name
+            if _predictions_pattern.search(folder_name):
+                dirnames.clear()  # don't descend into subfolders of predictions either
+                continue
+            has_images = any(Path(f).suffix.lower() in image_extensions for f in filenames)
+            if has_images:
+                if not any(entry["path"] == dirpath for entry in self.image_folders):
+                    self.image_folders.append({"path": dirpath, "recursive": False})
+                    added += 1
+        if added:
+            self._refresh_folder_list_widget()
+            self.updateSegmentButtonState()
+            self.update_model_config()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def remove_selected_folder(self):
+        """Remove the currently selected folder from the list."""
+        row = self.listWidget_image_folders.currentRow()
+        if row >= 0:
+            del self.image_folders[row]
+            self._refresh_folder_list_widget()
+            self.updateSegmentButtonState()
+            self.update_model_config()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def clear_all_folders(self):
+        """Clear all folders from the list."""
+        self.image_folders.clear()
+        self._refresh_folder_list_widget()
+        self.updateSegmentButtonState()
+        self.update_model_config()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _refresh_folder_list_widget(self):
+        """Rebuild the listWidget_image_folders display from self.image_folders."""
+        self.listWidget_image_folders.clear()
+        image_extensions = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+        total_images = 0
+        for entry in self.image_folders:
+            mode = "Recursive" if entry["recursive"] else "Flat"
+            self.listWidget_image_folders.addItem(f"[{mode}]  {entry['path']}")
+            total_images += self._count_images(entry["path"], entry["recursive"], image_extensions)
+        if self.image_folders:
+            count_text = f"{len(self.image_folders)} folder(s) — {total_images} image(s) found"
+        else:
+            count_text = "No folders selected"
+        try:
+            self.label_folder_image_count.setText(count_text)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _count_images(self, folder: str, recursive: bool, extensions: set) -> int:
+        """Return the number of image files in folder (optionally recursive)."""
+        try:
+            p = Path(folder)
+            if not p.is_dir():
+                return 0
+            pattern = "**/*" if recursive else "*"
+            return sum(1 for f in p.glob(pattern) if f.is_file() and f.suffix.lower() in extensions)
+        except Exception:
+            return 0
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _collect_image_paths(self) -> list:
+        """Return a flat list of all image file paths across all registered folders."""
+        image_extensions = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+        paths = []
+        for entry in self.image_folders:
+            p = Path(entry["path"])
+            if not p.is_dir():
+                continue
+            pattern = "**/*" if entry["recursive"] else "*"
+            for f in sorted(p.glob(pattern)):
+                if f.is_file() and f.suffix.lower() in image_extensions:
+                    paths.append(str(f).replace("\\", "/"))
+        return paths
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
@@ -442,18 +586,19 @@ class SegmentImagesTab(QWidget):
     # ------------------------------------------------------------------------------------------------------------------
     def updateSegmentButtonState(self):
         """
-        Enable the Segment button only when a model path and images folder are provided.
-        Optionally require at least one label selected if labels exist.
+        Enable the Segment button only when a model path and at least one
+        image folder are provided, and at least one label is selected if labels exist.
         """
         model_path = self.lineEdit_segmentation_model_file.text().strip()
-        images_folder = self.lineEdit_segmentation_images_folder.text().strip()
+        has_folders = bool(self.image_folders)
+        output_folder = self.lineEdit_output_folder.text().strip()
 
         labels_exist = (self.listWidget_labels.count() > 0)
         labels_selected = True
         if labels_exist:
             labels_selected = any(self.listWidget_labels.item(i).isSelected() for i in range(self.listWidget_labels.count()))
 
-        enabled = bool(model_path and images_folder and labels_selected)
+        enabled = bool(model_path and has_folders and output_folder and labels_selected)
         try:
             self.pushButton_Segment.setEnabled(enabled)
         except Exception:
