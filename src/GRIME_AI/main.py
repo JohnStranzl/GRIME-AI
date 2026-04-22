@@ -4620,6 +4620,54 @@ def my_main():
     segment_parser.add_argument('--no-copy',       action='store_true',
                                 help='Skip copying original image to output folder')
 
+    # ROI Analyzer parser
+    roi_parser = subparsers.add_parser(
+        'roi',
+        help='Run ROI feature extraction on image/mask pairs'
+    )
+    roi_parser.add_argument(
+        '--folder', required=True,
+        help='Folder containing image/mask pairs.'
+    )
+    roi_parser.add_argument(
+        '--mode', required=True, choices=['analyze', 'extract'],
+        help=(
+            'analyze: run analysis on the first pair (or the pair matching --image) '
+            'and print metrics to stdout. '
+            'extract: batch all pairs and write CSV, XLSX, and optional aligned XLSX.'
+        )
+    )
+    roi_parser.add_argument(
+        '--image', required=False, default=None,
+        help='(analyze mode only) Filename of a specific image in --folder to analyze. '
+             'If omitted, the first pair is used.'
+    )
+    roi_parser.add_argument(
+        '--output', required=False, default=None,
+        help='Output folder for CSV/XLSX results (extract mode). '
+             'Defaults to --folder if not specified.'
+    )
+    roi_parser.add_argument(
+        '--clustering', required=False, default='kmeans',
+        choices=['kmeans', 'gmm', 'meanshift'],
+        help='Color clustering method (default: kmeans).'
+    )
+    roi_parser.add_argument(
+        '--clusters', required=False, type=int, default=3,
+        help='Number of clusters for kmeans or gmm (default: 3).'
+    )
+    roi_parser.add_argument(
+        '--auto-estimate', required=False, action='store_true',
+        help='(meanshift only) Auto-estimate bandwidth from data using --quantile.'
+    )
+    roi_parser.add_argument(
+        '--quantile', required=False, type=float, default=0.3,
+        help='(meanshift + --auto-estimate) Quantile for bandwidth estimation (default: 0.3).'
+    )
+    roi_parser.add_argument(
+        '--bandwidth', required=False, type=float, default=1.0,
+        help='(meanshift, manual) Fixed bandwidth value (default: 1.0).'
+    )
 
     # Custom help handling
     if '-h' in sys.argv or '--help' in sys.argv:
@@ -4673,6 +4721,7 @@ def run_cli(args):
                              reference_image_filename, rotation_threshold)
 
         print('Image triage is complete!')
+
     elif args.command == 'slice':
         filenames = cli_fetchLocalImageList(args.folder)
 
@@ -4680,6 +4729,7 @@ def run_cli(args):
         compositeSlices.create_composite_image(filenames, args.folder+'\compositeSlices')
 
         print("Composite slice complete!")
+
     elif args.command == "coco":
         # Import your CocoGenerator class from coco_generator.py
         from coco_generator import CocoGenerator
@@ -4697,6 +4747,7 @@ def run_cli(args):
             # Instantiate for one-to-one mode
             generator = CocoGenerator(folder=folder, output_path=output_path)
         generator.generate_annotations()
+
     elif args.command == 'segment':
         from GRIME_AI.GRIME_AI_segment import run_sam2, run_segformer
 
@@ -4722,9 +4773,517 @@ def run_cli(args):
             run_segformer(args, device, category, progressBar=None)
 
         print("[GRIME AI] Segmentation complete.")
-    else:
-        print(f"[ERROR] Unknown command: {args.command}", file=sys.stderr)
-        sys.exit(1)
+
+    elif args.command == 'roi':
+
+        # ------------------------------------------------------------------
+        # Force matplotlib to use a non-interactive backend so plt calls
+        # work headlessly on servers and HPC clusters with no display.
+        # This must happen before any matplotlib.pyplot import.
+        # ------------------------------------------------------------------
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        import re
+        import os
+        import sys
+        import pandas as pd
+        import seaborn as sns
+        import statsmodels.api as sm
+        from pathlib import Path
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+
+        from GRIME_AI.GRIME_AI_ROI_Analyzer import GRIME_AI_ROI_Analyzer
+
+        # ------------------------------------------------------------------
+        # Validate folder
+        # ------------------------------------------------------------------
+        folder = args.folder
+        if not os.path.isdir(folder):
+            print(f"[ERROR] Folder not found: {folder}", file=sys.stderr)
+            sys.exit(1)
+
+        output_folder = args.output if args.output else folder
+        os.makedirs(output_folder, exist_ok=True)
+
+        # ------------------------------------------------------------------
+        # Build meanshift kwargs from CLI args, mirroring _get_meanshift_kwargs()
+        # ------------------------------------------------------------------
+        if args.clustering == 'meanshift':
+            if args.auto_estimate:
+                meanshift_kwargs = {'bandwidth': None, 'quantile': args.quantile}
+            else:
+                meanshift_kwargs = {'bandwidth': args.bandwidth, 'quantile': None}
+        else:
+            meanshift_kwargs = {}
+
+        n_clusters = args.clusters
+        clustering = args.clustering
+
+        # ------------------------------------------------------------------
+        # Datetime extraction helper — mirrors _extract_datetime_from_path()
+        # ------------------------------------------------------------------
+        def _extract_datetime_from_path(filepath):
+            stem = os.path.splitext(os.path.basename(filepath))[0]
+            patterns = [
+                (r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                            f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+                (r'(\d{4})_(\d{2})_(\d{2})_(\d{2})(\d{2})(\d{2})',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                            f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+                (r'(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                            f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+                (r'(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                            f"{m.group(4)}:{m.group(5)}:{m.group(6)}")),
+                (r'(\d{4})_(\d{2})_(\d{2})',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}", "n/a")),
+                (r'(\d{4})(\d{2})(\d{2})',
+                 lambda m: (f"{m.group(1)}-{m.group(2)}-{m.group(3)}", "n/a")),
+            ]
+            for pattern, extractor in patterns:
+                m = re.search(pattern, stem)
+                if m:
+                    try:
+                        return extractor(m)
+                    except Exception:
+                        continue
+            return "n/a", "n/a"
+
+        # ------------------------------------------------------------------
+        # analyze_responses() — mirrors tab method; uses Agg matplotlib
+        # ------------------------------------------------------------------
+        def _analyze_responses(df, predictors, responses, out_dir):
+            out_path = Path(out_dir)
+            out_path.mkdir(parents=True, exist_ok=True)
+
+            df1 = df.copy()
+            df1[predictors + responses] = df1[predictors + responses].apply(
+                pd.to_numeric, errors='coerce'
+            )
+
+            # Distribution plots
+            for col in predictors + responses:
+                plt.figure()
+                sns.histplot(df1[col].dropna(), kde=True)
+                plt.title(f"Distribution of {col}")
+                plt.tight_layout()
+                plt.savefig(out_path / f"hist_{col}.png")
+                plt.close()
+
+            # Correlations
+            pearson_results = {}
+            spearman_results = {}
+            for resp in responses:
+                pearson_results[resp] = df1[predictors + [resp]].corr(method='pearson')[resp].drop(resp)
+                spearman_results[resp] = df1[predictors + [resp]].corr(method='spearman')[resp].drop(resp)
+
+            pearson_df = pd.DataFrame(pearson_results)
+            spearman_df = pd.DataFrame(spearman_results)
+
+            # Scatterplots with regression lines
+            for resp in responses:
+                for pred in predictors:
+                    x = df1[pred]
+                    y = df1[resp]
+                    valid = x.notna() & y.notna()
+                    if valid.sum() < 2:
+                        print(f"[ROI] Skipping scatter {pred} vs {resp}: insufficient data")
+                        continue
+                    plt.figure()
+                    sns.regplot(x=x[valid], y=y[valid], scatter_kws={'alpha': 0.5})
+                    plt.xlabel(pred)
+                    plt.ylabel(resp)
+                    plt.title(f"{pred} vs {resp}")
+                    plt.tight_layout()
+                    plt.savefig(out_path / f"scatter_{pred}_vs_{resp}.png")
+                    plt.close()
+
+            # OLS regressions
+            model_summaries = {}
+            for resp in responses:
+                X = df1[predictors]
+                y = df1[resp]
+                valid = X.notna().all(axis=1) & y.notna()
+                if valid.sum() < 2:
+                    print(f"[ROI] Skipping regression for {resp}: insufficient data")
+                    continue
+                X_valid = sm.add_constant(X[valid])
+                model = sm.OLS(y[valid], X_valid).fit()
+                model_summaries[resp] = model.summary().as_text()
+                print(f"\n[ROI] Regression for {resp}:")
+                print(model.summary())
+
+            # Correlation heatmap
+            plt.figure(figsize=(10, 8))
+            corr_matrix = df1[predictors + responses].corr(method='pearson')
+            sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm")
+            plt.title("Correlation Heatmap (Pearson)")
+            plt.tight_layout()
+            plt.savefig(out_path / "correlation_heatmap.png")
+            plt.close()
+
+            # Excel export
+            excel_path = out_path / "analysis_results.xlsx"
+            with pd.ExcelWriter(excel_path) as writer:
+                pearson_df.to_excel(writer, sheet_name="Pearson_Corr")
+                spearman_df.to_excel(writer, sheet_name="Spearman_Corr")
+                summary_df = pd.DataFrame.from_dict(
+                    model_summaries, orient='index', columns=['Summary']
+                )
+                summary_df.to_excel(writer, sheet_name="Model_Summaries")
+
+            print(f"[ROI] Response analysis saved to {out_path}")
+
+        # ------------------------------------------------------------------
+        # Generate image/mask pairs
+        # ------------------------------------------------------------------
+        temp = GRIME_AI_ROI_Analyzer("", "")
+        pairs = temp.generate_file_pairs(folder)
+
+        if not pairs:
+            print(f"[ERROR] No image/mask pairs found in: {folder}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"[ROI] Found {len(pairs)} image/mask pair(s).")
+
+        # ==================================================================
+        # MODE: analyze
+        # ==================================================================
+        if args.mode == 'analyze':
+
+            # Select the target pair
+            target_pair = None
+            if args.image:
+                target_name = os.path.basename(args.image)
+                for orig, mask in pairs:
+                    if os.path.basename(orig) == target_name:
+                        target_pair = (orig, mask)
+                        break
+                if target_pair is None:
+                    print(f"[ERROR] Image not found in pairs: {args.image}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                target_pair = pairs[0]
+
+            orig_path, mask_path = target_pair
+            print(f"[ROI] Analyzing: {orig_path}")
+            print(f"[ROI] Mask:      {mask_path}")
+
+            analyzer = GRIME_AI_ROI_Analyzer(
+                orig_path, mask_path,
+                clusters=n_clusters,
+                clustering_method=clustering,
+                **meanshift_kwargs
+            )
+            analyzer.run_analysis()
+
+            capture_date, capture_time = _extract_datetime_from_path(orig_path)
+
+            print(f"\n[ROI] Results for: {os.path.basename(orig_path)}")
+            print(f"  Capture Date     : {capture_date}")
+            print(f"  Capture Time     : {capture_time}")
+            print(f"  ROI Intensity    : {analyzer.roi_intensity:.2f}")
+            print(f"  ROI Entropy      : {analyzer.roi_entropy:.4f}")
+            print(f"  ROI Texture      : {analyzer.roi_texture:.4f}")
+            print(f"  Mean GLI         : {analyzer.mean_gli:.6f}")
+            print(f"  Mean GCC         : {analyzer.mean_gcc:.6f}")
+            print(f"  ROI Pixel Count  : {analyzer.ROI_total_pixels:.0f}")
+            print(f"  ROI Area         : {analyzer.ROI_total_area:.2f}")
+            print(f"  ROI Area %       : {analyzer.ROI_percentage:.2f}%")
+            print(f"  Image Dimensions : {analyzer.image_width:.0f} x {analyzer.image_height:.0f}")
+            print(f"  Clustering       : {clustering}, clusters={n_clusters}")
+            for i, (rgb, hsv, pct) in enumerate(zip(
+                    analyzer.dominant_rgb_list,
+                    analyzer.dominant_hsv_list,
+                    analyzer.percentages_list), start=1):
+                print(f"  Cluster {i}        : RGB={rgb}  HSV={hsv}  Coverage={pct:.1f}%")
+
+            print("\n[ROI] Analysis complete.")
+
+        # ==================================================================
+        # MODE: extract
+        # ==================================================================
+        elif args.mode == 'extract':
+
+            # Build output filename prefix from first image datetime
+            dt_pattern = re.compile(r'(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})Z')
+            file_dt_prefix = "no_datetime"
+            for img_path, _ in pairs:
+                m = dt_pattern.search(os.path.basename(img_path))
+                if m:
+                    file_dt_prefix = f"{m.group(1)}_{m.group(2).replace('-', '')}"
+                    break
+
+            csv_path = os.path.join(output_folder, f"{file_dt_prefix}_roi_metrics.csv")
+            xlsx_path = os.path.join(output_folder, f"{file_dt_prefix}_roi_metrics.xlsx")
+            aligned_xlsx_path = os.path.join(output_folder, f"{file_dt_prefix}_aligned_results.xlsx")
+
+            # Build clustering params string for the output
+            if clustering in ('kmeans', 'gmm'):
+                clustering_params = f"clusters={n_clusters}"
+            else:
+                if meanshift_kwargs.get('bandwidth') is None:
+                    clustering_params = f"auto=True, quantile={meanshift_kwargs['quantile']}"
+                else:
+                    clustering_params = f"auto=False, bandwidth={meanshift_kwargs['bandwidth']}"
+
+            # Build CSV header
+            header = [
+                "Image Path", "Mask Path",
+                "Capture Date", "Capture Time",
+                "Clustering Method", "Clustering Params",
+                "ROI Intensity", "ROI Entropy", "ROI Texture",
+                "Mean GLI", "Mean GCC",
+                "ROI Pixel Count", "ROI Area",
+                "Image Height", "Image Width", "Image Total Pixels",
+                "ROI Area Percentage",
+            ]
+            for i in range(1, n_clusters + 1):
+                header.extend([f"Cluster {i} H", f"Cluster {i} S", f"Cluster {i} V"])
+            for i in range(1, n_clusters + 1):
+                header.extend([f"Cluster {i} R", f"Cluster {i} G", f"Cluster {i} B"])
+
+            rows = []
+
+            # ----------------------------------------------------------
+            # Look for a related sensor CSV in the same folder as the
+            # images, matching the naming convention: "<prefix> - *.csv"
+            # ----------------------------------------------------------
+            first_img_path = pairs[0][0]
+            image_folder = os.path.dirname(first_img_path)
+            first_stem = os.path.splitext(os.path.basename(first_img_path))[0]
+            match_dt = dt_pattern.search(first_stem)
+            common_prefix = first_stem[:match_dt.start()].rstrip("_ ") if match_dt else first_stem
+            related_csv_df = None
+            matching_csv_path = None
+
+            try:
+                for fname in os.listdir(image_folder):
+                    if (fname.lower().endswith(".csv") and
+                            fname.lower().startswith((common_prefix + " - ").lower())):
+                        matching_csv_path = os.path.join(image_folder, fname)
+                        break
+            except Exception as e:
+                print(f"[ROI] Warning: could not scan image folder for related CSV: {e}")
+
+            if matching_csv_path:
+                print(f"[ROI] Found related sensor CSV: {matching_csv_path}")
+                try:
+                    related_csv_df = pd.read_csv(matching_csv_path)
+                    if 'datetime' in related_csv_df.columns:
+                        related_csv_df['datetime'] = pd.to_datetime(
+                            related_csv_df['datetime'],
+                            format="%m/%d/%Y %H:%M",
+                            errors="coerce"
+                        )
+                        related_csv_df['Date'] = related_csv_df['datetime'].dt.strftime("%Y-%m-%d")
+                        related_csv_df['Time'] = related_csv_df['datetime'].dt.strftime("%H:%M:%S")
+                except Exception as e:
+                    print(f"[ROI] Warning: could not read related CSV: {e}")
+                    related_csv_df = None
+            else:
+                print("[ROI] No related sensor CSV found. Alignment step will be skipped.")
+
+            # ----------------------------------------------------------
+            # Iterate all pairs
+            # ----------------------------------------------------------
+            total = len(pairs)
+            for i, (orig_path, mask_path) in enumerate(pairs):
+                print(f"[ROI] Processing {i + 1}/{total}: {os.path.basename(orig_path)}")
+
+                capture_date, capture_time = _extract_datetime_from_path(orig_path)
+
+                analyzer = GRIME_AI_ROI_Analyzer(
+                    orig_path, mask_path,
+                    clusters=n_clusters,
+                    clustering_method=clustering,
+                    **meanshift_kwargs
+                )
+                try:
+                    analyzer.run_analysis()
+                except Exception as e:
+                    print(f"[ROI] Warning: analysis failed for {orig_path}: {e}")
+                    continue
+
+                data_row = [
+                    orig_path, mask_path,
+                    capture_date, capture_time,
+                    clustering, clustering_params,
+                    f"{analyzer.roi_intensity:.2f}",
+                    f"{analyzer.roi_entropy:.4f}",
+                    f"{analyzer.roi_texture:.4f}",
+                    f"{analyzer.mean_gli:.6f}",
+                    f"{analyzer.mean_gcc:.6f}",
+                    f"{analyzer.ROI_total_pixels:.2f}",
+                    f"{analyzer.ROI_total_area:.2f}",
+                    f"{analyzer.image_height:.2f}",
+                    f"{analyzer.image_width:.2f}",
+                    f"{analyzer.image_total_pixels:.2f}",
+                    f"{analyzer.ROI_percentage:.2f}",
+                ]
+                for (h, s, v) in analyzer.dominant_hsv_list:
+                    data_row.extend([f"{h:.4f}", f"{s:.4f}", f"{v:.4f}"])
+                for (r, g, b) in analyzer.dominant_rgb_list:
+                    data_row.extend([f"{r:.4f}", f"{g:.4f}", f"{b:.4f}"])
+
+                rows.append(data_row)
+
+            if not rows:
+                print("[ERROR] No results produced. Check image/mask pairs.", file=sys.stderr)
+                sys.exit(1)
+
+            roi_metrics_df = pd.DataFrame(rows, columns=header)
+
+            # ----------------------------------------------------------
+            # Write CSV
+            # ----------------------------------------------------------
+            try:
+                roi_metrics_df.to_csv(csv_path, index=False)
+                print(f"[ROI] CSV written: {csv_path}")
+            except Exception as e:
+                print(f"[ROI] Warning: could not write CSV: {e}")
+
+            # ----------------------------------------------------------
+            # Write XLSX with hyperlinks
+            # ----------------------------------------------------------
+            try:
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "ROI Metrics"
+                hyperlink_style = Font(color="0000FF", underline="single")
+
+                for col_idx, title in enumerate(header, start=1):
+                    ws.cell(row=1, column=col_idx, value=title)
+
+                for row_idx, data in enumerate(rows, start=2):
+                    (
+                        orig_full, mask_full, capture_date, capture_time,
+                        method_name, method_params,
+                        intensity, entropy, texture, gli, gcc,
+                        pixel_count, pixel_area, image_height,
+                        image_width, image_total_pixels, roi_area_percentage,
+                        *cluster_values
+                    ) = data
+
+                    cell_img = ws.cell(row=row_idx, column=1, value=os.path.basename(orig_full))
+                    cell_img.hyperlink = orig_full
+                    cell_img.font = hyperlink_style
+
+                    cell_mask = ws.cell(row=row_idx, column=2, value=os.path.basename(mask_full))
+                    cell_mask.hyperlink = mask_full
+                    cell_mask.font = hyperlink_style
+
+                    ws.cell(row=row_idx, column=3, value=capture_date)
+                    ws.cell(row=row_idx, column=4, value=capture_time)
+                    ws.cell(row=row_idx, column=5, value=method_name)
+                    ws.cell(row=row_idx, column=6, value=method_params)
+                    ws.cell(row=row_idx, column=7, value=float(intensity))
+                    ws.cell(row=row_idx, column=8, value=float(entropy))
+                    ws.cell(row=row_idx, column=9, value=float(texture))
+                    ws.cell(row=row_idx, column=10, value=float(gli))
+                    ws.cell(row=row_idx, column=11, value=float(gcc))
+                    ws.cell(row=row_idx, column=12, value=float(pixel_count))
+                    ws.cell(row=row_idx, column=13, value=float(pixel_area))
+                    ws.cell(row=row_idx, column=14, value=float(image_height))
+                    ws.cell(row=row_idx, column=15, value=float(image_width))
+                    ws.cell(row=row_idx, column=16, value=float(image_total_pixels))
+                    ws.cell(row=row_idx, column=17, value=float(roi_area_percentage))
+
+                    for offset, value in enumerate(cluster_values, start=18):
+                        ws.cell(row=row_idx, column=offset, value=float(value))
+
+                wb.save(xlsx_path)
+                print(f"[ROI] XLSX written: {xlsx_path}")
+
+            except ImportError:
+                print("[ROI] Warning: openpyxl not installed. XLSX export skipped.")
+            except Exception as e:
+                print(f"[ROI] Warning: could not write XLSX: {e}")
+
+            # ----------------------------------------------------------
+            # Align ROI metrics with sensor CSV by nearest timestamp
+            # ----------------------------------------------------------
+            aligned_df = None
+            aligned_written = False
+
+            try:
+                if related_csv_df is not None and not related_csv_df.empty:
+                    roi_dt = pd.to_datetime(
+                        roi_metrics_df["Capture Date"].astype(str).str.strip() + " " +
+                        roi_metrics_df["Capture Time"].astype(str).str.strip(),
+                        errors="coerce",
+                        format="%Y-%m-%d %H:%M:%S"
+                    )
+                    roi_df = roi_metrics_df.copy()
+                    roi_df["datetime"] = roi_dt
+
+                    csv_df = related_csv_df.copy()
+                    if {"Date", "Time"}.issubset(csv_df.columns):
+                        csv_df["datetime"] = pd.to_datetime(
+                            csv_df["Date"].astype(str).str.strip() + " " +
+                            csv_df["Time"].astype(str).str.strip(),
+                            errors="coerce",
+                            format="%Y-%m-%d %H:%M:%S"
+                        )
+                    elif "datetime" in csv_df.columns:
+                        csv_df["datetime"] = pd.to_datetime(csv_df["datetime"], errors="coerce")
+                    else:
+                        csv_df["datetime"] = pd.NaT
+
+                    roi_df = roi_df.dropna(subset=["datetime"]).sort_values("datetime")
+                    csv_df = csv_df.dropna(subset=["datetime"]).sort_values("datetime")
+
+                    if not roi_df.empty and not csv_df.empty:
+                        aligned_df = pd.merge_asof(
+                            roi_df, csv_df,
+                            on="datetime",
+                            direction="nearest",
+                            tolerance=pd.Timedelta("6H")
+                        )
+                        aligned_df["Image Path"] = aligned_df["Image Path"].apply(os.path.basename)
+                        aligned_df["Mask Path"] = aligned_df["Mask Path"].apply(os.path.basename)
+                        aligned_df.to_excel(aligned_xlsx_path, index=False)
+                        aligned_written = True
+                        print(f"[ROI] Aligned XLSX written: {aligned_xlsx_path}")
+                    else:
+                        print("[ROI] Alignment skipped: no valid datetime rows in one or both DataFrames.")
+                else:
+                    print("[ROI] Alignment skipped: no related sensor CSV.")
+
+            except Exception as e:
+                print(f"[ROI] Warning: alignment step failed: {e}")
+
+            # ----------------------------------------------------------
+            # Run response analysis if alignment produced results
+            # ----------------------------------------------------------
+            if aligned_df is not None and not aligned_df.empty:
+                predictors = []
+                for i in range(1, n_clusters + 1):
+                    predictors.extend([f"Cluster {i} H", f"Cluster {i} S", f"Cluster {i} V"])
+                responses = ["Gage Height", "Discharge"]
+                try:
+                    _analyze_responses(aligned_df, predictors, responses, output_folder)
+                except Exception as e:
+                    print(f"[ROI] Warning: response analysis failed: {e}")
+
+            # ----------------------------------------------------------
+            # Summary
+            # ----------------------------------------------------------
+            print("\n[ROI] Extract complete.")
+            print(f"  Pairs processed : {len(rows)}")
+            print(f"  CSV             : {csv_path}")
+            print(f"  XLSX            : {xlsx_path}")
+            print(f"  Aligned XLSX    : {aligned_xlsx_path if aligned_written else 'skipped'}")
+            print(f"  Related CSV     : {matching_csv_path if matching_csv_path else 'not found'}")
+
+        else:
+            print(f"[ERROR] Unknown command: {args.command}", file=sys.stderr)
+            sys.exit(1)
 
 # ======================================================================================================================
 # ======================================================================================================================
