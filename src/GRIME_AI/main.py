@@ -254,10 +254,6 @@ from GRIME_AI.ml_core.ml_image_segmentation import MLImageSegmentation
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from pathlib import Path
-
-# ----------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
 global bStartupComplete
 bStartupComplete = False
 
@@ -4679,6 +4675,8 @@ def my_main():
         slice_parser.print_help()  # Help for slice subparser
         print("\nHelp for 'segment' command:")
         segment_parser.print_help()  # Help for segment subparser
+        print("\nHelp for 'roi' command:")
+        roi_parser.print_help()  # Help for roi subparser
         sys.exit(0)  # Exit after displaying help
 
     args = parser.parse_args()
@@ -4695,6 +4693,11 @@ def my_main():
     #frame.show()
 
 def run_cli(args):
+    import re
+    import os
+    import sys
+    from pathlib import Path
+
     if args.command == 'triage':
         create_report = True
         move_images = True
@@ -4785,9 +4788,6 @@ def run_cli(args):
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
-        import re
-        import os
-        import sys
         import pandas as pd
         import seaborn as sns
         import statsmodels.api as sm
