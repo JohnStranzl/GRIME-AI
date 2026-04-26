@@ -160,6 +160,8 @@ from dataclasses import dataclass
 
 from GRIME_AI.utils.resource_utils import icon_path
 
+from pathlib import Path
+
 # ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 from PyQt5 import QtCore, QtWidgets, QtGui, uic
@@ -172,33 +174,32 @@ from PyQt5.QtWidgets import QTreeWidgetItem
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
 
-import pandas as pd
+# pandas imported lazily inside functions
 
 from GRIME_AI.usgs.usgs_client import USGSClient
 
 # ----------------------------------------------------------------------------
 # POP-UP/MODELESS DIALOG BOXES
 # ----------------------------------------------------------------------------
-from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
-from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
-from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
-from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
-from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
-from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
+# lazy: from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
+# lazy: from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
+# lazy: from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
+# lazy: from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
+# lazy: from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
+# lazy: from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
 from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
-from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
+# lazy: from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
 from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI.GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
-from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
-from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
+# lazy: from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
 from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
-from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
-from GRIME_AI.dialogs.temporal_averaging.GRIME_AI_TemporalAveragingDlg import GRIME_AI_TemporalAveragingDlg
+# lazy: from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
+# lazy: from GRIME_AI.dialogs.temporal_averaging.GRIME_AI_TemporalAveragingDlg import GRIME_AI_TemporalAveragingDlg
 from GRIME_AI.GRIME_AI_ProductTable import GRIME_AI_ProductTable
 from GRIME_AI.GRIME_AI_QLabel import DrawingMode
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
@@ -249,8 +250,6 @@ from GRIME_AI.exifData import EXIFData
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
-from GRIME_AI.ml_core.ml_model_training import MLModelTraining
-from GRIME_AI.ml_core.ml_image_segmentation import MLImageSegmentation
 
 # ----------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -446,6 +445,60 @@ class USGSLatestImageFetcher(QtCore.QThread):
             self.result.emit(404, None, False)
 
 
+class PhenocamStartupFetcher(QtCore.QThread):
+    """Fetches the PhenoCam site table in a background thread at startup."""
+    result = QtCore.pyqtSignal(object)  # dict or None
+
+    def __init__(self, neon_api, parent=None):
+        super().__init__(parent)
+        self._neon_api = neon_api
+
+    def run(self):
+        try:
+            data = self._neon_api.scrape_phenocam_table()
+            self.result.emit(data)
+        except Exception as e:
+            print(f"[PhenocamStartupFetcher] Error: {e}")
+            self.result.emit(None)
+
+
+class USGSStartupFetcher(QtCore.QThread):
+    """Fetches USGS HIVIS camera dictionary in a background thread at startup."""
+    result = QtCore.pyqtSignal(object, object, object)  # (hivis, cameraDictionary, cameraList)
+
+    def __init__(self, usgs_client, parent=None):
+        super().__init__(parent)
+        self._usgs = usgs_client
+
+    def run(self):
+        try:
+            from GRIME_AI.usgs.usgs_hivis import USGS_HIVIS
+            hivis    = USGS_HIVIS()
+            cam_dict = hivis.get_camera_dictionary()
+            cam_list = hivis.get_camera_list()
+            self.result.emit(hivis, cam_dict, cam_list)
+        except Exception as e:
+            print(f"[USGSStartupFetcher] Error: {e}")
+            self.result.emit(None, {}, [])
+
+
+class NEONStartupFetcher(QtCore.QThread):
+    """Fetches NEON field site table in a background thread at startup."""
+    result = QtCore.pyqtSignal(object, object)  # (status, siteList)
+
+    def __init__(self, neon_api, parent=None):
+        super().__init__(parent)
+        self._neon_api = neon_api
+
+    def run(self):
+        try:
+            status, site_list = self._neon_api.readFieldSiteTable()
+            self.result.emit(status, site_list)
+        except Exception as e:
+            print(f"[NEONStartupFetcher] Error: {e}")
+            self.result.emit(None, [])
+
+
 class NWISParameterFetcher(QtCore.QThread):
     """
     Fetches available NWIS time series parameters for a given nwisId
@@ -560,10 +613,14 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     # CLASS INITIALIZATION
     # ------------------------------------------------------------------------------------------------------------------
-    def __init__(self, parent=None, win=None, session=None):
+    def __init__(self, parent=None, win=None, session=None, splash=None):
         super(MainWindow, self).__init__(parent)
         self.mainwin = win
         self.session = session
+        self._splash = splash
+        self._usgs_startup_ready = False
+        self._neon_startup_ready = False
+        self._phenocam_startup_ready = False
         ui_path = os.path.join(os.path.dirname(__file__), "resources", "ui", "neonAIgui.ui")
         uic.loadUi(ui_path, self)
 
@@ -594,29 +651,12 @@ class MainWindow(QMainWindow):
 
 
         # ------------------------------------------------------------------------------------------------------------------
-        # DISPLAY SPLASH SCREEN
-        # ------------------------------------------------------------------------------------------------------------------
-        base_path = Path(__file__).resolve().parent
-        splash_dir = base_path / "resources" / "splash_screens"
-
-        splash = GRIME_AI_SplashScreen(
-            QPixmap(os.path.join(splash_dir, "Splash_007.jpg")),
-            strVersion=SW_VERSION
-        )
-        splash.show(self)
-
-        splash = GRIME_AI_SplashScreen(
-            QPixmap(os.path.join(splash_dir, "GRIME-AI Logo.jpg")),
-            delay=5
-        )
-        splash.show(self)
-
-        # ------------------------------------------------------------------------------------------------------------------
         # INITIALIZE VARIABLES
         # ------------------------------------------------------------------------------------------------------------------
         self.myHIVIS = None
         self.cameraDictionary = {}
         self.phenocam_site_dictionary = {}
+        self.NEON_siteList = []
 
         # ------------------------------------------------------------------------------------------------------------------
         # CREATE REQUIRED FOLDERS IN THE USER'S DOCUMENTS FOLDER
@@ -776,55 +816,11 @@ class MainWindow(QMainWindow):
         self.usgs_checking = False  # Track if currently checking
 
         # ------------------------------------------------------------------------------------------------------------------
-        # NIMS
-        # ------------------------------------------------------------------------------------------------------------------
-        try:
-            from GRIME_AI.usgs.usgs_hivis import USGS_HIVIS
-
-            self.myHIVIS = USGS_HIVIS()
-            self.cameraDictionary = self.myHIVIS.get_camera_dictionary()
-            self.cameraList = self.myHIVIS.get_camera_list()
-            
-            # ========================================================================
-            # CONNECT USGS SERVICE TO HIVIS FOR CACHE ACCESS
-            # This allows download_images() to use cached filenames from get_image_count()
-            # ========================================================================
-            self.usgs._svc.hivis = self.myHIVIS
-            print("Connected USGS service to HIVIS for cache access")
-            
-            self.USGS_listboxSites.clear()
-            for camID in self.cameraList:
-                site_item = QTreeWidgetItem([camID])
-                site_item.setData(0, QtCore.Qt.UserRole, camID)
-                for line in self.myHIVIS.get_camera_info(camID):
-                    child = QTreeWidgetItem([line])
-                    child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
-                    site_item.addChild(child)
-                # Placeholder so the expand arrow appears and triggers itemExpanded
-                placeholder = QTreeWidgetItem(["  Time series: loading..."])
-                placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
-                placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
-                site_item.addChild(placeholder)
-                self.USGS_listboxSites.addTopLevelItem(site_item)
-
-            self.USGS_listboxSites.itemExpanded.connect(self._on_usgs_site_expanded)
-
-            self.USGS_listboxSites.collapseAll()
-
-            self.USGS_listboxSites.show()
-
-            cameraIndex = 1
-            default_item = self.USGS_listboxSites.topLevelItem(cameraIndex)
-            if default_item:
-                self.USGS_listboxSites.setCurrentItem(default_item)
-
-            strCamID = self.USGS_listboxSites.currentItem().data(0, QtCore.Qt.UserRole)
-
-            self.USGS_updateSiteInfo(1)
-
-        except Exception as e:
-            msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS/HIVIS Database!')
-            response = msgBox.displayMsgBox()
+        # NIMS — fetch camera data in background thread
+        self.USGS_listboxSites.clear()
+        self._usgs_startup_fetcher = USGSStartupFetcher(self.usgs, parent=self)
+        self._usgs_startup_fetcher.result.connect(self._on_usgs_startup_result)
+        self._usgs_startup_fetcher.start()
 
         #self.edit_USGSSaveFilePath.setText("C:\\Users\\Astrid Haugen\\Documents\\GRIME-AI\\Downloads\\USGS_Test")
 
@@ -855,15 +851,78 @@ class MainWindow(QMainWindow):
         # INITIALIZE GUI CONTROLS
         # frame.NEON_listboxSites.setCurrentRow(1)
 
-        # GET LIST OF ALL SITES ON NEON
-        # if frame.checkBoxNEONSites.isChecked():
-        print("Download NEON Field Site Table from NEON website...")
-        myNEON_API = NEON_API()
-        _, self.NEON_siteList = myNEON_API.readFieldSiteTable()
+        geojson_str = None
+        self.init_openstreetmap(self.cameraDictionary, redList=[], geojson_str=geojson_str)
 
-        if len(self.NEON_siteList) == 0:
+        # Fetch NEON field site table in background — populates NEON tab and triggers PhenoCam fetch
+        print("Fetching NEON Field Site Table in background...")
+        self._neon_api = NEON_API()
+        self._neon_startup_fetcher = NEONStartupFetcher(self._neon_api, parent=self)
+        self._neon_startup_fetcher.result.connect(self._on_neon_startup_result)
+        self._neon_startup_fetcher.start()
+
+        # Show main window
+        self.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_usgs_startup_result(self, hivis, camera_dict, camera_list):
+        """Callback when USGS HIVIS data has been fetched in background."""
+        if hivis is None:
+            msgBox = GRIME_AI_QMessageBox('USGS NIMS Error', 'Unable to access USGS NIMS/HIVIS Database!')
+            msgBox.displayMsgBox()
+            return
+
+        self.myHIVIS         = hivis
+        self.cameraDictionary = camera_dict
+        self.cameraList       = camera_list
+
+        # Connect USGS service to HIVIS for cache access
+        try:
+            self.usgs._svc.hivis = self.myHIVIS
+            print("Connected USGS service to HIVIS for cache access")
+        except Exception as e:
+            print(f"[USGS startup] Could not connect HIVIS to USGS service: {e}")
+
+        self.USGS_listboxSites.clear()
+        for camID in self.cameraList:
+            site_item = QTreeWidgetItem([camID])
+            site_item.setData(0, QtCore.Qt.UserRole, camID)
+            for line in self.myHIVIS.get_camera_info(camID):
+                child = QTreeWidgetItem([line])
+                child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                site_item.addChild(child)
+            placeholder = QTreeWidgetItem(["  Time series: loading..."])
+            placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
+            placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
+            site_item.addChild(placeholder)
+            self.USGS_listboxSites.addTopLevelItem(site_item)
+
+        self.USGS_listboxSites.itemExpanded.connect(self._on_usgs_site_expanded)
+        self.USGS_listboxSites.collapseAll()
+        self.USGS_listboxSites.show()
+
+        cameraIndex = 1
+        default_item = self.USGS_listboxSites.topLevelItem(cameraIndex)
+        if default_item:
+            self.USGS_listboxSites.setCurrentItem(default_item)
+
+        self.USGS_updateSiteInfo(1)
+
+        # Add USGS pins to map now that we have the camera dictionary
+        for name, coords in self.cameraDictionary.items():
+            self.osm_widget.add_pin(coords["lat"], coords["lng"], color="usgs_green", label=name)
+
+        self._usgs_startup_ready = True
+        self._check_and_dismiss_splash()
+
+    def _on_neon_startup_result(self, status, site_list):
+        """Callback when NEON field site table has been fetched in background."""
+        self.NEON_siteList = site_list if site_list else []
+
+        if not self.NEON_siteList:
             print("NEON Field Site Table from NEON website FAILED...")
-        # IF THERE ARE FIELD SITE TABLES AVAILABLE, ENABLE GUI WIDGETS PERTAINING TO WEB SITE DATA/IMAGES
         else:
             print("Populate NEON Sites tab on GUI...")
             self.NEON_listboxSites.clear()
@@ -890,7 +949,10 @@ class MainWindow(QMainWindow):
 
             self.NEON_listboxSites.collapseAll()
 
-            #JES - TEMPORARILY SET BARCO LAKE AS THE DEFAULT SELECTION
+            # Add NEON map pins
+            for coords in self.NEON_siteList:
+                self.osm_widget.add_pin(coords.latitude, coords.longitude, color="gold", label=coords.siteName)
+
             try:
                 default_item = self.NEON_listboxSites.topLevelItem(2)
                 if default_item:
@@ -900,39 +962,38 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        self.show()
+        # Chain: now fetch PhenoCam in background
+        self._phenocam_startup_fetcher = PhenocamStartupFetcher(self._neon_api, parent=self)
+        self._phenocam_startup_fetcher.result.connect(self._on_phenocam_startup_result)
+        self._phenocam_startup_fetcher.start()
 
-        #shapefile_path = self.osm_widget.load_shapefile("Ogallala", "NE_Aggregated_polygons.shp")
-        #geojson_str = self.shapefile_to_geojson_string(shapefile_path)
-        geojson_str = None
-        self.init_openstreetmap(self.cameraDictionary, redList=self.NEON_siteList, geojson_str=geojson_str)
-
-        # -----     USGS NIMS     -----     USGS NIMS     -----     USGS NIMS     -----     USGS NIMS     -----
-        if self.cameraDictionary:
-            for name, coords in self.cameraDictionary.items():
-                self.osm_widget.add_pin(coords["lat"], coords["lng"], color="usgs_green", label=name)
-
-        # -----     NEON     -----     NEON     -----     NEON     -----     NEON     -----     NEON     -----
-        if self.NEON_siteList:
-            for coords in self.NEON_siteList:
-                self.osm_widget.add_pin(coords.latitude, coords.longitude, color="gold", label=coords.siteName)
-
-        # -----      PHENOCAM      -----      PHENOCAM      -----      PHENOCAM      -----      PHENOCAM      -----
-        try:
-            self.phenocam_site_dictionary = myNEON_API.scrape_phenocam_table()
-        except Exception as e:
-            print('ERROR: Unable to access Phenocam site information on Phenocam server!')
-
-        if self.phenocam_site_dictionary:
-            for site_id, info in self.phenocam_site_dictionary.items():
-                self.osm_widget.add_pin(info["lat"], info["lon"], color="yellow", label=site_id)
-
-            self.populate_phenocam_tree()
-            self.setup_phenocam_right_panel()
+        self._neon_startup_ready = True
+        self._check_and_dismiss_splash()
+        #JES self._check_startup_complete()
 
     # ------------------------------------------------------------------------------------------------------------------
-    #
     # ------------------------------------------------------------------------------------------------------------------
+    def _on_phenocam_startup_result(self, data):
+        """Callback when PhenoCam site table has been fetched in background."""
+        if not data:
+            print("ERROR: Unable to access Phenocam site information on Phenocam server!")
+            return
+        self.phenocam_site_dictionary = data
+        for site_id, info in self.phenocam_site_dictionary.items():
+            self.osm_widget.add_pin(info["lat"], info["lon"], color="yellow", label=site_id)
+        self.populate_phenocam_tree()
+        self.setup_phenocam_right_panel()
+
+        self._phenocam_startup_ready = True
+        self._check_and_dismiss_splash()
+
+    def _check_and_dismiss_splash(self):
+        """Dismiss splash only when USGS, NEON, and PhenoCam have all completed."""
+        if self._usgs_startup_ready and self._neon_startup_ready and self._phenocam_startup_ready:
+            if self._splash is not None:
+                self._splash.dismiss()
+                self._splash = None
+
     def init_openstreetmap(self, cameraDictionary, redList=None, geojson_str=None):
         osm_tab = self.findChild(QWidget, "tab_GoogleMaps")
 
@@ -968,6 +1029,7 @@ class MainWindow(QMainWindow):
           └─ ROI name
              └─ Hyperlink items (opened in browser on click)
         """
+        import pandas as pd
         api = GRIME_AI_Phenocam_API()
         cameras_df = api.get_cameras(all_records=True)
         rois_df    = api.get_roilists(all_records=True)
@@ -1387,6 +1449,7 @@ class MainWindow(QMainWindow):
     #
     # ------------------------------------------------------------------------------------------------------------------
     def shapefile_to_geojson_string(self, shapefile_path):
+        import pandas as pd
         import geopandas as gpd
 
         gdf = gpd.read_file(shapefile_path)
@@ -2454,6 +2517,7 @@ class MainWindow(QMainWindow):
         CONFIG_FILENAME = "site_config.json"
         site_configuration_file = os.path.normpath(os.path.join(settings_folder, CONFIG_FILENAME))
 
+        from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
         hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
 
         hyperparameterDlg.ml_train_signal.connect(train_main)
@@ -2552,6 +2616,7 @@ class MainWindow(QMainWindow):
             imageFilename = dailyImagesList.getVisibleList()[currentImageIndex].fullPathAndFilename
 
             if self.compositeSliceDlg is None:
+                from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
                 self.compositeSliceDlg = GRIME_AI_CompositeSliceDlg()
                 self.compositeSliceDlg.compositeSliceGenerateSignal.connect(self.generateCompositeSlices)
                 self.compositeSliceDlg.compositeSliceCancelSignal.connect(self.closeCompositeSlices)
@@ -2644,6 +2709,7 @@ class MainWindow(QMainWindow):
 
 
     def menubarExtractCOCOMasks(self):
+        from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
         self.COCOdlg = GRIME_AI_ExportCOCOMasksDlg(self)
 
         self.COCOdlg.COCO_signal_ok.connect(self.accepted_COCODlg)
@@ -2766,6 +2832,7 @@ class MainWindow(QMainWindow):
         # Create and show new dialog
         try:
             print("[DEBUG] Creating new Image Organizer dialog")
+            from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
             self.imageOrganizerDlg = GRIME_AI_ImageOrganizerDlg(self)
             print("[DEBUG] Showing Image Organizer dialog")
             self.imageOrganizerDlg.show()
@@ -2781,6 +2848,7 @@ class MainWindow(QMainWindow):
     def toolbarButtonTemporalAveraging(self):
         """Launch the Temporal Averaging dialog."""
         if not hasattr(self, "_temporalAvgDlg") or self._temporalAvgDlg is None:
+            from GRIME_AI.dialogs.temporal_averaging.GRIME_AI_TemporalAveragingDlg import GRIME_AI_TemporalAveragingDlg
             self._temporalAvgDlg = GRIME_AI_TemporalAveragingDlg(self)
         self._temporalAvgDlg.show()
         self._temporalAvgDlg.raise_()
@@ -2792,6 +2860,7 @@ class MainWindow(QMainWindow):
     # ======================================================================================================================
     def toolbarButtonReleaseNotes(self):
         global frame
+        from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
         releaseNotesDlg = GRIME_AI_ReleaseNotesDlg(frame)
 
         releaseNotesDlg.show()
@@ -2811,6 +2880,7 @@ class MainWindow(QMainWindow):
     # ======================================================================================================================
     def toolbarButtonEdgeDetection(self):
         global frame
+        from GRIME_AI.dialogs.edge_detection.GRIME_AI_EdgeDetectionDlg import GRIME_AI_EdgeDetectionDlg
         self.edgeDetectionDlg = GRIME_AI_EdgeDetectionDlg(frame)
 
         self.edgeDetectionDlg.edgeDetectionSignal.connect(self.edgeDetectionMethod)
@@ -2865,6 +2935,7 @@ class MainWindow(QMainWindow):
     # ======================================================================================================================
     def onMyToolBarFileFolder(self):
         global frame
+        from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
         self.fileFolderDlg = GRIME_AI_FileUtilitiesDlg(frame)
 
         self.fileFolderDlg.create_composite_slice_signal.connect(self.menubarCompositeSlices)
@@ -2898,6 +2969,7 @@ class MainWindow(QMainWindow):
             global currentImageCount
 
             if gFrameCount > 0:
+                from GRIME_AI.dialogs.image_navigation.GRIME_AI_ImageNavigationDlg import GRIME_AI_ImageNavigationDlg
                 self.imageNavigationDlg = GRIME_AI_ImageNavigationDlg(frame)
                 self.imageNavigationDlg.imageIndexSignal.connect(self.getImageIndex)
 
@@ -2945,6 +3017,7 @@ class MainWindow(QMainWindow):
             if self.maskEditorDlg == None:
                 self.labelOriginalImage.setDrawingMode(DrawingMode.COLOR_SEGMENTATION)
 
+                from GRIME_AI.dialogs.color_segmentation.GRIME_AI_ColorSegmentationDlg import GRIME_AI_ColorSegmentationDlg
                 self.colorSegmentationDlg = GRIME_AI_ColorSegmentationDlg()
 
                 self.colorSegmentationDlg.colorSegmentation_Signal.connect(self.colorSegmentation)
@@ -3060,6 +3133,7 @@ class MainWindow(QMainWindow):
             if self.colorSegmentationDlg == None:
                 self.labelOriginalImage.setDrawingMode(DrawingMode.MASK)
 
+                from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
                 self.maskEditorDlg = GRIME_AI_MaskEditorDlg()
 
                 self.maskEditorDlg.addMask_Signal.connect(self.addMask)
@@ -3964,6 +4038,7 @@ def closest_colour(requested_colour):
 #
 # ======================================================================================================================
 def top_colors(image, n):
+    import pandas as pd
     # convert the image to rgb
     # image = image.convert('RGB')
 
@@ -4526,7 +4601,26 @@ def run_gui():
 
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
-    frame = MainWindow()
+
+    # Apply dark theme if the OS is in dark mode
+    try:
+        import darkdetect
+        import qdarkstyle
+        if darkdetect.isDark():
+            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
+    except ImportError:
+        pass  # darkdetect or qdarkstyle not installed — continue with default theme
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # SHOW SPLASH IN SEPARATE PROCESS — stays visible throughout all of MainWindow init
+    # ------------------------------------------------------------------------------------------------------------------
+    _splash_dir = Path(__file__).resolve().parent / "resources" / "splash_screens"
+    _splash = GRIME_AI_SplashScreen(
+        image_path=os.path.join(_splash_dir, "GRIME-AI Logo.jpg")
+    )
+    _splash.show()   # blocks briefly until splash is painted, then returns
+
+    frame = MainWindow(splash=_splash)
 
     frame.move(app.desktop().screen().rect().center() - frame.rect().center())
 
@@ -5357,6 +5451,7 @@ def train_main(cfg: DictConfig) -> None:
 
         # BEGIN TRAINING THE MODEL
         print("Instantiate MLModelTraining class...")
+        from GRIME_AI.ml_core.ml_model_training import MLModelTraining
         myML_Dispatcher = MLModelTraining(cfg, parent_widget=hyperparameterDlg)
 
         print("Execute ML training...")
@@ -5399,6 +5494,7 @@ def segment_main(cfg: DictConfig) -> None:
         except Exception:
             pass
 
+        from GRIME_AI.ml_core.ml_image_segmentation import MLImageSegmentation
         mySegmentation = MLImageSegmentation(cfg, parent_widget=hyperparameterDlg)
         mySegmentation.ML_Segmentation_Dispatcher(copy_original_image, save_masks, selected_label_categories, mode=selected_segment_model)
 

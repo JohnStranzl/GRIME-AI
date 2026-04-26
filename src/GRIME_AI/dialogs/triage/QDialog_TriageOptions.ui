@@ -3,435 +3,438 @@
  <class>TriageOptionsDlg</class>
  <widget class="QDialog" name="TriageOptionsDlg">
   <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>559</width>
-    <height>272</height>
-   </rect>
+   <rect><x>0</x><y>0</y><width>520</width><height>520</height></rect>
   </property>
-  <property name="windowTitle">
-   <string>Dialog</string>
-  </property>
-  <widget class="QDialogButtonBox" name="dialogButtonBox_ApplyCancel">
-   <property name="geometry">
-    <rect>
-     <x>120</x>
-     <y>230</y>
-     <width>321</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="layoutDirection">
-    <enum>Qt::LeftToRight</enum>
-   </property>
-   <property name="autoFillBackground">
-    <bool>false</bool>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
-   <property name="centerButtons">
-    <bool>true</bool>
-   </property>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_12">
-   <property name="geometry">
-    <rect>
-     <x>220</x>
-     <y>130</y>
-     <width>160</width>
-     <height>80</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="title">
-    <string>Blur</string>
-   </property>
-   <widget class="QDoubleSpinBox" name="doubleSpinBoxBlurThreshhold">
-    <property name="geometry">
-     <rect>
-      <x>90</x>
-      <y>25</y>
-      <width>62</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="minimum">
-     <double>-100.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>100.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>17.500000000000000</double>
-    </property>
-   </widget>
-   <widget class="QLabel" name="labelBlurThreshhold_2">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>28</y>
-      <width>61</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>Threshold</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="labelShiftSize_2">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>56</y>
-      <width>61</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>Shift Size</string>
-    </property>
-   </widget>
-   <widget class="QSpinBox" name="spinBoxShiftSize">
-    <property name="geometry">
-     <rect>
-      <x>90</x>
-      <y>53</y>
-      <width>62</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="maximum">
-     <number>1000</number>
-    </property>
-    <property name="value">
-     <number>60</number>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_11">
-   <property name="geometry">
-    <rect>
-     <x>399</x>
-     <y>130</y>
-     <width>141</width>
-     <height>80</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="title">
-    <string>Brightness</string>
-   </property>
-   <widget class="QLabel" name="labelBrightnessMin_3">
-    <property name="geometry">
-     <rect>
-      <x>15</x>
-      <y>26</y>
-      <width>31</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>min</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="labelBrightnessMin_4">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>56</y>
-      <width>31</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>MAX</string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="doubleSpinBoxBrightnessMin">
-    <property name="geometry">
-     <rect>
-      <x>60</x>
-      <y>23</y>
-      <width>71</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="maximum">
-     <double>255.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>65.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="doubleSpinBoxBrightnessMax">
-    <property name="geometry">
-     <rect>
-      <x>60</x>
-      <y>53</y>
-      <width>71</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="maximum">
-     <double>255.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>180.000000000000000</double>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>20</y>
-     <width>191</width>
-     <height>191</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="title">
-    <string>Triage Options</string>
-   </property>
-   <widget class="QWidget" name="layoutWidget">
-    <property name="geometry">
-     <rect>
-      <x>18</x>
-      <y>35</y>
-      <width>151</width>
-      <height>141</height>
-     </rect>
-    </property>
-    <layout class="QVBoxLayout" name="verticalLayout">
+  <property name="windowTitle"><string>Image Triage Options</string></property>
+  <layout class="QVBoxLayout" name="verticalLayoutMain">
+
+   <!-- Row 1: Output + Alignment side by side -->
+   <item>
+    <layout class="QHBoxLayout" name="hLayoutTopRow">
+
      <item>
-      <widget class="QCheckBox" name="checkBoxTriageImagesReport">
-       <property name="font">
-        <font>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Generate Report</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
+      <widget class="QGroupBox" name="groupBox_Output">
+       <property name="title"><string>Output</string></property>
+       <layout class="QVBoxLayout" name="vLayoutOutput">
+        <item>
+         <widget class="QCheckBox" name="checkBoxTriageImagesReport">
+          <property name="text"><string>Generate report</string></property>
+          <property name="checked"><bool>true</bool></property>
+          <property name="toolTip"><string>Saves a CSV file in the image folder with focus, brightness, and quality scores for every image processed.</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkBoxTriageImagesMove">
+          <property name="text"><string>Move bad images</string></property>
+          <property name="toolTip"><string>Moves images that fail quality checks into a MovedImages subfolder so they are excluded from downstream processing.</string></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QGroupBox" name="groupBox_Alignment">
+       <property name="title"><string>Alignment</string></property>
+       <layout class="QVBoxLayout" name="vLayoutAlignment">
+        <item>
+         <widget class="QCheckBox" name="checkBox_TriageImages_CorrectAlignment">
+          <property name="text"><string>Correct alignment</string></property>
+          <property name="checked"><bool>false</bool></property>
+          <property name="toolTip"><string>Detects and corrects camera rotation and shift between images and a reference image. Requires a reference image to be selected below.</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkBox_TriageImages_SavePolylines">
+          <property name="text"><string>Save alignment overlays</string></property>
+          <property name="toolTip"><string>Saves diagnostic overlay images showing how each image was matched to the reference. Useful for verifying alignment quality.</string></property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="hLayoutRefImage">
+          <item>
+           <widget class="QLineEdit" name="lineEdit_ReferenceImagePath">
+            <property name="placeholderText"><string>No reference image selected</string></property>
+            <property name="readOnly"><bool>true</bool></property>
+            <property name="toolTip"><string>Select a known-good reference image from the same camera. Used for alignment correction.</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_SelectReferenceImage">
+            <property name="text"><string>Browse</string></property>
+            <property name="toolTip"><string>Select a known-good reference image from the same camera.</string></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="hLayoutRotation">
+          <item>
+           <widget class="QLabel" name="labelRotationThreshold">
+            <property name="text"><string>Rotation threshold (°)</string></property>
+            <property name="toolTip"><string>Images rotated more than this many degrees from the reference are flagged for realignment.</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="doubleSpinBox_TriageOptions_RotationThreshold">
+            <property name="toolTip"><string>Images rotated more than this many degrees from the reference are flagged for realignment.</string></property>
+            <property name="maximum"><double>180.000000000000000</double></property>
+            <property name="singleStep"><double>0.010000000000000</double></property>
+            <property name="value"><double>0.250000000000000</double></property>
+            <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacerRotation">
+            <property name="orientation"><enum>Qt::Horizontal</enum></property>
+            <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+    </layout>
+   </item>
+
+   <!-- Blur detection -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_Blur">
+     <property name="title"><string>Blur detection</string></property>
+     <layout class="QVBoxLayout" name="vLayoutBlur">
+
+      <!-- Edge-based -->
+      <item>
+       <widget class="QCheckBox" name="checkBox_UseLaplacian">
+        <property name="text"><string>Blur sensitivity (edge-based)</string></property>
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable the edge-sharpness blur detector. Detects focus blur and camera vibration blur. Recommended for fixed-mounted cameras.</string></property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridLapSlider">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelLapLeft">
+          <property name="text"><string>        Less sensitive</string></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="labelLapMiddle">
+          <property name="text"><string>Balanced</string></property>
+          <property name="alignment"><set>Qt::AlignHCenter|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelLapRight">
+          <property name="text"><string>More sensitive</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_lap_value">
+          <property name="text"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+          <property name="maximumWidth"><number>55</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="3">
+         <widget class="QSlider" name="sliderLaplacian">
+          <property name="singleStep"><number>1</number></property>
+          <property name="pageStep"><number>1</number></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>500</number></property>
+          <property name="value"><number>150</number></property>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+          <property name="tickInterval"><number>1</number></property>
+          <property name="toolTip"><string>Adjusts how aggressively the edge-based detector flags blurry images. Use Calibrate to find the best setting for your camera.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="0" colspan="3">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxLaplacianThreshold">
+          <property name="visible"><bool>false</bool></property>
+          <property name="minimum"><double>0.000000000000000</double></property>
+          <property name="maximum"><double>1000.000000000000000</double></property>
+          <property name="value"><double>150.000000000000000</double></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Frequency-based -->
+      <item>
+       <widget class="QCheckBox" name="checkBox_UseFftBlur">
+        <property name="text"><string>Blur sensitivity (frequency-based)</string></property>
+        <property name="checked"><bool>false</bool></property>
+        <property name="toolTip"><string>Enable the frequency-based blur detector. Useful for detecting large-scale blur patterns. Disabled by default — edge-based detection alone is sufficient for fixed-camera blur.</string></property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridFftSlider">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelFftLeft">
+          <property name="text"><string>        Less sensitive</string></property>
+          <property name="enabled"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="labelFftMiddle">
+          <property name="text"><string>Balanced</string></property>
+          <property name="enabled"><bool>true</bool></property>
+          <property name="alignment"><set>Qt::AlignHCenter|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelFftRight">
+          <property name="text"><string>More sensitive</string></property>
+          <property name="enabled"><bool>true</bool></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_fft_value">
+          <property name="text"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+          <property name="maximumWidth"><number>55</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="3">
+         <widget class="QSlider" name="sliderFftBlur">
+          <property name="enabled"><bool>true</bool></property>
+          <property name="singleStep"><number>1</number></property>
+          <property name="pageStep"><number>1</number></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>30</number></property>
+          <property name="value"><number>21</number></property>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+          <property name="tickInterval"><number>1</number></property>
+          <property name="toolTip"><string>Adjusts how aggressively the frequency-based detector flags blurry images. Use Calibrate to find the best setting for your camera.</string></property>
+         </widget>
+        </item>
+        <!-- Hidden spinbox stores actual value — driven by slider via code -->
+        <item row="2" column="0" colspan="3">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxBlurThreshhold">
+          <property name="enabled"><bool>true</bool></property>
+          <property name="visible"><bool>false</bool></property>
+          <property name="minimum"><double>-100.000000000000000</double></property>
+          <property name="maximum"><double>100.000000000000000</double></property>
+          <property name="value"><double>21.000000000000000</double></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Uniform area filter (sub-item of frequency-based) -->
+      <item>
+       <layout class="QGridLayout" name="gridUniformSlider">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelUniformLeft">
+          <property name="text"><string>        Less filtering</string></property>
+          <property name="enabled"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="labelUniformMiddle">
+          <property name="text"><string>Uniform area filter</string></property>
+          <property name="enabled"><bool>true</bool></property>
+          <property name="alignment"><set>Qt::AlignHCenter|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelUniformRight">
+          <property name="text"><string>More filtering</string></property>
+          <property name="enabled"><bool>true</bool></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_uaf_value">
+          <property name="text"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+          <property name="maximumWidth"><number>55</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="3">
+         <widget class="QSlider" name="sliderUniformArea">
+          <property name="enabled"><bool>true</bool></property>
+          <property name="singleStep"><number>1</number></property>
+          <property name="pageStep"><number>1</number></property>
+          <property name="minimum"><number>1</number></property>
+          <property name="maximum"><number>100</number></property>
+          <property name="value"><number>40</number></property>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+          <property name="tickInterval"><number>1</number></property>
+          <property name="toolTip"><string>Controls how much large uniform areas like sky and water are filtered out before measuring sharpness. Only applies when frequency-based detection is enabled.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="0" colspan="3">
+         <widget class="QSpinBox" name="spinBoxShiftSize">
+          <property name="enabled"><bool>true</bool></property>
+          <property name="visible"><bool>false</bool></property>
+          <property name="minimum"><number>1</number></property>
+          <property name="maximum"><number>200</number></property>
+          <property name="value"><number>40</number></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Brightness -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_Brightness">
+     <property name="title"><string>Brightness</string></property>
+     <layout class="QVBoxLayout" name="vLayoutBrightness">
+
+      <!-- Too dark -->
+      <item>
+       <widget class="QLabel" name="labelTooDark">
+        <property name="text"><string>Too dark</string></property>
+        <property name="toolTip"><string>Controls how dark an image must be before it is flagged. More sensitive = flags more dark images.</string></property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridDarkSlider">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelDarkLeft">
+          <property name="text"><string>Less sensitive</string></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="labelDarkMiddle">
+          <property name="text"><string>Balanced</string></property>
+          <property name="alignment"><set>Qt::AlignHCenter|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelDarkRight">
+          <property name="text"><string>More sensitive</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_bmin_value">
+          <property name="text"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+          <property name="maximumWidth"><number>55</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="3">
+         <widget class="QSlider" name="sliderBrightnessMin">
+          <property name="singleStep"><number>1</number></property>
+          <property name="pageStep"><number>1</number></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>255</number></property>
+          <property name="value"><number>40</number></property>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+          <property name="tickInterval"><number>1</number></property>
+          <property name="toolTip"><string>Controls how dark an image must be before it is flagged. More sensitive = flags more dark images. Use Calibrate to find the best setting.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="0" colspan="3">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxBrightnessMin">
+          <property name="visible"><bool>false</bool></property>
+          <property name="maximum"><double>255.000000000000000</double></property>
+          <property name="value"><double>40.000000000000000</double></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Too bright -->
+      <item>
+       <widget class="QLabel" name="labelTooBright">
+        <property name="text"><string>Too bright</string></property>
+        <property name="toolTip"><string>Controls how bright an image must be before it is flagged. More sensitive = flags more bright images.</string></property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridBrightSlider">
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelBrightLeft">
+          <property name="text"><string>Less sensitive</string></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="labelBrightMiddle">
+          <property name="text"><string>Balanced</string></property>
+          <property name="alignment"><set>Qt::AlignHCenter|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelBrightRight">
+          <property name="text"><string>More sensitive</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_bmax_value">
+          <property name="text"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+          <property name="maximumWidth"><number>55</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="3">
+         <widget class="QSlider" name="sliderBrightnessMax">
+          <property name="singleStep"><number>1</number></property>
+          <property name="pageStep"><number>1</number></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>255</number></property>
+          <property name="value"><number>215</number></property>
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+          <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+          <property name="tickInterval"><number>1</number></property>
+          <property name="toolTip"><string>Controls how bright an image must be before it is flagged. More sensitive = flags more bright images. Use Calibrate to find the best setting.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="0" colspan="3">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxBrightnessMax">
+          <property name="visible"><bool>false</bool></property>
+          <property name="maximum"><double>255.000000000000000</double></property>
+          <property name="value"><double>215.000000000000000</double></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Dialog buttons -->
+   <item>
+    <layout class="QHBoxLayout" name="hLayoutDialogButtons">
+     <item>
+      <widget class="QPushButton" name="pushButton_Calibrate">
+       <property name="text"><string>Calibrate...</string></property>
+       <property name="toolTip"><string>Open the calibration tool to automatically determine optimal blur and brightness thresholds from your own labelled images.</string></property>
       </widget>
      </item>
      <item>
-      <widget class="QCheckBox" name="checkBoxTriageImagesMove">
-       <property name="font">
-        <font>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Check this box to move bad images into the subfolder &quot;MovedImages&quot; which is automatically created beneath the image folder.</string>
-       </property>
-       <property name="text">
-        <string>Move Bad Images</string>
-       </property>
-      </widget>
+      <spacer name="spacerDialogButtons">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+      </spacer>
      </item>
      <item>
-      <widget class="QCheckBox" name="checkBox_TriageImages_SavePolylines">
-       <property name="font">
-        <font>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Check this box to move bad images into the subfolder &quot;MovedImages&quot; which is automatically created beneath the image folder.</string>
-       </property>
-       <property name="text">
-        <string>Save Polylines</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="checkBox_TriageImages_CorrectAlignment">
-       <property name="font">
-        <font>
-         <weight>50</weight>
-         <bold>false</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Check this box to move bad images into the subfolder &quot;MovedImages&quot; which is automatically created beneath the image folder.</string>
-       </property>
-       <property name="text">
-        <string>Correct Alignment</string>
-       </property>
-       <property name="checked">
-        <bool>false</bool>
-       </property>
+      <widget class="QDialogButtonBox" name="dialogButtonBox_ApplyCancel">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="standardButtons"><set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set></property>
+       <property name="centerButtons"><bool>false</bool></property>
       </widget>
      </item>
     </layout>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_2">
-   <property name="geometry">
-    <rect>
-     <x>220</x>
-     <y>20</y>
-     <width>321</width>
-     <height>101</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <weight>75</weight>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="title">
-    <string>Image Transformation</string>
-   </property>
-   <widget class="QPushButton" name="pushButton_SelectReferenceImage">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>30</y>
-      <width>281</width>
-      <height>31</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Select Reference Image</string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="labelBrightnessMin_5">
-    <property name="geometry">
-     <rect>
-      <x>7</x>
-      <y>72</y>
-      <width>121</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>Rotation Threshold</string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="doubleSpinBox_TriageOptions_RotationThreshold">
-    <property name="geometry">
-     <rect>
-      <x>128</x>
-      <y>71</y>
-      <width>62</width>
-      <height>22</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-    </property>
-    <property name="maximum">
-     <double>255.000000000000000</double>
-    </property>
-    <property name="singleStep">
-     <double>0.010000000000000</double>
-    </property>
-    <property name="value">
-     <double>0.250000000000000</double>
-    </property>
-   </widget>
-  </widget>
+   </item>
+
+  </layout>
  </widget>
  <resources/>
  <connections>
@@ -441,14 +444,8 @@
    <receiver>TriageOptionsDlg</receiver>
    <slot>accept()</slot>
    <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>254</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>157</x>
-     <y>274</y>
-    </hint>
+    <hint type="sourcelabel"><x>260</x><y>500</y></hint>
+    <hint type="destinationlabel"><x>260</x><y>520</y></hint>
    </hints>
   </connection>
   <connection>
@@ -457,14 +454,8 @@
    <receiver>TriageOptionsDlg</receiver>
    <slot>reject()</slot>
    <hints>
-    <hint type="sourcelabel">
-     <x>316</x>
-     <y>260</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>286</x>
-     <y>274</y>
-    </hint>
+    <hint type="sourcelabel"><x>260</x><y>500</y></hint>
+    <hint type="destinationlabel"><x>260</x><y>520</y></hint>
    </hints>
   </connection>
  </connections>
