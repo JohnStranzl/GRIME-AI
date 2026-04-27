@@ -114,7 +114,6 @@
                    <font>
                     <family>Arial</family>
                     <pointsize>12</pointsize>
-                    <weight>75</weight>
                     <bold>true</bold>
                    </font>
                   </property>
@@ -151,7 +150,6 @@
                    <font>
                     <family>Arial</family>
                     <pointsize>12</pointsize>
-                    <weight>75</weight>
                     <bold>true</bold>
                    </font>
                   </property>
@@ -227,7 +225,6 @@
                    <font>
                     <family>Arial</family>
                     <pointsize>12</pointsize>
-                    <weight>75</weight>
                     <bold>true</bold>
                    </font>
                   </property>
@@ -291,7 +288,6 @@
                      <font>
                       <family>Arial</family>
                       <pointsize>12</pointsize>
-                      <weight>75</weight>
                       <bold>true</bold>
                      </font>
                     </property>
@@ -525,7 +521,6 @@
          <font>
           <family>Arial</family>
           <pointsize>11</pointsize>
-          <weight>50</weight>
           <bold>false</bold>
           <underline>false</underline>
          </font>
@@ -546,7 +541,6 @@
           <font>
            <family>Arial</family>
            <pointsize>10</pointsize>
-           <weight>50</weight>
            <bold>false</bold>
            <underline>false</underline>
           </font>
@@ -595,7 +589,6 @@
          <font>
           <family>Arial</family>
           <pointsize>11</pointsize>
-          <weight>75</weight>
           <bold>true</bold>
           <underline>false</underline>
          </font>
@@ -833,7 +826,6 @@
                  <font>
                   <family>Arial</family>
                   <pointsize>11</pointsize>
-                  <weight>75</weight>
                   <bold>true</bold>
                  </font>
                 </property>
@@ -1234,7 +1226,7 @@
      <x>0</x>
      <y>0</y>
      <width>1440</width>
-     <height>20</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -1298,7 +1290,7 @@
   </action>
   <action name="action_About">
    <property name="text">
-    <string>&amp;About GRIME-AI</string>
+    <string>&amp;About GRIME AI</string>
    </property>
   </action>
   <action name="action_Clean">

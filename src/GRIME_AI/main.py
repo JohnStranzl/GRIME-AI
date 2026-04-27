@@ -169,7 +169,7 @@ from PyQt5.QtCore import QCoreApplication, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPainter, QPen, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QToolBar, QDateTimeEdit, \
     QMessageBox, QAction, QHeaderView, QDialog, QFileDialog
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMenu
 from PyQt5.QtWidgets import QTreeWidgetItem
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
@@ -747,6 +747,12 @@ class MainWindow(QMainWindow):
 
         self.action_ImageOrganizer.triggered.connect(self.menubar_ImageOrganizer)
 
+        # Connect About GRIME AI
+        try:
+            self.action_About.triggered.connect(self._show_about_dialog)
+        except AttributeError:
+            pass  # action_About not found in .ui — skip
+
         try:
             self.action_TemporalAveraging = QAction("Temporal Averaging", self)
             self.action_TemporalAveraging.setStatusTip("Average a folder of images together")
@@ -757,6 +763,21 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[ERROR] Failed to add Temporal Averaging to Tools menu: {e}")
             traceback.print_exc()
+
+        # ------------------------------------------------------------------------------------------------------------------
+        # VIEW MENU — dark/light mode toggle
+        # ------------------------------------------------------------------------------------------------------------------
+        self._is_dark_mode = False   # always start in light mode
+
+        # Insert View before Help (Help is always last)
+        _help_action = self.menuBar().actions()[-1] if self.menuBar().actions() else None
+        self._menu_view = QMenu("View", self)
+        self.menuBar().insertMenu(_help_action, self._menu_view)
+
+        self._action_toggle_theme = QAction("Dark Mode", self)
+        self._action_toggle_theme.setStatusTip("Toggle between dark and light application theme")
+        self._action_toggle_theme.triggered.connect(self._toggle_dark_mode)
+        self._menu_view.addAction(self._action_toggle_theme)
 
         # GRAPH TAB(S)
         self.NEON_labelLatestImage.setScaledContents(False)
@@ -867,6 +888,76 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
+    def _toggle_dark_mode(self):
+        """Toggle between dark and light application theme."""
+        self._is_dark_mode = not self._is_dark_mode
+        app = QApplication.instance()
+        if self._is_dark_mode:
+            try:
+                import qdarkstyle
+                app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
+            except ImportError:
+                pass
+            self._action_toggle_theme.setText("Light Mode")
+        else:
+            app.setStyleSheet("")
+            self._action_toggle_theme.setText("Dark Mode")
+
+    def _show_about_dialog(self):
+        """Display the About GRIME AI dialog with logo, version, and commit SHA."""
+        try:
+            from GRIME_AI.version import SW_VERSION, COMMIT_SHA
+        except ImportError:
+            SW_VERSION = globals().get('SW_VERSION', 'Ver. 0.0.0.0')
+            COMMIT_SHA = 'N/A'
+
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtCore import Qt
+        from pathlib import Path
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("About GRIME AI")
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setFixedSize(480, 380)
+
+        layout = QVBoxLayout(dlg)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(12)
+
+        # Logo
+        splash_dir = Path(__file__).resolve().parent / "resources" / "splash_screens"
+        logo_path  = splash_dir / "GRIME-AI Logo.jpg"
+        lbl_logo   = QLabel()
+        lbl_logo.setAlignment(Qt.AlignCenter)
+        if logo_path.exists():
+            pix = QPixmap(str(logo_path)).scaledToWidth(320, Qt.SmoothTransformation)
+            lbl_logo.setPixmap(pix)
+        else:
+            lbl_logo.setText("GRIME AI")
+            lbl_logo.setStyleSheet("font-size: 28px; font-weight: bold;")
+        layout.addWidget(lbl_logo)
+
+        # Version
+        lbl_version = QLabel(SW_VERSION)
+        lbl_version.setAlignment(Qt.AlignCenter)
+        lbl_version.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(lbl_version)
+
+        # SHA
+        lbl_sha = QLabel(f"Commit: {COMMIT_SHA}")
+        lbl_sha.setAlignment(Qt.AlignCenter)
+        lbl_sha.setStyleSheet("font-size: 11px; color: gray;")
+        layout.addWidget(lbl_sha)
+
+        # Close button
+        btn = QPushButton("Close")
+        btn.setFixedWidth(100)
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn, alignment=Qt.AlignCenter)
+
+        dlg.exec_()
+
     def _on_usgs_startup_result(self, hivis, camera_dict, camera_list):
         """Callback when USGS HIVIS data has been fetched in background."""
         if hivis is None:
@@ -4602,14 +4693,8 @@ def run_gui():
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
 
-    # Apply dark theme if the OS is in dark mode
-    try:
-        import darkdetect
-        import qdarkstyle
-        if darkdetect.isDark():
-            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
-    except ImportError:
-        pass  # darkdetect or qdarkstyle not installed — continue with default theme
+    # Light mode is the default — dark mode toggled via View menu
+    app.setStyleSheet("")
 
     # ------------------------------------------------------------------------------------------------------------------
     # SHOW SPLASH IN SEPARATE PROCESS — stays visible throughout all of MainWindow init
