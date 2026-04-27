@@ -29,8 +29,9 @@ class QProgressWheel(QWidget):
     # CONSTRUCTOR ---------------------------------------------------
     def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True,
                  title: str = None, total: int = None, on_close=None, parent=None):
-        #def __init__(self, startVal=0, maxVal=0, alwaysOnTop: bool = True, parent=None):
         super(QProgressWheel, self).__init__(parent)
+        self._is_closed = False  # must be set before any overridden method is called
+        self._on_close_callback = on_close
         self.m_min = 0
         self.m_max = maxVal
         self.m_value = startVal
@@ -72,20 +73,17 @@ class QProgressWheel(QWidget):
         flags = Qt.Window | Qt.WindowTitleHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint
         self.setWindowFlags(flags)
 
+        # Prevent closing this window from quitting the application
+        self.setAttribute(Qt.WA_QuitOnClose, False)
+
         self.show()
 
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setStyleSheet("background-color: white;")
 
-        # Parent-based z-ordering: if a parent window is provided, Windows OS
-        # automatically keeps this window above its parent but below unrelated
-        # applications. No WindowStaysOnTopHint needed or used.
-
         if title:
             self.setWindowTitle(title)
-
-        self._on_close_callback = on_close
 
         if total is not None:
             self.setRange(0, total)
@@ -180,8 +178,50 @@ class QProgressWheel(QWidget):
     def setMaximum(self, val: float):
         self.setRange(self.m_min, val)
 
+    def setWindowTitle(self, title: str):
+        if self._is_closed:
+            return
+        try:
+            super().setWindowTitle(title)
+        except Exception:
+            pass
+
+    def show(self):
+        if self._is_closed:
+            return
+        try:
+            super().show()
+        except Exception:
+            pass
+
+    def isVisible(self):
+        if self._is_closed:
+            return False
+        try:
+            return super().isVisible()
+        except Exception:
+            return False
+
+    def close(self):
+        if self._is_closed:
+            return
+        try:
+            super().close()
+        except Exception:
+            pass
+
+    def repaint(self):
+        if self._is_closed:
+            return
+        try:
+            super().repaint()
+        except Exception:
+            pass
+
     @pyqtSlot(int)
     def setValue(self, val: int):
+        if self._is_closed:
+            return
         if self.m_value != val:
             if val < self.m_min:
                 self.m_value = self.m_min
@@ -348,8 +388,9 @@ class QProgressWheel(QWidget):
         self.setPalette(p)
 
     def closeEvent(self, event):
+        self._is_closed = True
         if self._on_close_callback is not None:
             self._on_close_callback()
-            self._on_close_callback = None  # prevent double-fire
+            self._on_close_callback = None
         self.deleteLater()
         event.accept()

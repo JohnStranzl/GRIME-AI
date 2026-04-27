@@ -12,6 +12,10 @@ class GRIME_AI_Phenocam_API:
     BASE_URL = "https://phenocam.nau.edu/api/"
 
     def __init__(self):
+        # Persistent session — reuses the HTTPS connection across all API calls
+        # instead of opening a new connection per request
+        self.session = requests.Session()
+
         # Define available endpoints
         self.endpoints = {
             "cameras": "cameras/",
@@ -26,7 +30,7 @@ class GRIME_AI_Phenocam_API:
         If all_records=True, use the 'count' field to request all rows in one call.
         """
         url = self.BASE_URL + endpoint
-        response = requests.get(url)
+        response = self.session.get(url)
         response.raise_for_status()
         json_data = response.json()
 
@@ -34,7 +38,7 @@ class GRIME_AI_Phenocam_API:
         if all_records and isinstance(json_data, dict) and "count" in json_data:
             total = json_data["count"]
             url = f"{url}?format=json&limit={total}"
-            response = requests.get(url)
+            response = self.session.get(url)
             response.raise_for_status()
             json_data = response.json()
 
@@ -75,7 +79,7 @@ class GRIME_AI_Phenocam_API:
         This avoids downloading the entire dataset.
         """
         url = self.BASE_URL + self.endpoints["cameras"]
-        response = requests.get(url)
+        response = self.session.get(url)
         response.raise_for_status()
         json_data = response.json()
         return json_data.get("count", 0)

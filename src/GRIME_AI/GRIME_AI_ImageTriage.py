@@ -17,120 +17,98 @@ from GRIME_AI.GRIME_AI_Utils import GRIME_AI_Utils
 from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI.GRIME_AI_QMessageBox import GRIME_AI_QMessageBox
+from GRIME_AI.GRIME_AI_ImageQualityCheck import ImageQualityAnalyzer
 from datetime import datetime
+
 
 class GRIME_AI_ImageTriage:
 
     def __init__(self, show_gui=True):
         self.className = "GRIME_AI_ImageTriage"
-        self.show_gui = show_gui
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def computeBlurAndBrightness(self, shiftSize):
-        global currentImage
-
-        img1 = GRIME_AI_Utils().convertQImageToMat(currentImage.toImage())
-        grayImage = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
-
-        # DECIMATE IMAGE
-        grayImage = self.resizeImage(grayImage, 50.0)
-
-        hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
-
-        ''' BLUR DETECTION CALCULATIONS'''
-        # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
-        (h, w) = grayImage.shape
-        (cX, cY) = (int(w / 2.0), int(h / 2.0))
-
-        fft = np.fft.fft2(grayImage)
-        fftShift = np.fft.fftshift(fft)
-
-        # compute the magnitude spectrum of the transform
-        magnitude = 20 * np.log(np.abs(fftShift))
-
-        # zero-out the center of the FFT shift (i.e., remove low frequencies),
-        # apply the inverse shift such that the DC component once again becomes the top-left,
-        # and then apply the inverse FFT
-        fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
-        fftShift = np.fft.ifftshift(fftShift)
-        recon = np.fft.ifft2(fftShift)
-
-        # compute the magnitude spectrum of the reconstructed image,
-        # then compute the mean of the magnitude values
-        magnitude = 20 * np.log(np.abs(recon))
-        mean = np.mean(magnitude)
-
-        # IMAGE INTENSITY CALCULATIONS
-        # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
-        blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
-        intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
-
-        # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
-        del fftShift
-        del fft
-        del recon
-        del blur
-
-        return mean, intensity
+        self.show_gui  = show_gui
 
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def cleanImages(self, folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX, bCreateReport,
-                    bMoveImages, bCorrectAlignment, bSavePolylines, strReferenceImageFilename, rotationThreshold):
+    def cleanImages(self, folder, bFetchRecursive, blurThreshhold, shiftSize, brightnessMin, brightnessMAX,
+                    bCreateReport, bMoveImages, bCorrectAlignment, bSavePolylines,
+                    strReferenceImageFilename, rotationThreshold,
+                    laplacian_threshold=150.0, blur_logic="OR"):
+        """
+        Triage images in folder, flagging those that are blurry, too dark, or too light.
 
-        badImageCount = 0
-        rotationAngle = 0.0
+        Image quality metrics are fully delegated to ImageQualityAnalyzer.
+        This method handles file I/O, progress reporting, alignment, CSV writing, and moving.
+
+        Parameters
+        ----------
+        blurThreshhold      : float  FFT blur threshold (passed to ImageQualityAnalyzer as fft_blur_threshold)
+        shiftSize           : int    FFT DC-mask radius (passed as fft_shift_radius)
+        brightnessMin       : float  Minimum acceptable brightness
+        brightnessMAX       : float  Maximum acceptable brightness
+        laplacian_threshold : float  Laplacian variance threshold (default 150.0 — calibrated)
+        blur_logic          : str    "OR" or "AND" — how FFT and Laplacian are combined
+        """
+
+        badImageCount    = 0
+        rotationAngle    = 0.0
         horizontal_shift = 0.0
-        vertical_shift = 0.0
+        vertical_shift   = 0.0
 
-        extensions = ('.jpg', '.jpeg', '.png')
-
+        extensions   = ('.jpg', '.jpeg', '.png')
         myGRIMe_Color = GRIME_AI_Color()
 
+        # ── Image quality analyser ─────────────────────────────────────────────────────
+        analyzer = ImageQualityAnalyzer(
+            fft_shift_radius    = shiftSize,
+            fft_blur_threshold  = blurThreshhold,
+            laplacian_threshold = laplacian_threshold,
+            blur_logic          = blur_logic,
+            brightness_min      = brightnessMin,
+            brightness_max      = brightnessMAX,
+            use_contrast        = False,        # not used in triage
+            use_exposure_clipping = False,      # not used in triage
+            resize_percent      = 50.0,
+        )
+
+        # ── CSV report ────────────────────────────────────────────────────────────────
         if bCreateReport:
-            csvFilename = 'ImageTriage_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
+            csvFilename      = 'ImageTriage_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.csv'
             imageQualityFile = os.path.join(folder, csvFilename)
-            csvFile = open(imageQualityFile, 'a', newline='')
-            csvFile.write('Focus Value, Focus Attrib, Intensity Value, Intensity Attrib., Rotation, H. Shift, V. Shift, Filename, Moved\n')
+            csvFile          = open(imageQualityFile, 'a', newline='')
+            csvFile.write('Focus Value, Focus Attrib, Laplacian Value, Intensity Value, Intensity Attrib., '
+                          'Rotation, H. Shift, V. Shift, Filename, Moved\n')
 
-        # count the number of images that will potentially be processed and possibly saved with the specified extension
-        # to display an "hourglass" to give an indication as to how long the process will take. Furthermore, the number
-        # of images will help determine whether or not there is enough disk space to accommodate storing the images.
+        # ── Progress bar ──────────────────────────────────────────────────────────────
         imageCount = GRIME_AI_Utils().get_image_count(folder, extensions)
-
         if self.show_gui:
             progressBar = QProgressWheel(0, imageCount + 1)
             progressBar.show()
 
         imageIndex = 0
 
-        # --------------------------------------------------------------------------------------------------------------
-        #
-        # --------------------------------------------------------------------------------------------------------------
+        # ── Optional output subfolders ────────────────────────────────────────────────
         if bSavePolylines:
-            polyFolder = folder + "\\poly\\"
-            if not os.path.exists(polyFolder):
-                os.mkdir(polyFolder)
+            polyFolder = os.path.join(folder, "poly")
+            os.makedirs(polyFolder, exist_ok=True)
 
         if bCorrectAlignment:
-            warpFolder = folder + "\\warp\\"
-            if not os.path.exists(warpFolder):
-                os.mkdir(warpFolder)
+            warpFolder = os.path.join(folder, "warp")
+            os.makedirs(warpFolder, exist_ok=True)
 
-        # --------------------------------------------------------------------------------------------------------------
-        #
-        # --------------------------------------------------------------------------------------------------------------
-        # process images to determine which ones are too dark/too light, blurry/clear, etc and move them into a subfolder
-        # created so they are not processed with nominal images.
-        file_count, files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
-
-        if bCorrectAlignment:
+        # ── Reference image for alignment ─────────────────────────────────────────────
+        refImage = None
+        if bCorrectAlignment and len(strReferenceImageFilename) > 0:
             refImage = myGRIMe_Color.loadColorImage(strReferenceImageFilename)
 
+        # ── Main loop ─────────────────────────────────────────────────────────────────
+        file_count, files = GRIME_AI_Utils().getFileList(folder, extensions, bFetchRecursive)
+
         for file in files:
+            # Check if user closed the progress bar — stop triage
+            if self.show_gui and progressBar._is_closed:
+                break
+
             if self.show_gui:
                 progressBar.setWindowTitle(file)
                 progressBar.setValue(imageIndex)
@@ -138,149 +116,91 @@ class GRIME_AI_ImageTriage:
             imageIndex += 1
 
             ext = os.path.splitext(file)[-1].lower()
+            if ext not in extensions:
+                continue
 
-            if ext in extensions:
-                filename = os.path.join(folder, file)
-                numpyImage = myGRIMe_Color.loadColorImage(filename)
-                grayImage = cv2.cvtColor(numpyImage, cv2.COLOR_RGB2GRAY)
+            filename    = os.path.join(folder, file)
+            numpyImage  = myGRIMe_Color.loadColorImage(filename)
 
-                hist = cv2.calcHist([grayImage], [0], None, [256], [0, 256])
+            # ── Quality analysis ──────────────────────────────────────────────────────
+            quality = analyzer.analyze(numpyImage)
 
-                ''' BLUR DETECTION CALCULATIONS'''
-                # grab the dimensions of the image and use the dimensions to derive the center (x, y)-coordinates
-                (h, w) = grayImage.shape
-                (cX, cY) = (int(w / 2.0), int(h / 2.0))
+            blur_fft        = quality.get("blur_fft",       0.0)
+            blur_laplacian  = quality.get("blur_laplacian",  0.0)
+            brightness      = quality.get("brightness",      0.0)
+            is_blurry       = quality.get("is_blurry",      False)
+            is_too_dark     = quality.get("is_too_dark",    False)
+            is_too_light    = quality.get("is_too_light",   False)
 
-                fft = np.fft.fft2(grayImage)
-                fftShift = np.fft.fftshift(fft)
+            # ── Decision ──────────────────────────────────────────────────────────────
+            bMove           = False
+            strFocusMetric  = "Nominal"
+            strIntensity    = "Nominal"
 
-                # compute the magnitude spectrum of the transform
-                magnitude = 20 * np.log(np.abs(fftShift))
+            if is_blurry:
+                strFocusMetric = "Blurry"
+                bMove          = True
 
-                # zero-out the center of the FFT shift (i.e., remove low frequencies),
-                # apply the inverse shift such that the DC component once again becomes the top-left,
-                # and then apply the inverse FFT
-                fftShift[cY - shiftSize:cY + shiftSize, cX - shiftSize:cX + shiftSize] = 0
-                fftShift = np.fft.ifftshift(fftShift)
-                recon = np.fft.ifft2(fftShift)
+            if is_too_dark:
+                strIntensity = "Too Dark"
+                bMove        = True
+            elif is_too_light:
+                strIntensity = "Too Light"
+                bMove        = True
 
-                # compute the magnitude spectrum of the reconstructed image, then compute the mean of the magnitude values
-                magnitude = 20 * np.log(np.abs(recon))
-                mean = np.mean(magnitude)
+            # ── Alignment correction ──────────────────────────────────────────────────
+            if refImage is not None and bCorrectAlignment:
+                rotationAngle, poly_img, warp_img = self.checkImageAlignment(refImage, numpyImage)
 
-                # ----------------------------------------------------------------------------------------------------
-                # IMAGE INTENSITY CALCULATIONS
-                # ----------------------------------------------------------------------------------------------------
-                # blur = cv2.blur(grayImage, (5, 5))  # With kernel size depending upon image size
-                blur = cv2.GaussianBlur(grayImage, (0, 0), 1) if 0. < 1 else grayImage
-                intensity = cv2.mean(blur)[0]  # The range for a pixel's value in grayscale is (0-255), 127 lies midway
+                baseFilename = os.path.basename(file)
 
-                # DECISION LOGIC
-                bMove = False
-                strFFTFocusMetric = 'Nominal'
-                strFocusMetric = 'N/A'
-                strIntensity = 'Nominal'
+                if bSavePolylines:
+                    cv2.imwrite(os.path.join(polyFolder, baseFilename + "_poly.jpg"), poly_img)
 
-                # ----------------------------------------------------------------------------------------------------
-                # CHECK MEAN AGAINST THRESHOLD TO DETERMINE IF THE IMAGE IS BLURRY/FOGGY/OUT-OF-FOCUS/ETC.
-                # ----------------------------------------------------------------------------------------------------
-                if mean <= blurThreshhold:
-                    strFFTFocusMetric = "Blurry"
-                    bMove = True
+                if bCorrectAlignment and rotationAngle > rotationThreshold:
+                    cv2.imwrite(os.path.join(warpFolder, baseFilename + "_align.jpg"), warp_img)
 
-                # ----------------------------------------------------------------------------------------------------
-                # CHECK TO SEE IF THE OVERALL IMAGE IS TOO DARK OR TOO BRIGHT
-                # ----------------------------------------------------------------------------------------------------
-                if float(intensity) < float(brightnessMin):
-                    strIntensity = "Too Dark"
-                    bMove = True
-                elif float(intensity) > float(brightnessMAX):
-                    strIntensity = "Too Light"
-                    bMove = True
+                grayImage        = cv2.cvtColor(numpyImage, cv2.COLOR_RGB2GRAY)
+                horizontal_shift, vertical_shift = self.checkImageShift(refImage, grayImage)
 
-                if len(strReferenceImageFilename) > 0 and bCorrectAlignment is True:
-                    # ----------------------------------------------------------------------------------------------------
-                    # GET THE ROTATION ANGLE OF THE IMAGE
-                    # ----------------------------------------------------------------------------------------------------
-                    rotationAngle, poly_img, warp_img = self.checkImageAlignment(refImage, numpyImage)
+            # ── Move rejects ──────────────────────────────────────────────────────────
+            if bMoveImages and bMove:
+                filepath   = os.path.dirname(file)
+                tempFolder = os.path.join(filepath, "MovedImages")
+                os.makedirs(tempFolder, exist_ok=True)
+                shutil.move(file, tempFolder)
+                filename   = os.path.join(tempFolder, os.path.basename(file))
 
-                    baseFilename = os.path.basename(file)
+            if bMove:
+                badImageCount += 1
 
-                    if bSavePolylines:
-                        polyFilename = baseFilename + "_poly.jpg"
-                        polyFilename_with_path = os.path.join(polyFolder, polyFilename)
-                        cv2.imwrite(polyFilename_with_path, poly_img)
+            # ── CSV row ───────────────────────────────────────────────────────────────
+            if bCreateReport:
+                formula     = f'=HYPERLINK("{filename}", "{os.path.basename(filename)}")'
+                if ',' in formula:
+                    safe_formula = formula.replace('"', '""')
+                    formula      = f'"{safe_formula}"'
+                quotedHyperlink = f'"{formula}"'
 
-                    if (bCorrectAlignment and (rotationAngle > rotationThreshold)):
-                        warpFilename = baseFilename + "_align.jpg"
-                        warpFilename_with_path = os.path.join(warpFolder, warpFilename)
-                        cv2.imwrite(warpFilename_with_path, warp_img)
+                strOutputString = '%3.2f,%s,%3.2f,%3.2f,%s,%3.2f,%3.2f,%3.2f,%s,%s\n' % (
+                    blur_fft, strFocusMetric,
+                    blur_laplacian,
+                    brightness, strIntensity,
+                    rotationAngle, horizontal_shift, vertical_shift,
+                    formula,
+                    'Y' if bMove else 'N'
+                )
+                csvFile.write(strOutputString)
 
-                    # ----------------------------------------------------------------------------------------------------
-                    # CHECK FOR IMAGE TRANSLATION
-                    # ----------------------------------------------------------------------------------------------------
-                    horizontal_shift, vertical_shift = self.checkImageShift(refImage, grayImage)
-
-                # MOVE THE IMAGE REJECTS TO A SUBFOLDER IF THE USER CHOOSE THIS OPTION
-                if bMoveImages and bMove:
-                    # create a subfolder beneath the current root folder if the option to move less than nominal images is selected
-                    filename = os.path.basename(file)
-                    filepath = os.path.dirname(file)
-                    tempFolder = os.path.join(filepath, "MovedImages")
-                    if not os.path.exists(tempFolder):
-                        os.makedirs(tempFolder)
-
-                    shutil.move(file, tempFolder)
-
-                    filename = os.path.join(tempFolder, filename)
-
-                if bMove:
-                    badImageCount = badImageCount + 1
-
-                # ----------------------------------------------------------------------------------------------------
-                # CREATE A CSV FILE THAT CONTAINS THE FOCUS AND INTENSITY METRICS ALONG WITH HYPERLINKS TO THE IMAGES
-                # ----------------------------------------------------------------------------------------------------
-                if bCreateReport:
-                    # Build the hyperlink formula
-                    formula = f'=HYPERLINK("{filename}", "{os.path.basename(filename)}")'
-                    #strHyperlink = strHyperlink.replace("\\", "\\\\")  # escape backslashes
-
-                    # If the formula contains commas, enclose the entire field in extra quotes and escape inner quotes.
-                    if ',' in formula:
-                        safe_formula = formula.replace('"', '""')
-                        formula = f'"{safe_formula}"'
-
-                    # Wrap the formula in double quotes so Excel sees it as a formula
-                    quotedHyperlink = f'"{formula}"'
-
-                    # Format the CSV line
-                    strOutputString = '%3.2f,%s,%3.2f,%s,%3.2f,%3.2f,%3.2f,%s,%s\n' % (
-                        mean, strFFTFocusMetric, intensity, strIntensity,
-                        rotationAngle, horizontal_shift, vertical_shift, formula,
-                        'Y' if bMove else 'N'
-                    )
-                    csvFile.write(strOutputString)
-
-                # ----------------------------------------------------------------------------------------------------
-                # FREE UP MEMORY FOR THE NEXT IMAGE TO BE PROCESSSED
-                # ----------------------------------------------------------------------------------------------------
-                del fftShift
-                del fft
-                del recon
-                del blur
-
+        # ── Summary ───────────────────────────────────────────────────────────────────
         if badImageCount == 0:
             strMessage = 'No bad images found.'
             print(strMessage)
             if self.show_gui:
-                msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage)
+                msgBox   = GRIME_AI_QMessageBox('Image Triage', strMessage)
                 response = msgBox.displayMsgBox()
 
-        # ----------------------------------------------------------------------------------------------------
-        # clean-up before exiting function
-        # 1. close and delete the progress bar
-        # 2. close the EXIF log file, if opened
-        # ----------------------------------------------------------------------------------------------------
+        # ── Cleanup ───────────────────────────────────────────────────────────────────
         if bCreateReport:
             csvFile.close()
 
@@ -288,139 +208,67 @@ class GRIME_AI_ImageTriage:
             progressBar.close()
             del progressBar
 
-
-    # ======================================================================================================================
+    # ==================================================================================================================
     #
-    # ======================================================================================================================
+    # ==================================================================================================================
     def checkImageShift(self, refImage, image):
-        # Convert images to grayscale
         refImageGray = cv2.cvtColor(refImage, cv2.COLOR_BGR2GRAY)
-        imageGray = image
+        imageGray    = image
 
-        # Compute the keypoints and descriptors
-        orb = cv2.ORB_create()
+        orb                         = cv2.ORB_create()
+        keypoints1, descriptors1    = orb.detectAndCompute(refImageGray, None)
+        keypoints2, descriptors2    = orb.detectAndCompute(imageGray,    None)
 
-        # Find keypoints and descriptors.
-        # The first arg is the image, second arg is the mask (which is not required in this case).
-        keypoints1, descriptors1 = orb.detectAndCompute(refImageGray, None)
-        keypoints2, descriptors2 = orb.detectAndCompute(imageGray, None)
-
-        # Match descriptors between the two images
-        # We create a Brute Force matcher with Hamming distance as measurement mode.
         matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = sorted(matcher.match(descriptors1, descriptors2), key=lambda x: x.distance)
 
-        # Match the two sets of descriptors.
-        matches = matcher.match(descriptors1, descriptors2)
-
-        # Sort matches on the basis of their Hamming distance.
-        matches = sorted(matches, key=lambda x: x.distance)
-
-        # Extract matched keypoints
         src_pts = np.float32([keypoints1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([keypoints2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
 
-        # Find homography matrix
-        M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-        # Compute horizontal and vertical shifts
+        M, _             = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
         horizontal_shift = M[0, 2]
-        vertical_shift = M[1, 2]
+        vertical_shift   = M[1, 2]
 
         return horizontal_shift, vertical_shift
 
-
-    # ======================================================================================================================
+    # ==================================================================================================================
     #
-    # ======================================================================================================================
+    # ==================================================================================================================
     def checkImageAlignment(self, refImage, image):
-        # Convert to grayscale.
         refImageGray = cv2.cvtColor(refImage, cv2.COLOR_BGR2GRAY)
-        imageGray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        imageGray    = cv2.cvtColor(image,    cv2.COLOR_RGB2GRAY)
 
-        # Create ORB detector with 5000 features.
-        orb_detector = cv2.ORB_create(5000)
+        orb_detector                = cv2.ORB_create(5000)
+        keypoints1, descriptors1    = orb_detector.detectAndCompute(imageGray,    None)
+        keypoints2, descriptors2    = orb_detector.detectAndCompute(refImageGray, None)
 
-        # Find keypoints and descriptors.
-        # The first arg is the image, second arg is the mask (which is not required in this case).
-        keypoints1, descriptors1 = orb_detector.detectAndCompute(imageGray, None)
-        keypoints2, descriptors2 = orb_detector.detectAndCompute(refImageGray, None)
-
-        # Match features between the two images.
-        # We create a Brute Force matcher with Hamming distance as measurement mode.
         matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
-        # Match the two sets of descriptors.
-        matches = matcher.match(descriptors1, descriptors2)
-
-        # Sort matches on the basis of their Hamming distance.
-        matches = sorted(matches, key=lambda x: x.distance)
-
-
-
-
-
-        ## Take the top 90 % matches forward.
+        matches = sorted(matcher.match(descriptors1, descriptors2), key=lambda x: x.distance)
         matches = matches[:int(len(matches) * 0.9)]
         no_of_matches = len(matches)
 
-        ## Define empty matrices of shape no_of_matches * 2.
         p1 = np.zeros((no_of_matches, 2))
         p2 = np.zeros((no_of_matches, 2))
+        for i, m in enumerate(matches):
+            p1[i, :] = keypoints1[m.queryIdx].pt
+            p2[i, :] = keypoints2[m.trainIdx].pt
 
-        for i in range(len(matches)):
-            p1[i, :] = keypoints1[matches[i].queryIdx].pt
-            p2[i, :] = keypoints2[matches[i].trainIdx].pt
+        homography, _ = cv2.findHomography(p1, p2, cv2.RANSAC)
 
-        ## Find the homography matrix.
-        homography, mask = cv2.findHomography(p1, p2, cv2.RANSAC)
-
-        # EXTRACT MATCHED KEYPOINTS
         src_pts = np.float32([keypoints1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([keypoints2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+        M, _    = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-        M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-        # COMPUTE ROTATION ANGLE
         rotation_angle = np.arctan2(M[1, 0], M[0, 0]) * 180 / np.pi
 
-        if 1:
-            # Use this matrix to transform the colored image wrt the reference image.
-            width = image.shape[1]
-            height = image.shape[0]
-            swapImage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            warp_img = cv2.warpPerspective(swapImage, homography, (width, height))
+        width, height = image.shape[1], image.shape[0]
+        swapImage     = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        warp_img      = cv2.warpPerspective(swapImage, homography, (width, height))
 
-        if 1:
-            h, w = refImage.shape[:2]
+        h, w  = refImage.shape[:2]
+        pts   = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
+        dst   = cv2.perspectiveTransform(pts, M)
+        img2  = cv2.polylines(image, [np.int32(dst)], True, (0, 0, 255), 1, cv2.LINE_AA)
+        poly_img = cv2.drawMatches(refImage, keypoints1, image, keypoints2, matches[:20], None, flags=2)
 
-            pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
-            dst = cv2.perspectiveTransform(pts, M)
-
-            # draw found regions
-            img2 = cv2.polylines(image, [np.int32(dst)], True, (0, 0, 255), 1, cv2.LINE_AA)
-
-            # draw match lines
-            poly_img = cv2.drawMatches(refImage, keypoints1, image, keypoints2, matches[:20], None, flags=2)
-
-        return (rotation_angle, poly_img, warp_img)
-
-    # ======================================================================================================================
-    #
-    # ======================================================================================================================
-    def resizeImage(self, image, scale_percent):
-        # --------------------------------------------------------------------------------
-        # reshape the image to be a list of pixels
-        # --------------------------------------------------------------------------------
-        if scale_percent == 100.0:
-            return image
-        else:
-            width = int(image.shape[1] * scale_percent / 100)
-            height = int(image.shape[0] * scale_percent / 100)
-
-            dim = (width, height)
-
-            resized = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-
-            return resized
-
-
+        return rotation_angle, poly_img, warp_img
