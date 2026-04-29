@@ -7,7 +7,7 @@
 
 GRIME AI is an open-source AI framework for the retrieval, automated quality control, and exploratory analysis of ground-based time-lapse imagery. It provides programmatic access to imagery and data products from the National Ecological Observatory Network (NEON), the PhenoCam Network, and the United States Geological Survey Hydrologic Imagery Visualization and Information System (USGS HIVIS), and supports locally stored imagery. Image segmentation using Segment Anything Model 2 (SAM 2) isolates ecologically meaningful regions such as vegetation, water, and soil to support feature extraction from user-defined areas.
 
-GRIME AI is developed at the University of Nebraska-Lincoln in collaboration with Blade Vision Systems, LLC, and is supported by NSF Award 2411065.
+GRIME AI is developed at the University of Nebraska-Lincoln and is supported by NSF Award 2411065 and the U.S. Geological Survey under Grant/Cooperative Agreement No. G23AC00141-00.
 
 ---
 
