@@ -113,15 +113,12 @@ python GRIME_AI.py
 
 ### PyTorch and GPU Support
 
-GRIME AI uses SAM 2 for image segmentation, which requires PyTorch. GPU acceleration is supported on CUDA-compatible hardware.
+GRIME AI uses SAM 2 for image segmentation, which requires PyTorch 2.8. GPU acceleration is supported on CUDA-compatible hardware. CPU-only operation is supported but will be significantly slower for segmentation tasks.
 
-> **Important:** PyTorch 2.5 or earlier is required for compatibility with Pascal architecture GPUs (sm 6.0, e.g., GTX 1080). PyTorch 2.8 and later dropped sm 6.0 support. Pin your PyTorch version accordingly:
-
-```bash
-conda install pytorch<2.5 cudatoolkit -c pytorch
-```
-
-CPU-only operation is supported but will be significantly slower for segmentation tasks.
+> **Note for Pascal GPU users (sm 6.0, e.g., GTX 1080):** PyTorch 2.8 dropped sm 6.0 support. Users on Pascal architecture hardware must pin PyTorch to an earlier compatible version:
+> ```bash
+> conda install "pytorch<2.5" cudatoolkit -c pytorch
+> ```
 
 ---
 
@@ -228,6 +225,6 @@ Additional references:
 
 ## Acknowledgements
 
-GRIME AI is developed at the University of Nebraska-Lincoln, Conservation and Survey Division, School of Natural Resources, in collaboration with Northern Arizona University. Development is supported by NSF Award 2411065.
+GRIME AI is developed at the University of Nebraska-Lincoln, Conservation and Survey Division, School of Natural Resources, in collaboration with Northern Arizona University. Development is supported by NSF Award 2411065 and the U.S. Geological Survey under Grant/Cooperative Agreement No. G23AC00141-00.
 
 Thanks to Keegan Johnson (U.S. Geological Survey, Upper Midwest Water Science Center) for project coordination and liaison support, and to Christopher Terry, Maggie Wells, Mackenzie Smith, and Dawson Kosmicki (University of Nebraska at Kearney) for image annotation and software functionality testing.
