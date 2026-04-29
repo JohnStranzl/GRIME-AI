@@ -1,2 +1,4 @@
-SW_VERSION = "Ver. 2.1.0.5 (nightly)"
+SW_VERSION = "2.1.0.5"
+RELEASE = "nightly"
+BUILD_DATE = ""
 COMMIT_SHA = "ef634957ca7181dcb6b1671ee13978fc0ffeb4c2"
