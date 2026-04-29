@@ -1,2 +1,2 @@
 SW_VERSION = "Ver. 2.1.0.5 (nightly)"
-COMMIT_SHA = "386aa36e4f2957e1911bad65ca18ebe93f07fbc8"
+COMMIT_SHA = "3e2d237512ec0cf6d005b73b1aaaf15d6de336c7"
