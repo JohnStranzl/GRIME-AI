@@ -28,11 +28,18 @@ GRIME AI is developed at the University of Nebraska-Lincoln and is supported by 
 
 ## Features
 
-- **Unified data retrieval** from NEON, PhenoCam, and USGS HIVIS repositories through a single graphical interface
+- **NEON Download Manager** — programmatic access to NEON ground-based imagery (hosted via PhenoCam) and associated NEON data products via the NEON API, with site browsing, date range filtering, and time-of-day filtering
+- **PhenoCam Download Manager** — programmatic access to PhenoCam Network imagery via the PhenoCam API, with site browsing, date range filtering, and automatic retrieval of the latest or midday site image
+- **USGS HIVIS Download Manager** — programmatic access to USGS HIVIS imagery paired with curated hydrological data products including stream stage and discharge, with site browsing and date range filtering
+- **Local imagery support** — load locally stored imagery directly into the GRIME AI workflow without downloading from a public repository
 - **Automated image triage** using edge-based (Laplacian) and frequency-based (FFT) blur detection, and grayscale intensity-based brightness assessment
 - **Qualitative exploration** via animations, composite slice visualizations, and temporal image sequences
 - **Quantitative feature extraction** including Shannon entropy, RGB-based greenness indices (GCC, ExG, VARI, GLI), GLCM texture metrics, Gabor filters, Local Binary Patterns, wavelet decomposition, Fourier analysis, Laws texture energy maps, and HSV color descriptors
-- **Deep learning-based segmentation** using SAM 2 for precise, reproducible isolation of target features across large image collections
+- **ROI Analyzer** for interactive region-of-interest definition, management, and correlation analysis across image collections
+- **Deep learning-based segmentation** using SAM 2 (Segment Anything Model 2), SegFormer-LoRA, and YOLOv11 for precise, reproducible isolation of target features such as vegetation, water, and soil across large image collections
+- **Model training and tuning** workflows supporting fine-tuning of deep learning architectures on user-provided annotated datasets
+- **Inference engine** for applying trained or pre-trained segmentation models to single images or entire image collections
+- **SAGE annotation tool** for creating, managing, and exporting ground-truth training annotations with edge trace mode, label management, and CSV import/export
 - **Command-line interface** (`GRIME_AI_segment.py`) supporting `--image` and `--folder` flags for batch segmentation workflows
 - **Cross-platform** operation on Windows, Linux, and Linux-derived operating systems including HPC clusters and browser-based environments such as Open OnDemand (OOD)
 - **FAIR-aligned** outputs in standard CSV and image formats compatible with spreadsheet software and downstream analysis pipelines
