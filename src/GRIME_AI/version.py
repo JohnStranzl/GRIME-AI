@@ -1,4 +1,4 @@
 SW_VERSION = "2.1.0.5"
 RELEASE = "nightly"
-BUILD_DATE = ""
-COMMIT_SHA = "ef634957ca7181dcb6b1671ee13978fc0ffeb4c2"
+SHA = "75007159ebf2fb0ec16fb01f809e0d3c6faefcdf"
+BUILD_DATE = "2026-04-29"
