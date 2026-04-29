@@ -1,27 +1,24 @@
 # .github/workflows/update_version.yml
 name: Update SHA
-
 on:
   push:
     branches:
       - main
-
 jobs:
   update-version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Write commit SHA to version.py
+      - name: Write commit SHA and build date to version.py
         run: |
-          # Extract the existing SW_VERSION line as-is, then append COMMIT_SHA
           SW_VERSION_LINE=$(grep '^SW_VERSION' src/GRIME_AI/version.py)
+          RELEASE_LINE=$(grep '^RELEASE' src/GRIME_AI/version.py)
           echo "$SW_VERSION_LINE" > src/GRIME_AI/version.py
-          echo "COMMIT_SHA = \"${{ github.sha }}\"" >> src/GRIME_AI/version.py
-
+          echo "$RELEASE_LINE" >> src/GRIME_AI/version.py
+          echo "SHA = \"${{ github.sha }}\"" >> src/GRIME_AI/version.py
+          echo "BUILD_DATE = \"$(date -u +"%Y-%m-%d")\"" >> src/GRIME_AI/version.py
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
