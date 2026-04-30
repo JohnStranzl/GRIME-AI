@@ -87,6 +87,24 @@ class ROIAnalyzerTab(QWidget):
         lw.setFixedHeight(icon_h)
 
     # ------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    def _update_texture_fields(self, image):
+        """Compute and display GLCM metrics if the GLCM checkbox is checked."""
+        self.lineEdit_glcm_contrast.clear()
+        self.lineEdit_glcm_homogeneity.clear()
+        self.lineEdit_glcm_correlation.clear()
+
+        if self.checkBox_texture_GLCM.isChecked():
+            try:
+                from GRIME_AI.GRIME_AI_Texture import GLCMTexture
+                features = GLCMTexture().compute_features(image)
+                self.lineEdit_glcm_contrast.setText(f"{features['contrast']:.4f}")
+                self.lineEdit_glcm_homogeneity.setText(f"{features['homogeneity']:.4f}")
+                self.lineEdit_glcm_correlation.setText(f"{features['correlation']:.4f}")
+            except Exception as e:
+                print(f"[Texture] GLCM computation failed: {e}")
+
+    # ------------------------------------------------------------------------------------------------------------------
     # Signal wiring
     # ------------------------------------------------------------------------------------------------------------------
     def wire_connections(self):
@@ -133,6 +151,13 @@ class ROIAnalyzerTab(QWidget):
         # Optional close hook (matches original)
         if hasattr(self, "buttonBox_close") and self.buttonBox_close is not None:
             self.buttonBox_close.rejected.connect(self.reject)
+
+        # Texture Analysis checkbox defaults
+        self.checkBox_texture_GLCM.setChecked(True)
+        self.checkBox_texture_Gabor.setChecked(False)
+        self.checkBox_texture_LBP.setChecked(False)
+        self.checkBox_texture_Wavelet.setChecked(False)
+        self.checkBox_texture_Fourier.setChecked(False)
 
         # Splitter stretch factors and image label stretch
         self.splitter_display.setStretchFactor(0, 4)
@@ -392,6 +417,11 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
         self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
 
+        import cv2 as _cv2
+        _img = _cv2.imread(str(orig_path))
+        if _img is not None:
+            self._update_texture_fields(_img)
+
         capture_date, capture_time = self._extract_datetime_from_path(orig_path)
         self._display_analysis(analyzer, capture_date, capture_time)
 
@@ -532,6 +562,11 @@ class ROIAnalyzerTab(QWidget):
         self.lineEdit_Texture.setText(f"{analyzer.roi_texture:.4f}")
         self.lineEdit_GLI.setText(f"{analyzer.mean_gli:.6f}")
         self.lineEdit_GCC.setText(f"{analyzer.mean_gcc:.6f}")
+
+        import cv2 as _cv2
+        _img = _cv2.imread(str(orig_path))
+        if _img is not None:
+            self._update_texture_fields(_img)
 
         capture_date, capture_time = self._extract_datetime_from_path(orig_path)
         self._display_analysis(analyzer, capture_date, capture_time)
@@ -692,6 +727,9 @@ class ROIAnalyzerTab(QWidget):
             "ROI Texture",
             "Mean GLI",
             "Mean GCC",
+            "GLCM Contrast",
+            "GLCM Homogeneity",
+            "GLCM Correlation",
             "ROI Pixel Count",
             "ROI Area",
             "Image Height",
@@ -783,6 +821,21 @@ class ROIAnalyzerTab(QWidget):
                     print(f"Failed on {orig_path}, {mask_path}: {e}")
                     continue
 
+                # Compute GLCM if checked
+                glcm_contrast = glcm_homogeneity = glcm_correlation = ""
+                if self.checkBox_texture_GLCM.isChecked():
+                    try:
+                        import cv2 as _cv2
+                        from GRIME_AI.GRIME_AI_Texture import GLCMTexture
+                        _img = _cv2.imread(str(orig_path))
+                        if _img is not None:
+                            glcm_features = GLCMTexture().compute_features(_img)
+                            glcm_contrast    = f"{glcm_features['contrast']:.4f}"
+                            glcm_homogeneity = f"{glcm_features['homogeneity']:.4f}"
+                            glcm_correlation = f"{glcm_features['correlation']:.4f}"
+                    except Exception as e:
+                        print(f"[Texture] GLCM export failed for {orig_path}: {e}")
+
                 # Build row: fixed ROI metrics first
                 data_row = [
                     orig_path,
@@ -796,6 +849,9 @@ class ROIAnalyzerTab(QWidget):
                     f"{analyzer.roi_texture:.4f}",
                     f"{analyzer.mean_gli:.6f}",
                     f"{analyzer.mean_gcc:.6f}",
+                    glcm_contrast,
+                    glcm_homogeneity,
+                    glcm_correlation,
                     f"{analyzer.ROI_total_pixels:.2f}",
                     f"{analyzer.ROI_total_area:.2f}",
                     f"{analyzer.image_height:.2f}",
@@ -860,6 +916,7 @@ class ROIAnalyzerTab(QWidget):
                     orig_full, mask_full, capture_date, capture_time,
                     method_name, method_params,
                     intensity, entropy, texture, gli, gcc,
+                    glcm_contrast, glcm_homogeneity, glcm_correlation,
                     pixel_count, pixel_area, image_height,
                     image_width, image_total_pixels, roi_area_percentage,
                     *cluster_values
@@ -875,23 +932,26 @@ class ROIAnalyzerTab(QWidget):
                 cell_mask.hyperlink = mask_full
                 cell_mask.font = hyperlink_style
 
-                ws.cell(row=row_idx, column=3, value=capture_date)
-                ws.cell(row=row_idx, column=4, value=capture_time)
-                ws.cell(row=row_idx, column=5, value=method_name)
-                ws.cell(row=row_idx, column=6, value=method_params)
-                ws.cell(row=row_idx, column=7, value=float(intensity))
-                ws.cell(row=row_idx, column=8, value=float(entropy))
-                ws.cell(row=row_idx, column=9, value=float(texture))
+                ws.cell(row=row_idx, column=3,  value=capture_date)
+                ws.cell(row=row_idx, column=4,  value=capture_time)
+                ws.cell(row=row_idx, column=5,  value=method_name)
+                ws.cell(row=row_idx, column=6,  value=method_params)
+                ws.cell(row=row_idx, column=7,  value=float(intensity))
+                ws.cell(row=row_idx, column=8,  value=float(entropy))
+                ws.cell(row=row_idx, column=9,  value=float(texture))
                 ws.cell(row=row_idx, column=10, value=float(gli))
                 ws.cell(row=row_idx, column=11, value=float(gcc))
-                ws.cell(row=row_idx, column=12, value=float(pixel_count))
-                ws.cell(row=row_idx, column=13, value=float(pixel_area))
-                ws.cell(row=row_idx, column=14, value=float(image_height))
-                ws.cell(row=row_idx, column=15, value=float(image_width))
-                ws.cell(row=row_idx, column=16, value=float(image_total_pixels))
-                ws.cell(row=row_idx, column=17, value=float(roi_area_percentage))
+                ws.cell(row=row_idx, column=12, value=float(glcm_contrast)    if glcm_contrast    != "" else "")
+                ws.cell(row=row_idx, column=13, value=float(glcm_homogeneity) if glcm_homogeneity != "" else "")
+                ws.cell(row=row_idx, column=14, value=float(glcm_correlation) if glcm_correlation != "" else "")
+                ws.cell(row=row_idx, column=15, value=float(pixel_count))
+                ws.cell(row=row_idx, column=16, value=float(pixel_area))
+                ws.cell(row=row_idx, column=17, value=float(image_height))
+                ws.cell(row=row_idx, column=18, value=float(image_width))
+                ws.cell(row=row_idx, column=19, value=float(image_total_pixels))
+                ws.cell(row=row_idx, column=20, value=float(roi_area_percentage))
 
-                for offset, value in enumerate(cluster_values, start=18):
+                for offset, value in enumerate(cluster_values, start=21):
                     ws.cell(row=row_idx, column=offset, value=float(value))
 
             wb.save(xlsx_path)

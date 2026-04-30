@@ -50,7 +50,7 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams, greenness_index_list):
+    def ExtractFeatures(self, imagesList, imageFileFolder, roiList, colorSegmentationParams, greenness_index_list, texture_options=None):
 
         # ----------------------------------------------------------------------------------------------------------
         # CREATE PROGRESS WHEEL
@@ -148,7 +148,7 @@ class GRIME_AI_Feature_Export:
             '''
 
 
-            self.extract_ROI_features(csvFile, xlsFile, videoFileList, roiList, colorSegmentationParams, greenness_index_list, progressBarIndex, progressBar)
+            self.extract_ROI_features(csvFile, xlsFile, videoFileList, roiList, colorSegmentationParams, greenness_index_list, progressBarIndex, progressBar, texture_options=texture_options)
 
 
             csvFile.close()
@@ -160,7 +160,8 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def build_scalar_header(self, nClusters, roiList, colorSegmentationParams, greenness_index_list):
+    def build_scalar_header(self, nClusters, roiList, colorSegmentationParams, greenness_index_list, texture_options=None):
+        texture_options = texture_options or {}
         # CREATE HEADER FOR THE ATTIRBUTE OF THE ENTIRE IMAGE
         header = 'Image, Date (ISO), Time (ISO)'
 
@@ -169,7 +170,7 @@ class GRIME_AI_Feature_Export:
             header = self.build_image_scalar_header(header, roiList, colorSegmentationParams)
 
         if colorSegmentationParams.ROI:
-            header = self.build_ROI_scalar_header(header, roiList, colorSegmentationParams, greenness_index_list)
+            header = self.build_ROI_scalar_header(header, roiList, colorSegmentationParams, greenness_index_list, texture_options)
 
         return header
 
@@ -177,7 +178,7 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def extract_ROI_features(self, csvFile, xlsFile, videoFileList, roiList, colorSegmentationParams, greenness_index_list, progressBarIndex, progressBar):
+    def extract_ROI_features(self, csvFile, xlsFile, videoFileList, roiList, colorSegmentationParams, greenness_index_list, progressBarIndex, progressBar, texture_options=None):
 
         myGRIMe_Color = GRIME_AI_Color()
 
@@ -190,7 +191,8 @@ class GRIME_AI_Feature_Export:
         # AND TRAIN ALL SUBSEQUENT ROIs FOR THE SAME NUMBER OF COLOR CLUSTERS
         nClusters = colorSegmentationParams.numColorClusters
 
-        header = self.build_scalar_header(nClusters, roiList, colorSegmentationParams, greenness_index_list)
+        texture_options = texture_options or {}
+        header = self.build_scalar_header(nClusters, roiList, colorSegmentationParams, greenness_index_list, texture_options)
 
         # WRITE THE HEADER TO THE CSV
         csvFile.write(header)
@@ -258,7 +260,7 @@ class GRIME_AI_Feature_Export:
 
                     if colorSegmentationParams.ROI:
                         strROI = self.calculate_ROI_scalars(img, roiList, colorSegmentationParams, greenness_index_list,
-                                                            xlsFile)
+                                                            xlsFile, texture_options=texture_options)
 
                         strOutputString = strOutputString + strROI
 
@@ -317,8 +319,9 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     #
     # ==================================================================================================================
-    def build_ROI_scalar_header(self, header, roiList, colorSegmentationParams, greenness_index_list):
+    def build_ROI_scalar_header(self, header, roiList, colorSegmentationParams, greenness_index_list, texture_options=None):
 
+        texture_options = texture_options or {}
         newHeader = header
 
         # ADD HEADER TO CSV FILE FOR EACH ROI ASSUMING ROIs HAVE BEEN CREATED
@@ -332,7 +335,23 @@ class GRIME_AI_Feature_Export:
                 newHeader = (newHeader + template).replace('#', 'Entropy')
 
             if colorSegmentationParams.Texture:
-                newHeader = (newHeader + template).replace('#', 'Texture')
+                roi_name = roiObj.getROIName()
+                import numpy as np
+                if texture_options.get('glcm', True):
+                    newHeader += f', {roi_name}: GLCM_Contrast, {roi_name}: GLCM_Homogeneity, {roi_name}: GLCM_Correlation'
+                if texture_options.get('gabor', True):
+                    for freq in [0.1, 0.3]:
+                        for theta in [0, np.pi/4, np.pi/2, 3*np.pi/4]:
+                            newHeader += f', {roi_name}: Gabor_f{freq}_t{theta:.2f}_mean, {roi_name}: Gabor_f{freq}_t{theta:.2f}_var'
+                if texture_options.get('lbp', False):
+                    newHeader += f', {roi_name}: LBP_hist'
+                if texture_options.get('wavelet', False):
+                    for lvl in [1, 2]:
+                        for sub in ['cH_mean', 'cH_var', 'cV_mean', 'cV_var', 'cD_mean', 'cD_var']:
+                            newHeader += f', {roi_name}: Wavelet_L{lvl}_{sub}'
+                if texture_options.get('fourier', False):
+                    for i in range(32):
+                        newHeader += f', {roi_name}: Fourier_bin{i}'
 
             if colorSegmentationParams.GCC:
                 newHeader = (newHeader + template).replace('#', 'GCC')
@@ -373,22 +392,12 @@ class GRIME_AI_Feature_Export:
     # ==================================================================================================================
     # CALCULATE THE FEATURE SCALARS FOR THE VARIOUS ROIs AND SAVE THEM TO THE CSV FILE
     # ==================================================================================================================
-    def calculate_ROI_scalars(self, img, roiList, colorSegmentationParams, greenness_index_list, xlsFile):
+    def calculate_ROI_scalars(self, img, roiList, colorSegmentationParams, greenness_index_list, xlsFile, texture_options=None):
 
         strOutputString = ''
+        texture_options = texture_options or {}
 
         for roiObj in roiList:
-            texture = -999
-
-            if 0:
-                self.extract_texture_and_savCe(
-                    image=img,
-                    excel_filename=xlsFile,
-                    plot_folder="plots",
-                    file_name="example_image",
-                    plot_option="embed"  # Options: "file", "embed", or "both"
-                )
-
             nClusters = roiObj.getNumColorClusters()
 
             rgb = GRIME_AI_roiData().extractROI(roiObj.getImageROI(), img)
@@ -419,7 +428,40 @@ class GRIME_AI_Feature_Export:
             if colorSegmentationParams.ShannonEntropy:
                 strOutputString = strOutputString + ', %3.4f' % entropyValue
             if colorSegmentationParams.Texture:
-                strOutputString = strOutputString + ', %3.2f' % texture
+                if texture_options.get('glcm', True):
+                    try:
+                        glcm_features = GLCMTexture().compute_features(rgb)
+                        strOutputString += ', %3.4f, %3.4f, %3.4f' % (
+                            glcm_features.get('contrast', -999),
+                            glcm_features.get('homogeneity', -999),
+                            glcm_features.get('correlation', -999)
+                        )
+                    except Exception:
+                        strOutputString += ', -999, -999, -999'
+                if texture_options.get('gabor', True):
+                    try:
+                        gabor_features = GaborTexture().compute_features(rgb)
+                        strOutputString += ''.join(', %3.4f' % v for v in gabor_features.values())
+                    except Exception:
+                        strOutputString += ', -999'
+                if texture_options.get('lbp', False):
+                    try:
+                        lbp_hist = LBPTexture().compute_features(rgb)
+                        strOutputString += ''.join(', %3.4f' % v for v in lbp_hist)
+                    except Exception:
+                        strOutputString += ', -999'
+                if texture_options.get('wavelet', False):
+                    try:
+                        wav_features = WaveletTexture().compute_features(rgb)
+                        strOutputString += ''.join(', %3.4f' % v for v in wav_features.values())
+                    except Exception:
+                        strOutputString += ', -999'
+                if texture_options.get('fourier', False):
+                    try:
+                        fourier_profile = FourierTexture().compute_features(rgb)
+                        strOutputString += ''.join(', %3.4f' % v for v in fourier_profile)
+                    except Exception:
+                        strOutputString += ', -999'
 
             try:
                 for greenness in greenness_index_list:
