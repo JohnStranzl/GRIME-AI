@@ -26,13 +26,14 @@
     </layout>
    </item>
 
-   <!-- Row 2: Left panel (clustering+metrics) + Right panel (splitter full height) -->
-   <item>
+   <!-- Row 2: Left panel + Right panel -->
+   <item stretches="1">
     <layout class="QHBoxLayout" name="horizontalLayoutMain">
 
-     <!-- Left panel: clustering groupbox + metrics groupbox stacked, fixed width -->
+     <!-- Left panel: full height, fixed width -->
      <item>
       <layout class="QVBoxLayout" name="verticalLayoutLeftPanel">
+
        <item>
         <widget class="QGroupBox" name="groupBox_clusteringMethod">
          <property name="sizePolicy">
@@ -43,8 +44,6 @@
          <property name="title"><string>Clustering Method</string></property>
          <layout class="QVBoxLayout" name="verticalLayoutClusteringInner">
           <property name="spacing"><number>2</number></property>
-
-          <!-- K-Means radio -->
           <item>
            <widget class="QRadioButton" name="radioButton_kmeans">
             <property name="text"><string>K-Means</string></property>
@@ -54,35 +53,12 @@
           </item>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutKmeansParams">
-            <item>
-             <spacer name="spacer_kmeans_indent">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeType"><enum>QSizePolicy::Fixed</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_numClusters">
-              <property name="text"><string>Clusters:</string></property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSpinBox" name="spinBox_numClusters">
-              <property name="minimum"><number>1</number></property>
-              <property name="maximum"><number>10</number></property>
-              <property name="value"><number>3</number></property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="spacer_kmeans_right">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-             </spacer>
-            </item>
+            <item><spacer name="spacer_kmeans_indent"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property></spacer></item>
+            <item><widget class="QLabel" name="label_numClusters"><property name="text"><string>Clusters:</string></property></widget></item>
+            <item><widget class="QSpinBox" name="spinBox_numClusters"><property name="minimum"><number>1</number></property><property name="maximum"><number>10</number></property><property name="value"><number>3</number></property></widget></item>
+            <item><spacer name="spacer_kmeans_right"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
            </layout>
           </item>
-
-          <!-- GMM radio -->
           <item>
            <widget class="QRadioButton" name="radioButton_gmm">
             <property name="text"><string>GMM</string></property>
@@ -91,37 +67,12 @@
           </item>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutGmmParams">
-            <item>
-             <spacer name="spacer_gmm_indent">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeType"><enum>QSizePolicy::Fixed</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_numClusters_gmm">
-              <property name="text"><string>Clusters:</string></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSpinBox" name="spinBox_numClusters_gmm">
-              <property name="minimum"><number>1</number></property>
-              <property name="maximum"><number>10</number></property>
-              <property name="value"><number>3</number></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="spacer_gmm_right">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-             </spacer>
-            </item>
+            <item><spacer name="spacer_gmm_indent"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property></spacer></item>
+            <item><widget class="QLabel" name="label_numClusters_gmm"><property name="text"><string>Clusters:</string></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><widget class="QSpinBox" name="spinBox_numClusters_gmm"><property name="minimum"><number>1</number></property><property name="maximum"><number>10</number></property><property name="value"><number>3</number></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><spacer name="spacer_gmm_right"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
            </layout>
           </item>
-
-          <!-- Mean-Shift radio -->
           <item>
            <widget class="QRadioButton" name="radioButton_meanshift">
             <property name="text"><string>Mean-Shift</string></property>
@@ -130,85 +81,29 @@
           </item>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutMeanshiftRow1">
-            <item>
-             <spacer name="spacer_ms_indent1">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeType"><enum>QSizePolicy::Fixed</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="checkBox_autoEstimate">
-              <property name="text"><string>Auto</string></property>
-              <property name="checked"><bool>true</bool></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_quantile">
-              <property name="text"><string>Quantile:</string></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_quantile">
-              <property name="minimum"><double>0.05</double></property>
-              <property name="maximum"><double>0.95</double></property>
-              <property name="singleStep"><double>0.05</double></property>
-              <property name="value"><double>0.20</double></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="spacer_ms_right1">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-             </spacer>
-            </item>
+            <item><spacer name="spacer_ms_indent1"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property></spacer></item>
+            <item><widget class="QCheckBox" name="checkBox_autoEstimate"><property name="text"><string>Auto</string></property><property name="checked"><bool>true</bool></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><widget class="QLabel" name="label_quantile"><property name="text"><string>Quantile:</string></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><widget class="QDoubleSpinBox" name="doubleSpinBox_quantile"><property name="minimum"><double>0.05</double></property><property name="maximum"><double>0.95</double></property><property name="singleStep"><double>0.05</double></property><property name="value"><double>0.20</double></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><spacer name="spacer_ms_right1"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
            </layout>
           </item>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutMeanshiftRow2">
-            <item>
-             <spacer name="spacer_ms_indent2">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeType"><enum>QSizePolicy::Fixed</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_bandwidth">
-              <property name="text"><string>Bandwidth:</string></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QDoubleSpinBox" name="doubleSpinBox_bandwidth">
-              <property name="minimum"><double>1.00</double></property>
-              <property name="maximum"><double>200.00</double></property>
-              <property name="singleStep"><double>0.5</double></property>
-              <property name="value"><double>15.00</double></property>
-              <property name="enabled"><bool>false</bool></property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="spacer_ms_right2">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
-              <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-             </spacer>
-            </item>
+            <item><spacer name="spacer_ms_indent2"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>0</height></size></property></spacer></item>
+            <item><widget class="QLabel" name="label_bandwidth"><property name="text"><string>Bandwidth:</string></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><widget class="QDoubleSpinBox" name="doubleSpinBox_bandwidth"><property name="minimum"><double>1.00</double></property><property name="maximum"><double>200.00</double></property><property name="singleStep"><double>0.5</double></property><property name="value"><double>15.00</double></property><property name="enabled"><bool>false</bool></property></widget></item>
+            <item><spacer name="spacer_ms_right2"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
            </layout>
           </item>
-
          </layout>
         </widget>
        </item>
 
-       <!-- Metrics groupbox -->
        <item>
         <widget class="QGroupBox" name="groupBox_metrics">
          <property name="sizePolicy">
-          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
            <horstretch>0</horstretch><verstretch>0</verstretch>
           </sizepolicy>
          </property>
@@ -229,130 +124,173 @@
         </widget>
        </item>
 
-       <!-- Vertical spacer pushes groupboxes to the top -->
+       <item>
+        <widget class="QGroupBox" name="groupBox_textureAnalysis">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch><verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title"><string>Texture Analysis</string></property>
+         <layout class="QVBoxLayout" name="verticalLayoutTextureAnalysis">
+          <property name="spacing"><number>4</number></property>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutTextureRow1">
+            <item><widget class="QCheckBox" name="checkBox_texture_GLCM"><property name="text"><string>GLCM</string></property><property name="checked"><bool>true</bool></property></widget></item>
+            <item><widget class="QCheckBox" name="checkBox_texture_Gabor"><property name="text"><string>Gabor</string></property></widget></item>
+            <item><spacer name="spacer_texture_row1"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutTextureRow2">
+            <item><widget class="QCheckBox" name="checkBox_texture_LBP"><property name="text"><string>LBP</string></property></widget></item>
+            <item><widget class="QCheckBox" name="checkBox_texture_Wavelet"><property name="text"><string>Wavelet</string></property></widget></item>
+            <item><spacer name="spacer_texture_row2"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutTextureRow3">
+            <item><widget class="QCheckBox" name="checkBox_texture_Fourier"><property name="text"><string>Fourier</string></property></widget></item>
+            <item><spacer name="spacer_texture_row3"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QFormLayout" name="formLayout_glcmMetrics">
+            <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+            <item row="0" column="0"><widget class="QLabel" name="label_glcm_contrast"><property name="text"><string>Contrast:</string></property></widget></item>
+            <item row="0" column="1"><widget class="QLineEdit" name="lineEdit_glcm_contrast"><property name="readOnly"><bool>true</bool></property><property name="maxLength"><number>10</number></property></widget></item>
+            <item row="1" column="0"><widget class="QLabel" name="label_glcm_homogeneity"><property name="text"><string>Homogeneity:</string></property></widget></item>
+            <item row="1" column="1"><widget class="QLineEdit" name="lineEdit_glcm_homogeneity"><property name="readOnly"><bool>true</bool></property><property name="maxLength"><number>10</number></property></widget></item>
+            <item row="2" column="0"><widget class="QLabel" name="label_glcm_correlation"><property name="text"><string>Correlation:</string></property></widget></item>
+            <item row="2" column="1"><widget class="QLineEdit" name="lineEdit_glcm_correlation"><property name="readOnly"><bool>true</bool></property><property name="maxLength"><number>10</number></property></widget></item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Spacer pushes group boxes to top -->
        <item>
         <spacer name="spacer_leftPanelBottom">
          <property name="orientation"><enum>Qt::Vertical</enum></property>
          <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
         </spacer>
        </item>
+
       </layout>
      </item>
 
-     <!-- Right panel: vertical splitter spanning full height -->
+     <!-- Right panel: vertical layout containing images, swatches, filmstrip, buttons -->
      <item>
-      <widget class="QSplitter" name="splitter_display">
-       <property name="orientation"><enum>Qt::Vertical</enum></property>
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-         <horstretch>0</horstretch><verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <widget class="QWidget" name="widget_images_pane">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch><verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayoutImages">
-         <property name="spacing"><number>4</number></property>
+      <layout class="QVBoxLayout" name="verticalLayoutRightPanel">
+
+       <!-- Images pane -->
+       <item>
+        <widget class="QSplitter" name="splitter_display">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch><verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <widget class="QWidget" name="widget_images_pane">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch><verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayoutImages">
+           <property name="spacing"><number>4</number></property>
+           <item>
+            <widget class="QLabel" name="label_image_original">
+             <property name="text"><string></string></property>
+             <property name="alignment"><set>Qt::AlignCenter</set></property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch><verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_image_features">
+             <property name="text"><string></string></property>
+             <property name="alignment"><set>Qt::AlignCenter</set></property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch><verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_image_overlay">
+             <property name="text"><string></string></property>
+             <property name="alignment"><set>Qt::AlignCenter</set></property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <horstretch>0</horstretch><verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QLabel" name="label_swatches">
+          <property name="text"><string></string></property>
+          <property name="alignment"><set>Qt::AlignCenter</set></property>
+          <property name="scaledContents"><bool>true</bool></property>
+          <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch><verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </widget>
+       </item>
+
+       <!-- Filmstrip -->
+       <item>
+        <widget class="QListWidget" name="listWidget_filmstrip">
+         <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+         <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOn</enum></property>
+         <property name="iconSize"><size><width>100</width><height>100</height></size></property>
+         <property name="movement"><enum>QListView::Static</enum></property>
+         <property name="flow"><enum>QListView::LeftToRight</enum></property>
+         <property name="resizeMode"><enum>QListView::Adjust</enum></property>
+         <property name="spacing"><number>10</number></property>
+         <property name="viewMode"><enum>QListView::IconMode</enum></property>
+         <property name="wrapping" stdset="0"><bool>false</bool></property>
+        </widget>
+       </item>
+
+       <!-- Buttons -->
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayoutROIButtons">
+         <item><spacer name="leftSpacerROI"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
          <item>
-          <widget class="QLabel" name="label_image_original">
-           <property name="text"><string></string></property>
-           <property name="alignment"><set>Qt::AlignCenter</set></property>
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-             <horstretch>0</horstretch><verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
+          <widget class="QPushButton" name="pushButton_analyze">
+           <property name="minimumSize"><size><width>150</width><height>40</height></size></property>
+           <property name="styleSheet"><string notr="true">font: bold 11pt Arial;</string></property>
+           <property name="text"><string>Analyze</string></property>
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="label_image_features">
-           <property name="text"><string></string></property>
-           <property name="alignment"><set>Qt::AlignCenter</set></property>
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-             <horstretch>0</horstretch><verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
+          <widget class="QPushButton" name="pushButton_extract_ROI_features">
+           <property name="minimumSize"><size><width>150</width><height>40</height></size></property>
+           <property name="styleSheet"><string notr="true">font: bold 11pt Arial;</string></property>
+           <property name="text"><string>Extract ROI Features</string></property>
           </widget>
          </item>
-         <item>
-          <widget class="QLabel" name="label_image_overlay">
-           <property name="text"><string></string></property>
-           <property name="alignment"><set>Qt::AlignCenter</set></property>
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-             <horstretch>0</horstretch><verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-          </widget>
-         </item>
+         <item><spacer name="rightSpacerROI"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
         </layout>
-       </widget>
-       <widget class="QLabel" name="label_swatches">
-        <property name="text"><string></string></property>
-        <property name="alignment"><set>Qt::AlignCenter</set></property>
-        <property name="scaledContents"><bool>true</bool></property>
-        <property name="minimumSize"><size><width>0</width><height>50</height></size></property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch><verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-       </widget>
-      </widget>
+       </item>
+
+      </layout>
      </item>
 
     </layout>
-   </item>
-
-   <!-- Row 4: Buttons centered -->
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayoutROIButtons">
-     <item>
-      <spacer name="leftSpacerROI">
-       <property name="orientation"><enum>Qt::Horizontal</enum></property>
-       <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_analyze">
-       <property name="minimumSize"><size><width>150</width><height>40</height></size></property>
-       <property name="styleSheet"><string notr="true">font: bold 11pt Arial;</string></property>
-       <property name="text"><string>Analyze</string></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_extract_ROI_features">
-       <property name="minimumSize"><size><width>150</width><height>40</height></size></property>
-       <property name="styleSheet"><string notr="true">font: bold 11pt Arial;</string></property>
-       <property name="text"><string>Extract ROI Features</string></property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="rightSpacerROI">
-       <property name="orientation"><enum>Qt::Horizontal</enum></property>
-       <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
-      </spacer>
-     </item>
-    </layout>
-   </item>
-
-   <!-- Row 5: Filmstrip (bottom) -->
-   <item>
-    <widget class="QListWidget" name="listWidget_filmstrip">
-     <property name="verticalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
-     <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOn</enum></property>
-     <property name="iconSize"><size><width>100</width><height>100</height></size></property>
-     <property name="movement"><enum>QListView::Static</enum></property>
-     <property name="flow"><enum>QListView::LeftToRight</enum></property>
-     <property name="resizeMode"><enum>QListView::Adjust</enum></property>
-     <property name="spacing"><number>10</number></property>
-     <property name="viewMode"><enum>QListView::IconMode</enum></property>
-     <property name="wrapping" stdset="0"><bool>false</bool></property>
-    </widget>
    </item>
 
   </layout>

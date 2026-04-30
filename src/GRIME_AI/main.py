@@ -613,7 +613,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     # CLASS INITIALIZATION
     # ------------------------------------------------------------------------------------------------------------------
-    def __init__(self, parent=None, win=None, session=None, splash=None, is_dark=False):
+    def __init__(self, parent=None, win=None, session=None, splash=None):
         super(MainWindow, self).__init__(parent)
         self.mainwin = win
         self.session = session
@@ -639,12 +639,14 @@ class MainWindow(QMainWindow):
 
         # Set stylesheet for the tabs to change color when a tab is selected.
         self.tabWidget.setStyleSheet("""
-            QTabBar::tab { color: #cccccc; background: #3a3a3a; padding: 4px 8px; border: 1px solid #555555; }
-            QTabBar::tab:selected { color: #ffffff; background: #1e6aa8; border-bottom: none; }
-            QTabBar::tab:hover:!selected { color: #ffffff; background: #505050; }
-        """ if is_dark else """
-            QTabBar::tab { background-color: white; color: black; }
-            QTabBar::tab:selected { background-color: steelblue; color: white; }
+            QTabBar::tab {
+                background-color: white;
+                color: black;
+            }
+            QTabBar::tab:selected {
+                background-color: steelblue;
+                color: white;
+            }
         """)
 
 
@@ -759,7 +761,7 @@ class MainWindow(QMainWindow):
         # ------------------------------------------------------------------------------------------------------------------
         # VIEW MENU — dark/light mode toggle
         # ------------------------------------------------------------------------------------------------------------------
-        self._is_dark_mode = is_dark
+        self._is_dark_mode = False
         self._whole_image_ref_set = False
         self._roi_ref_set = set()
 
@@ -767,46 +769,10 @@ class MainWindow(QMainWindow):
         self._menu_view = QMenu("View", self)
         self.menuBar().insertMenu(_help_action, self._menu_view)
 
-        # "Follow System Theme" checkbox — top of View menu
-        self._action_system_theme = QAction("Follow System Theme", self)
-        self._action_system_theme.setCheckable(True)
-        self._action_system_theme.setStatusTip("Automatically match the operating system dark/light theme")
-        self._action_system_theme.triggered.connect(self._on_system_theme_toggled)
-        self._menu_view.addAction(self._action_system_theme)
-
-        self._menu_view.addSeparator()
-
-        # Manual dark/light toggle — disabled when following system theme
-        self._action_toggle_theme = QAction("Light Mode" if is_dark else "Dark Mode", self)
+        self._action_toggle_theme = QAction("Dark Mode", self)
         self._action_toggle_theme.setStatusTip("Toggle between dark and light application theme")
         self._action_toggle_theme.triggered.connect(self._toggle_dark_mode)
         self._menu_view.addAction(self._action_toggle_theme)
-
-        # Timer to poll OS theme changes when following system theme
-        self._system_theme_timer = QTimer(self)
-        self._system_theme_timer.timeout.connect(self._poll_system_theme)
-        self._last_system_dark = is_dark
-
-        # Load follow-system preference from settings
-        _follow_system_saved = True  # default to following system
-        try:
-            _saved = JsonEditor().getValue("Dark_Mode_Follow_System")
-            if _saved is not None:
-                _follow_system_saved = bool(_saved)
-        except Exception:
-            pass
-
-        try:
-            import darkdetect
-            self._action_system_theme.setChecked(_follow_system_saved)
-            if _follow_system_saved:
-                self._action_toggle_theme.setEnabled(False)
-                self._system_theme_timer.start(2000)
-            else:
-                self._action_toggle_theme.setEnabled(True)
-        except ImportError:
-            self._action_system_theme.setChecked(False)
-            self._action_system_theme.setEnabled(False)
 
         try:
             self.action_About.triggered.connect(self._show_about_dialog)
@@ -922,54 +888,6 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     #
     # ------------------------------------------------------------------------------------------------------------------
-    def _on_system_theme_toggled(self, checked):
-        """Enable or disable following the OS theme."""
-        if checked:
-            self._action_toggle_theme.setEnabled(False)
-            self._system_theme_timer.start(2000)
-            self._poll_system_theme()  # apply immediately
-        else:
-            self._action_toggle_theme.setEnabled(True)
-            self._system_theme_timer.stop()
-        # Save follow-system preference (None = follow system, True/False = manual override)
-        try:
-            JsonEditor().update_json_entry("Dark_Mode_Follow_System", checked)
-        except Exception:
-            pass
-
-    def _poll_system_theme(self):
-        """Poll OS theme and apply if it has changed."""
-        try:
-            import darkdetect
-            is_dark = darkdetect.isDark() or False
-        except Exception:
-            return
-
-        if is_dark == self._last_system_dark:
-            return  # no change
-
-        self._last_system_dark = is_dark
-        self._is_dark_mode = is_dark
-        app = QApplication.instance()
-        if is_dark:
-            try:
-                import qdarkstyle
-                app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
-            except Exception:
-                pass
-            self.tabWidget.setStyleSheet("""
-    QTabBar::tab { color: #cccccc; background: #3a3a3a; padding: 4px 8px; border: 1px solid #555555; }
-    QTabBar::tab:selected { color: #ffffff; background: #1e6aa8; border-bottom: none; }
-    QTabBar::tab:hover:!selected { color: #ffffff; background: #505050; }
-""")
-        else:
-            app.setStyleSheet("")
-            self.tabWidget.setStyleSheet("""
-    QTabBar::tab { background-color: white; color: black; }
-    QTabBar::tab:selected { background-color: steelblue; color: white; }
-""")
-        self._action_toggle_theme.setText("Light Mode" if is_dark else "Dark Mode")
-
     def _toggle_dark_mode(self):
         self._is_dark_mode = not self._is_dark_mode
         app = QApplication.instance()
@@ -979,31 +897,19 @@ class MainWindow(QMainWindow):
                 app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
             except ImportError:
                 pass
-            self.tabWidget.setStyleSheet("""
-    QTabBar::tab { color: #cccccc; background: #3a3a3a; padding: 4px 8px; border: 1px solid #555555; }
-    QTabBar::tab:selected { color: #ffffff; background: #1e6aa8; border-bottom: none; }
-    QTabBar::tab:hover:!selected { color: #ffffff; background: #505050; }
-""")
             self._action_toggle_theme.setText("Light Mode")
         else:
             app.setStyleSheet("")
-            self.tabWidget.setStyleSheet("""
-    QTabBar::tab { background-color: white; color: black; }
-    QTabBar::tab:selected { background-color: steelblue; color: white; }
-""")
             self._action_toggle_theme.setText("Dark Mode")
-        # Save preference
-        try:
-            JsonEditor().update_json_entry("Dark_Mode", self._is_dark_mode)
-        except Exception:
-            pass
 
     def _show_about_dialog(self):
         try:
-            from GRIME_AI.version import SW_VERSION, COMMIT_SHA
+            from GRIME_AI.version import SW_VERSION, RELEASE, BUILD_DATE, SHA
         except ImportError:
-            SW_VERSION = globals().get('SW_VERSION', 'Ver. 0.0.0.0')
-            COMMIT_SHA = 'N/A'
+            SW_VERSION = globals().get('SW_VERSION', '0.0.0.0')
+            RELEASE    = 'N/A'
+            BUILD_DATE = 'N/A'
+            SHA        = 'N/A'
 
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
         from PyQt5.QtGui import QPixmap
@@ -1013,7 +919,7 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("About GRIME AI")
         dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
-        dlg.setFixedSize(480, 380)
+        dlg.setFixedSize(480, 420)
 
         layout = QVBoxLayout(dlg)
         layout.setAlignment(Qt.AlignCenter)
@@ -1031,12 +937,22 @@ class MainWindow(QMainWindow):
             lbl_logo.setStyleSheet("font-size: 28px; font-weight: bold;")
         layout.addWidget(lbl_logo)
 
-        lbl_version = QLabel(SW_VERSION)
+        lbl_version = QLabel(f"Version: {SW_VERSION}")
         lbl_version.setAlignment(Qt.AlignCenter)
         lbl_version.setStyleSheet("font-size: 14px; font-weight: bold;")
         layout.addWidget(lbl_version)
 
-        lbl_sha = QLabel(f"Commit: {COMMIT_SHA}")
+        lbl_release = QLabel(f"Release: {RELEASE}")
+        lbl_release.setAlignment(Qt.AlignCenter)
+        lbl_release.setStyleSheet("font-size: 12px;")
+        layout.addWidget(lbl_release)
+
+        lbl_date = QLabel(f"Build Date: {BUILD_DATE}")
+        lbl_date.setAlignment(Qt.AlignCenter)
+        lbl_date.setStyleSheet("font-size: 11px; color: gray;")
+        layout.addWidget(lbl_date)
+
+        lbl_sha = QLabel(f"Commit: {SHA}")
         lbl_sha.setAlignment(Qt.AlignCenter)
         lbl_sha.setStyleSheet("font-size: 11px; color: gray;")
         layout.addWidget(lbl_sha)
@@ -1674,8 +1590,16 @@ class MainWindow(QMainWindow):
         if self.colorSegmentationDlg != None:
             self.getColorSegmentationParams()
 
+        # Get texture options from dialog if available
+        texture_options = {}
+        if self.colorSegmentationDlg is not None:
+            try:
+                texture_options = self.colorSegmentationDlg.get_texture_options()
+            except Exception:
+                pass
+
         global imageFileFolder
-        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams, self.greenness_index_list)
+        myFeatureExport.ExtractFeatures(imagesList, imageFileFolder, self.roiList, self.colorSegmentationParams, self.greenness_index_list, texture_options=texture_options)
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -4788,33 +4712,8 @@ def run_gui():
     # CREATE MAIN APP WINDOW
     app = QApplication(sys.argv)
 
-    # Load saved theme preference — overrides auto-detect if present
-    _is_dark = None
-    try:
-        _saved = JsonEditor().getValue("Dark_Mode")
-        if _saved is not None:
-            _is_dark = bool(_saved)
-    except Exception:
-        pass
-
-    # Fall back to auto-detect if no saved preference
-    if _is_dark is None:
-        _is_dark = False
-        try:
-            import darkdetect
-            _is_dark = darkdetect.isDark() or False
-        except Exception:
-            pass
-
-    if _is_dark:
-        try:
-            import qdarkstyle
-            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
-        except Exception:
-            _is_dark = False  # qdarkstyle unavailable — fall back to light
-            app.setStyleSheet("")
-    else:
-        app.setStyleSheet("")
+    # Light mode is the default — dark mode toggled via View menu
+    app.setStyleSheet("")
 
     # ------------------------------------------------------------------------------------------------------------------
     # SHOW SPLASH IN SEPARATE PROCESS — stays visible throughout all of MainWindow init
@@ -4825,7 +4724,7 @@ def run_gui():
     )
     _splash.show()   # blocks briefly until splash is painted, then returns
 
-    frame = MainWindow(splash=_splash, is_dark=_is_dark)
+    frame = MainWindow(splash=_splash)
 
     frame.move(app.desktop().screen().rect().center() - frame.rect().center())
 
