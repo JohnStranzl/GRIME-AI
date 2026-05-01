@@ -55,31 +55,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-try:
-    import torch
-    logging.debug("Successfully imported torch.")
-
-    # If you need to disable profiling to avoid TorchScript type inference issues,
-    # do it explicitly here. (Remove these lines if you want profiling enabled.)
-    torch._C._jit_set_profiling_mode(False)
-    torch._C._jit_set_profiling_executor(False)
-    logging.debug("Disabled Torch profiling mode and executor.")
-
-    # Force torch.jit initialization.
-    jit_doc = torch.jit.__doc__
-    logging.debug("Torch JIT initialized successfully, first 100 chars of doc: %.100s", jit_doc)
-except Exception as e:
-    logging.error("Error during Torch initialization", exc_info=True)
-
-try:
-    import torch.jit
-except Exception as e:
-    logging.error("Error importing torch.jit", exc_info=True)
-
-try:
-    import torch.jit._script    # This can be important if your models are scripted.
-except Exception as e:
-    logging.error("Error importing torch.jit._script", exc_info=True)
+# torch imported lazily at first use (CLI segmentation path)
 
 try:
     import sklearn.neighbors._typedefs
@@ -187,16 +163,12 @@ from GRIME_AI.usgs.usgs_client import USGSClient
 # lazy: from GRIME_AI.dialogs.file_utilities.GRIME_AI_FileUtilitiesDlg import GRIME_AI_FileUtilitiesDlg
 # lazy: from GRIME_AI.dialogs.mask_editor.GRIME_AI_MaskEditorDlg import GRIME_AI_MaskEditorDlg
 # lazy: from GRIME_AI.dialogs.composite_slice.GRIME_AI_CompositeSliceDlg import GRIME_AI_CompositeSliceDlg
-from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
 # lazy: from GRIME_AI.dialogs.release_notes.GRIME_AI_ReleaseNotesDlg import GRIME_AI_ReleaseNotesDlg
 from GRIME_AI.dialogs.triage.GRIME_AI_TriageOptionsDlg import GRIME_AI_TriageOptionsDlg
 from GRIME_AI.GRIME_AI_Color import GRIME_AI_Color
-from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
 from GRIME_AI.GRIME_AI_Vegetation_Indices import GRIME_AI_Vegetation_Indices, GreennessIndex
 # lazy: from GRIME_AI.dialogs.extract_coco_masks.GRIME_AI_ExportCOCOMasksDlg import GRIME_AI_ExportCOCOMasksDlg
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
-from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
-from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
 from GRIME_AI.GRIME_AI_ImageData import imageData
 # lazy: from GRIME_AI.dialogs.image_organizer.GRIME_AI_ImageOrganizerDlg import GRIME_AI_ImageOrganizerDlg
 # lazy: from GRIME_AI.dialogs.temporal_averaging.GRIME_AI_TemporalAveragingDlg import GRIME_AI_TemporalAveragingDlg
@@ -952,9 +924,15 @@ class MainWindow(QMainWindow):
         lbl_date.setStyleSheet("font-size: 11px; color: gray;")
         layout.addWidget(lbl_date)
 
-        lbl_sha = QLabel(f"Commit: {SHA}")
+        if SHA != 'N/A':
+            commit_url = f"https://github.com/JohnStranzl/GRIME-AI/commit/{SHA}"
+            lbl_sha = QLabel(f'Commit: <a href="{commit_url}" style="color: gray;">{SHA[:12]}</a>')
+        else:
+            lbl_sha = QLabel("Commit: N/A")
         lbl_sha.setAlignment(Qt.AlignCenter)
         lbl_sha.setStyleSheet("font-size: 11px; color: gray;")
+        lbl_sha.setOpenExternalLinks(True)
+        lbl_sha.setTextFormat(Qt.RichText)
         layout.addWidget(lbl_sha)
 
         btn = QPushButton("Close")
@@ -1584,6 +1562,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------------------------------------------------
     def buildFeatureFile(self):
         global dailyImagesList
+        from GRIME_AI.GRIME_AI_Feature_Export import GRIME_AI_Feature_Export
         myFeatureExport = GRIME_AI_Feature_Export()
         imagesList = dailyImagesList.getVisibleList()
 
@@ -1620,6 +1599,7 @@ class MainWindow(QMainWindow):
             if len(self.roiList) > 0:
                 # DIAGNOSTICS
                 #if self.checkBoxColorDiagnostics.checkState():
+                from GRIME_AI.GRIME_AI_Diagnostics import GRIME_AI_Diagnostics
                 GRIME_AI_Diagnostics.RGB3DPlot(rgb)
                 GRIME_AI_Diagnostics.plotHSVChannelsGray(hsv)
                 GRIME_AI_Diagnostics.plotHSVChannelsColor(hsv)
@@ -2739,6 +2719,7 @@ class MainWindow(QMainWindow):
 
         slice_rect = self.compositeSliceDlg.label_Image.getSliceRectInOriginal()
 
+        from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
         compositeSlices = GRIME_AI_CompositeSlices(slice_rect)
         compositeSlices.create_composite_image(dailyImagesList.visibleList, composite_slices_folder)
 
@@ -2780,7 +2761,7 @@ class MainWindow(QMainWindow):
                 msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
                 response = msgBox.displayMsgBox()
             else:
-                TriageDlg = GRIME_AI_TriageOptionsDlg()
+                TriageDlg = GRIME_AI_TriageOptionsDlg(folder=folder)
 
                 response = TriageDlg.exec_()
 
@@ -2798,7 +2779,10 @@ class MainWindow(QMainWindow):
                                              TriageDlg.getBrightnessMin(), TriageDlg.getBrightnessMax(), \
                                              TriageDlg.getCreateReport(), TriageDlg.getMoveImages(), \
                                              TriageDlg.getCorrectAlignment(), TriageDlg.getSavePolylines(),
-                                             TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold())
+                                             TriageDlg.getReferenceImageFilename(), TriageDlg.getRotationThreshold(),
+                                             focus_roi=TriageDlg.getFocusROI(),
+                                             use_color_imbalance=TriageDlg.getUseColorImbalance(),
+                                             color_imbalance_threshold=TriageDlg.getColorImbalanceThreshold())
 
                         strMessage = 'Image triage is complete!'
                         msgBox = GRIME_AI_QMessageBox('Image Triage', strMessage, buttons=QMessageBox.Close)
@@ -4090,6 +4074,7 @@ def processImage(self, myImage):
         # EDGE DETECTION METHODS
         if len(gray) != 0:
 
+            from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
             myProcessImage = GRIME_AI_ProcessImage()
 
             if g_edgeMethodSettings.method == edgeMethodsClass.CANNY:
@@ -4926,6 +4911,7 @@ def run_cli(args):
     elif args.command == 'slice':
         filenames = cli_fetchLocalImageList(args.folder)
 
+        from GRIME_AI.GRIME_AI_CompositeSlices import GRIME_AI_CompositeSlices
         compositeSlices = GRIME_AI_CompositeSlices(args.center, args.width, False)
         compositeSlices.create_composite_image(filenames, args.folder+'\compositeSlices')
 
