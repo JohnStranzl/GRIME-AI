@@ -6,194 +6,313 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>560</width>
+    <width>900</width>
     <height>420</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Calibrate Triage Parameters</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayoutMain">
 
-   <!-- Folder selection group -->
+  <!-- Top-level: left controls | right image panel -->
+  <layout class="QHBoxLayout" name="horizontalLayoutMain" stretch="0,1">
+
+   <!-- ── LEFT COLUMN ─────────────────────────────────────────── -->
    <item>
-    <widget class="QGroupBox" name="groupBox_Folders">
-     <property name="title"><string>Calibration image folders</string></property>
-     <layout class="QGridLayout" name="gridLayoutFolders">
+    <layout class="QVBoxLayout" name="verticalLayoutLeft">
 
-      <!-- Good -->
-      <item row="0" column="0">
-       <widget class="QLabel" name="labelGood">
-        <property name="text"><string>Good images</string></property>
-        <property name="toolTip"><string>Folder containing sharp, well-exposed images that should pass triage.</string></property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="lineEdit_GoodFolder">
-        <property name="placeholderText"><string>No folder selected</string></property>
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="toolTip"><string>Folder containing sharp, well-exposed images that should pass triage.</string></property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QPushButton" name="pushButton_BrowseGood">
-        <property name="text"><string>Browse</string></property>
-        <property name="toolTip"><string>Select the folder containing your known-good images.</string></property>
-       </widget>
-      </item>
-
-      <!-- Blurry -->
-      <item row="1" column="0">
-       <widget class="QLabel" name="labelBlurry">
-        <property name="text"><string>Blurry images</string></property>
-        <property name="toolTip"><string>Folder containing blurry images (focus blur or camera vibration) that should be flagged by triage.</string></property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="lineEdit_BlurryFolder">
-        <property name="placeholderText"><string>No folder selected</string></property>
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="toolTip"><string>Folder containing blurry images that should be flagged by triage.</string></property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QPushButton" name="pushButton_BrowseBlurry">
-        <property name="text"><string>Browse</string></property>
-        <property name="toolTip"><string>Select the folder containing your known-blurry images.</string></property>
-       </widget>
-      </item>
-
-      <!-- Exposure -->
-      <item row="2" column="0">
-       <widget class="QLabel" name="labelExposure">
-        <property name="text"><string>Exposure images</string></property>
-        <property name="toolTip"><string>Folder containing images that are too dark or too bright and should be flagged by triage.</string></property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QLineEdit" name="lineEdit_ExposureFolder">
-        <property name="placeholderText"><string>No folder selected</string></property>
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="toolTip"><string>Folder containing images that are too dark or too bright.</string></property>
-       </widget>
-      </item>
-      <item row="2" column="2">
-       <widget class="QPushButton" name="pushButton_BrowseExposure">
-        <property name="text"><string>Browse</string></property>
-        <property name="toolTip"><string>Select the folder containing your known exposure-problem images.</string></property>
-       </widget>
-      </item>
-
-     </layout>
-    </widget>
-   </item>
-
-   <!-- Progress -->
-   <item>
-    <widget class="QGroupBox" name="groupBox_Progress">
-     <property name="title"><string>Progress</string></property>
-     <layout class="QVBoxLayout" name="vLayoutProgress">
-      <item>
-       <widget class="QProgressBar" name="progressBar">
-        <property name="value"><number>0</number></property>
-        <property name="toolTip"><string>Calibration progress.</string></property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelStatus">
-        <property name="text"><string>Ready</string></property>
-        <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-
-   <!-- Results -->
-   <item>
-    <widget class="QGroupBox" name="groupBox_Results">
-     <property name="title"><string>Calibrated parameters</string></property>
-     <layout class="QGridLayout" name="gridLayoutResults" columnstretch="1,1,1,1,1">
-
-      <item row="0" column="0"><widget class="QLabel" name="labelResFftThr"><property name="text"><string>Focus sensitivity</string></property></widget></item>
-      <item row="0" column="1"><widget class="QLabel" name="labelResLapThr"><property name="text"><string>Edge sensitivity</string></property></widget></item>
-      <item row="0" column="2"><widget class="QLabel" name="labelResRadius"><property name="text"><string>Uniform area filter</string></property></widget></item>
-      <item row="0" column="3"><widget class="QLabel" name="labelResBMin"><property name="text"><string>Too dark below</string></property></widget></item>
-      <item row="0" column="4"><widget class="QLabel" name="labelResBMax"><property name="text"><string>Too bright above</string></property></widget></item>
-
-      <item row="1" column="0">
-       <widget class="QLineEdit" name="lineEdit_ResultFftThreshold">
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="placeholderText"><string>—</string></property>
-        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="lineEdit_ResultLaplacianThreshold">
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="placeholderText"><string>—</string></property>
-        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QLineEdit" name="lineEdit_ResultFftRadius">
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="placeholderText"><string>—</string></property>
-        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-      <item row="1" column="3">
-       <widget class="QLineEdit" name="lineEdit_ResultBrightnessMin">
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="placeholderText"><string>—</string></property>
-        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-      <item row="1" column="4">
-       <widget class="QLineEdit" name="lineEdit_ResultBrightnessMax">
-        <property name="readOnly"><bool>true</bool></property>
-        <property name="placeholderText"><string>—</string></property>
-        <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
-       </widget>
-      </item>
-
-     </layout>
-    </widget>
-   </item>
-
-   <!-- Buttons -->
-   <item>
-    <layout class="QHBoxLayout" name="hLayoutButtons">
+     <!-- Folder selection group -->
      <item>
-      <widget class="QPushButton" name="pushButton_RunCalibration">
-       <property name="text"><string>Run calibration</string></property>
-       <property name="enabled"><bool>false</bool></property>
-       <property name="toolTip"><string>Run the calibration. Requires at least the Good and one other folder to be selected.</string></property>
+      <widget class="QGroupBox" name="groupBox_Folders">
+       <property name="title"><string>Calibration image folders</string></property>
+       <layout class="QGridLayout" name="gridLayoutFolders">
+
+        <!-- Good -->
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelGood">
+          <property name="text"><string>Good images</string></property>
+          <property name="toolTip"><string>Folder containing sharp, well-exposed images that should pass triage.</string></property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLineEdit" name="lineEdit_GoodFolder">
+          <property name="placeholderText"><string>No folder selected</string></property>
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="toolTip"><string>Folder containing sharp, well-exposed images that should pass triage.</string></property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QPushButton" name="pushButton_BrowseGood">
+          <property name="text"><string>Browse</string></property>
+          <property name="toolTip"><string>Select the folder containing your known-good images.</string></property>
+         </widget>
+        </item>
+
+        <!-- Blurry -->
+        <item row="1" column="0">
+         <widget class="QLabel" name="labelBlurry">
+          <property name="text"><string>Blurry images</string></property>
+          <property name="toolTip"><string>Folder containing blurry images that should be flagged by triage.</string></property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QLineEdit" name="lineEdit_BlurryFolder">
+          <property name="placeholderText"><string>No folder selected</string></property>
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="toolTip"><string>Folder containing blurry images that should be flagged by triage.</string></property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QPushButton" name="pushButton_BrowseBlurry">
+          <property name="text"><string>Browse</string></property>
+          <property name="toolTip"><string>Select the folder containing your known-blurry images.</string></property>
+         </widget>
+        </item>
+
+        <!-- Exposure -->
+        <item row="2" column="0">
+         <widget class="QLabel" name="labelExposure">
+          <property name="text"><string>Exposure images</string></property>
+          <property name="toolTip"><string>Folder containing images that are too dark or too bright.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QLineEdit" name="lineEdit_ExposureFolder">
+          <property name="placeholderText"><string>No folder selected</string></property>
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="toolTip"><string>Folder containing images that are too dark or too bright.</string></property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QPushButton" name="pushButton_BrowseExposure">
+          <property name="text"><string>Browse</string></property>
+          <property name="toolTip"><string>Select the folder containing your known exposure-problem images.</string></property>
+         </widget>
+        </item>
+
+
+        <!-- Color imbalance -->
+        <item row="3" column="0">
+         <widget class="QLabel" name="labelColorImbalance">
+          <property name="text"><string>Color imbalance images</string></property>
+          <property name="toolTip"><string>Folder containing images with severe color imbalance (e.g. sunrise/sunset or white balance errors) that should be flagged by triage.</string></property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QLineEdit" name="lineEdit_ColorImbalanceFolder">
+          <property name="placeholderText"><string>No folder selected (uses default threshold 0.5)</string></property>
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="toolTip"><string>Folder containing images with severe color imbalance.</string></property>
+         </widget>
+        </item>
+        <item row="3" column="2">
+         <widget class="QPushButton" name="pushButton_BrowseColorImbalance">
+          <property name="text"><string>Browse</string></property>
+          <property name="toolTip"><string>Select the folder containing your known color-imbalanced images.</string></property>
+         </widget>
+        </item>
+
+       </layout>
       </widget>
      </item>
+
+     <!-- Progress -->
      <item>
-      <spacer name="spacerButtons">
-       <property name="orientation"><enum>Qt::Horizontal</enum></property>
-       <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_ApplyAndClose">
-       <property name="text"><string>Apply and close</string></property>
-       <property name="enabled"><bool>false</bool></property>
-       <property name="toolTip"><string>Apply the calibrated parameters to the triage options and close this dialog.</string></property>
+      <widget class="QGroupBox" name="groupBox_Progress">
+       <property name="title"><string>Progress</string></property>
+       <layout class="QVBoxLayout" name="vLayoutProgress">
+        <item>
+         <widget class="QProgressBar" name="progressBar">
+          <property name="value"><number>0</number></property>
+          <property name="toolTip"><string>Calibration progress.</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelStatus">
+          <property name="text"><string>Ready</string></property>
+          <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+       </layout>
       </widget>
      </item>
+
+     <!-- Results -->
      <item>
-      <widget class="QPushButton" name="pushButton_Cancel">
-       <property name="text"><string>Cancel</string></property>
+      <widget class="QGroupBox" name="groupBox_Results">
+       <property name="title"><string>Calibrated parameters</string></property>
+       <layout class="QGridLayout" name="gridLayoutResults" columnstretch="1,1,1,1,1">
+
+        <item row="0" column="0"><widget class="QLabel" name="labelResFftThr"><property name="text"><string>Focus sensitivity</string></property></widget></item>
+        <item row="0" column="1"><widget class="QLabel" name="labelResLapThr"><property name="text"><string>Edge sensitivity</string></property></widget></item>
+        <item row="0" column="2"><widget class="QLabel" name="labelResRadius"><property name="text"><string>Uniform area filter</string></property></widget></item>
+        <item row="0" column="3"><widget class="QLabel" name="labelResBMin"><property name="text"><string>Too dark below</string></property></widget></item>
+        <item row="0" column="4"><widget class="QLabel" name="labelResBMax"><property name="text"><string>Too bright above</string></property></widget></item>
+        <item row="0" column="5"><widget class="QLabel" name="labelResColorImbalance"><property name="text"><string>Color imbalance</string></property></widget></item>
+
+        <item row="1" column="0">
+         <widget class="QLineEdit" name="lineEdit_ResultFftThreshold">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QLineEdit" name="lineEdit_ResultLaplacianThreshold">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLineEdit" name="lineEdit_ResultFftRadius">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QLineEdit" name="lineEdit_ResultBrightnessMin">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="4">
+         <widget class="QLineEdit" name="lineEdit_ResultBrightnessMax">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+        <item row="1" column="5">
+         <widget class="QLineEdit" name="lineEdit_ResultColorImbalance">
+          <property name="readOnly"><bool>true</bool></property>
+          <property name="placeholderText"><string>—</string></property>
+          <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+         </widget>
+        </item>
+
+       </layout>
       </widget>
      </item>
+
+     <!-- Buttons -->
+     <item>
+      <layout class="QHBoxLayout" name="hLayoutButtons">
+       <item>
+        <widget class="QPushButton" name="pushButton_RunCalibration">
+         <property name="text"><string>Run calibration</string></property>
+         <property name="enabled"><bool>false</bool></property>
+         <property name="toolTip"><string>Run the calibration. Requires at least the Good and one other folder.</string></property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacerButtons">
+         <property name="orientation"><enum>Qt::Horizontal</enum></property>
+         <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_ApplyAndClose">
+         <property name="text"><string>Apply and close</string></property>
+         <property name="enabled"><bool>false</bool></property>
+         <property name="toolTip"><string>Apply the calibrated parameters to the triage options and close this dialog.</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_Cancel">
+         <property name="text"><string>Cancel</string></property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
     </layout>
    </item>
 
+   <!-- ── RIGHT COLUMN — Focus Region image panel ─────────────── -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_FocusRegion">
+     <property name="title"><string>Focus region</string></property>
+     <property name="toolTip"><string>Draw a rectangle on the image to restrict blur scoring to a specific region. Leave empty to score the full frame.</string></property>
+     <layout class="QVBoxLayout" name="vLayoutFocusRegion">
+
+      <!-- GRIME_AI_QLabel promoted widget -->
+      <item>
+       <widget class="GRIME_AI_QLabel" name="label_FocusImage">
+        <property name="text"><string></string></property>
+        <property name="alignment"><set>Qt::AlignCenter</set></property>
+        <property name="scaledContents"><bool>false</bool></property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size><width>300</width><height>200</height></size>
+        </property>
+       </widget>
+      </item>
+
+      <!-- Filename label -->
+      <item>
+       <widget class="QLabel" name="label_FocusImageName">
+        <property name="text"><string>No image loaded</string></property>
+        <property name="alignment"><set>Qt::AlignCenter</set></property>
+       </widget>
+      </item>
+
+      <!-- Prev / Next navigation -->
+      <item>
+       <layout class="QHBoxLayout" name="hLayoutImageNav">
+        <item>
+         <widget class="QPushButton" name="pushButton_PrevImage">
+          <property name="text"><string>◀ Prev</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <property name="toolTip"><string>Show previous image.</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_ImageIndex">
+          <property name="text"><string></string></property>
+          <property name="alignment"><set>Qt::AlignCenter</set></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_NextImage">
+          <property name="text"><string>Next ▶</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <property name="toolTip"><string>Show next image.</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Clear ROI -->
+      <item>
+       <widget class="QPushButton" name="pushButton_ClearROI">
+        <property name="text"><string>Clear focus region</string></property>
+        <property name="enabled"><bool>false</bool></property>
+        <property name="toolTip"><string>Remove the saved focus region and revert to full-frame scoring.</string></property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
   </layout>
+
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>GRIME_AI_QLabel</class>
+   <extends>QLabel</extends>
+   <header location="global">GRIME_AI.GRIME_AI_QLabel</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

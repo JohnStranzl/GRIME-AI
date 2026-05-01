@@ -29,11 +29,10 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Result dataclass (plain dict-compatible)
+# Result dataclass
 # ──────────────────────────────────────────────────────────────────────────────
 
 class CalibrationResult:
-    """Holds the optimal threshold parameters found by calibration."""
 
     def __init__(self):
         self.fft_blur_threshold   = 21.0
@@ -45,7 +44,10 @@ class CalibrationResult:
         self.brightness_accuracy  = 0.0
         self.n_good               = 0
         self.n_blurry             = 0
-        self.n_exposure           = 0
+        self.n_exposure              = 0
+        self.n_color_imbalance       = 0
+        self.color_imbalance_threshold = 0.5
+        self.color_imbalance_accuracy  = 0.0
         self.success              = False
         self.error_message        = ""
 
@@ -54,8 +56,9 @@ class CalibrationResult:
             "fft_blur_threshold":  self.fft_blur_threshold,
             "laplacian_threshold": self.laplacian_threshold,
             "fft_shift_radius":    self.fft_shift_radius,
-            "brightness_min":      self.brightness_min,
-            "brightness_max":      self.brightness_max,
+            "brightness_min":             self.brightness_min,
+            "brightness_max":             self.brightness_max,
+            "color_imbalance_threshold":  self.color_imbalance_threshold,
         }
 
 
@@ -74,30 +77,34 @@ class GRIME_AI_TriageCalibrator:
     # ──────────────────────────────────────────────────────────────────────────
 
     def calibrate(self,
-                  good_folder:     str,
-                  blurry_folder:   str,
-                  exposure_folder: str,
+                  good_folder:            str,
+                  blurry_folder:          str,
+                  exposure_folder:        str,
+                  color_imbalance_folder: str = '',
+                  focus_roi=None,
                   progress_callback=None) -> CalibrationResult:
         """
         Run calibration against three labelled folders.
 
-        progress_callback(message: str, percent: int) — optional callable for
-        progress reporting back to a GUI or CLI.
+        focus_roi : list or None
+            Normalised [x, y, w, h] passed directly to ImageQualityAnalyzer so
+            that calibration and triage operate on the same image region.
 
-        Returns a CalibrationResult instance.
+        progress_callback(message: str, percent: int) — optional.
         """
         result = CalibrationResult()
 
-        # ── Load images ───────────────────────────────────────────────────────
         self._report(progress_callback, "Loading images...", 0)
 
-        good_images     = self._load_images(good_folder)
-        blurry_images   = self._load_images(blurry_folder)
-        exposure_images = self._load_images(exposure_folder)
+        good_images            = self._load_images(good_folder)
+        blurry_images          = self._load_images(blurry_folder)
+        exposure_images        = self._load_images(exposure_folder)
+        color_imbalance_images = self._load_images(color_imbalance_folder)
 
-        result.n_good     = len(good_images)
-        result.n_blurry   = len(blurry_images)
-        result.n_exposure = len(exposure_images)
+        result.n_good             = len(good_images)
+        result.n_blurry           = len(blurry_images)
+        result.n_exposure         = len(exposure_images)
+        result.n_color_imbalance  = len(color_imbalance_images)
 
         if result.n_good == 0:
             result.error_message = "No images found in the Good folder."
@@ -106,16 +113,14 @@ class GRIME_AI_TriageCalibrator:
             result.error_message = "No images found in either the Blurry or Exposure folders."
             return result
 
-        # ── Compute metrics once per image ────────────────────────────────────
         self._report(progress_callback, "Computing image metrics...", 5)
 
         fft_radii = [20, 30, 40]
 
-        good_metrics     = self._compute_all_metrics(good_images,     fft_radii, progress_callback, 5,  35)
-        blurry_metrics   = self._compute_all_metrics(blurry_images,   fft_radii, progress_callback, 35, 60)
-        exposure_metrics = self._compute_all_metrics(exposure_images, fft_radii, progress_callback, 60, 75)
+        good_metrics     = self._compute_all_metrics(good_images,     fft_radii, focus_roi, progress_callback, 5,  35)
+        blurry_metrics   = self._compute_all_metrics(blurry_images,   fft_radii, focus_roi, progress_callback, 35, 60)
+        exposure_metrics = self._compute_all_metrics(exposure_images, fft_radii, focus_roi, progress_callback, 60, 75)
 
-        # ── Grid search — blur thresholds ─────────────────────────────────────
         self._report(progress_callback, "Searching blur thresholds...", 75)
 
         if result.n_blurry > 0:
@@ -127,7 +132,6 @@ class GRIME_AI_TriageCalibrator:
             result.fft_shift_radius    = best_radius
             result.blur_f1             = best_f1
 
-        # ── Grid search — brightness thresholds ───────────────────────────────
         self._report(progress_callback, "Searching brightness thresholds...", 88)
 
         if result.n_exposure > 0:
@@ -138,6 +142,17 @@ class GRIME_AI_TriageCalibrator:
             result.brightness_max      = bmax
             result.brightness_accuracy = b_acc
 
+        # ── Grid search — color imbalance threshold ───────────────────────
+        if result.n_color_imbalance > 0:
+            self._report(progress_callback, "Searching color imbalance threshold...", 93)
+            ci_thr, ci_acc = self._search_color_imbalance_threshold(
+                good_images, color_imbalance_images
+            )
+            result.color_imbalance_threshold = ci_thr
+            result.color_imbalance_accuracy  = ci_acc
+        else:
+            result.color_imbalance_threshold = 0.5   # default
+
         result.success = True
         self._report(progress_callback, "Calibration complete.", 100)
         return result
@@ -147,7 +162,6 @@ class GRIME_AI_TriageCalibrator:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _load_images(self, folder: str) -> list:
-        """Return list of (path, numpy_image) for all images in folder."""
         images = []
         if not folder or not os.path.isdir(folder):
             return images
@@ -163,12 +177,12 @@ class GRIME_AI_TriageCalibrator:
     # Metric computation
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _compute_all_metrics(self, images: list, fft_radii: list,
+    def _compute_all_metrics(self, images: list, fft_radii: list, focus_roi,
                               progress_callback, pct_start: int, pct_end: int) -> list:
         """
-        For each image compute FFT (all radii) and Laplacian + brightness once.
+        For each image compute FFT (all radii), Laplacian, and brightness.
+        Blur metrics use focus_roi if provided; brightness uses the full frame.
         Returns list of dicts: {path, brightness, laplacian, fft: {radius: value}}
-        Arrays are discarded immediately after metric extraction.
         """
         results = []
         n = len(images)
@@ -182,24 +196,25 @@ class GRIME_AI_TriageCalibrator:
             use_contrast=False,
             use_exposure_clipping=False,
             resize_percent=self.resize_percent,
+            focus_roi=focus_roi,
         )
 
         for i, (path, img) in enumerate(images):
             pct = pct_start + int((i / n) * (pct_end - pct_start))
             self._report(progress_callback, f"  {os.path.basename(path)}", pct)
 
-            gray = analyzer._preprocess(img)
+            # Full-frame gray for brightness
+            gray_full = analyzer._preprocess(img, apply_roi=False)
+            brightness = analyzer._compute_brightness(gray_full)
 
-            # Brightness
-            brightness = analyzer._compute_brightness(gray)
+            # ROI gray for blur metrics
+            gray_blur = analyzer._preprocess(img, apply_roi=True)
+            laplacian = analyzer._compute_laplacian_var(gray_blur)
 
-            # Laplacian
-            laplacian = analyzer._compute_laplacian_var(gray)
-
-            # FFT — compute shift once, apply all radii
-            fft_shift = np.fft.fftshift(np.fft.fft2(gray))
+            # FFT — compute shift once on ROI gray, apply all radii
+            fft_shift = np.fft.fftshift(np.fft.fft2(gray_blur))
             fft_scores = {}
-            h, w = gray.shape
+            h, w = gray_blur.shape
             cX, cY = w // 2, h // 2
             for r in fft_radii:
                 fs = fft_shift.copy()
@@ -207,7 +222,7 @@ class GRIME_AI_TriageCalibrator:
                 recon = np.fft.ifft2(np.fft.ifftshift(fs))
                 fft_scores[r] = float(np.mean(20 * np.log(np.abs(recon) + 1e-8)))
 
-            del gray, fft_shift
+            del gray_full, gray_blur, fft_shift
 
             results.append({
                 "path":       path,
@@ -224,12 +239,6 @@ class GRIME_AI_TriageCalibrator:
 
     def _search_blur_thresholds(self, good_metrics: list, blurry_metrics: list,
                                  fft_radii: list) -> tuple:
-        """
-        Grid search over FFT threshold, Laplacian threshold, and FFT radius.
-        Uses OR logic: blurry if either FFT or Laplacian fails.
-        Optimises for F1 score.
-        Returns (best_fft_thr, best_lap_thr, best_radius, best_f1).
-        """
         fft_thresholds = np.arange(5.0, 30.0, 1.0).tolist()
         lap_thresholds = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300]
 
@@ -269,11 +278,6 @@ class GRIME_AI_TriageCalibrator:
 
     def _search_brightness_thresholds(self, good_metrics: list,
                                        exposure_metrics: list) -> tuple:
-        """
-        Find brightness_min and brightness_max that best separate good from
-        exposure-bad images. Optimises for overall accuracy.
-        Returns (brightness_min, brightness_max, accuracy).
-        """
         bmin_candidates = list(range(10, 100, 5))
         bmax_candidates = list(range(150, 250, 5))
 
@@ -311,6 +315,36 @@ class GRIME_AI_TriageCalibrator:
     # ──────────────────────────────────────────────────────────────────────────
     # Helpers
     # ──────────────────────────────────────────────────────────────────────────
+
+    def _search_color_imbalance_threshold(self, good_images: list,
+                                           color_imbalance_images: list) -> tuple:
+        """
+        Grid search for the color imbalance threshold that best separates
+        good images from color-imbalanced images.
+        Returns (best_threshold, accuracy).
+        """
+        def max_channel_fraction(img):
+            b = float(np.mean(img[:, :, 0]))
+            g = float(np.mean(img[:, :, 1]))
+            r = float(np.mean(img[:, :, 2]))
+            total = r + g + b
+            if total < 1e-6:
+                return 0.333
+            return max(r / total, g / total, b / total)
+
+        good_scores = [max_channel_fraction(img) for _, img in good_images]
+        bad_scores  = [max_channel_fraction(img) for _, img in color_imbalance_images]
+
+        best_acc = -1.0
+        best_thr = 0.5
+        for thr in [x / 100 for x in range(34, 95)]:
+            correct = sum(1 for s in good_scores if s <= thr) +                       sum(1 for s in bad_scores  if s >  thr)
+            acc = correct / (len(good_scores) + len(bad_scores))
+            if acc > best_acc:
+                best_acc = acc
+                best_thr = round(thr, 2)
+
+        return best_thr, best_acc
 
     @staticmethod
     def _report(callback, message: str, percent: int):

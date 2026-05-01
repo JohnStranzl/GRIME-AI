@@ -409,6 +409,46 @@
     </widget>
    </item>
 
+
+   <!-- Color imbalance -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_ColorImbalance">
+     <property name="title"><string>Color imbalance</string></property>
+     <layout class="QHBoxLayout" name="hLayoutColorImbalance">
+      <item>
+       <widget class="QCheckBox" name="checkBox_UseColorImbalance">
+        <property name="text"><string>Flag color imbalance</string></property>
+        <property name="checked"><bool>false</bool></property>
+        <property name="toolTip"><string>Flag images where a single color channel dominates the scene, indicating sunrise/sunset lighting or a camera white balance problem.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelColorImbalanceThreshold">
+        <property name="text"><string>Max channel fraction</string></property>
+        <property name="toolTip"><string>Flag if the dominant channel exceeds this fraction of total RGB. 0.5 = any channel contributing more than 50% of total brightness is flagged.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_ColorImbalanceThreshold">
+        <property name="enabled"><bool>false</bool></property>
+        <property name="minimum"><double>0.334000000000000</double></property>
+        <property name="maximum"><double>1.000000000000000</double></property>
+        <property name="singleStep"><double>0.010000000000000</double></property>
+        <property name="decimals"><number>3</number></property>
+        <property name="value"><double>0.500000000000000</double></property>
+        <property name="toolTip"><string>Flag if the dominant channel exceeds this fraction of total RGB. 0.5 = any channel contributing more than 50% of total brightness is flagged.</string></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacerColorImbalance">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
    <!-- Dialog buttons -->
    <item>
     <layout class="QHBoxLayout" name="hLayoutDialogButtons">
@@ -416,6 +456,14 @@
       <widget class="QPushButton" name="pushButton_Calibrate">
        <property name="text"><string>Calibrate...</string></property>
        <property name="toolTip"><string>Open the calibration tool to automatically determine optimal blur and brightness thresholds from your own labelled images.</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="checkBox_UseFocusROI">
+       <property name="text"><string>Use focus region</string></property>
+       <property name="enabled"><bool>false</bool></property>
+       <property name="checked"><bool>false</bool></property>
+       <property name="toolTip"><string>Restrict blur scoring to the focus region defined in Calibrate. Enabled only when a focus region has been saved.</string></property>
       </widget>
      </item>
      <item>

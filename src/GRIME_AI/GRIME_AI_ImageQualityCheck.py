@@ -24,6 +24,13 @@ class ImageQualityAnalyzer:
         fft_blur_threshold  = 21.0  (FFT mean below this → blurry)
         laplacian_threshold = 150.0 (Laplacian variance below this → blurry)
     Combined OR logic: F1=0.921, focus-blur recall=99.7%, motion-blur recall=91.3%.
+
+    Parameters
+    ----------
+    focus_roi : list or None
+        Normalised [x, y, w, h] (values 0.0–1.0) defining the subregion used for
+        blur scoring. Brightness is always computed over the full frame.
+        If None, the full frame is used for all metrics.
     """
 
     def __init__(
@@ -34,12 +41,11 @@ class ImageQualityAnalyzer:
         fft_shift_radius=40,
         fft_blur_threshold=21.0,
         laplacian_threshold=150.0,
-        blur_logic="AND",           # "AND" → blurry if both metrics fail
-                                    # "OR"  → blurry if either metric fails
+        blur_logic="AND",
         # ── brightness ────────────────────────────────────────────────────────
         use_brightness=True,
-        brightness_min=40.0,        # below this → Too Dark
-        brightness_max=215.0,       # above this → Too Light
+        brightness_min=40.0,
+        brightness_max=215.0,
         # ── contrast ──────────────────────────────────────────────────────────
         use_contrast=True,
         contrast_threshold=30.0,
@@ -50,6 +56,10 @@ class ImageQualityAnalyzer:
         bright_clip=245,
         # ── preprocessing ─────────────────────────────────────────────────────
         resize_percent=50.0,
+        focus_roi=None,             # normalised [x, y, w, h] or None
+        # ── color imbalance ───────────────────────────────────────────────
+        use_color_imbalance=False,
+        color_imbalance_threshold=0.5,  # flag if max channel fraction exceeds this
     ):
         self.use_fft_blur          = use_fft_blur
         self.use_laplacian_blur    = use_laplacian_blur
@@ -70,7 +80,10 @@ class ImageQualityAnalyzer:
         self.dark_clip             = dark_clip
         self.bright_clip           = bright_clip
 
-        self.resize_percent        = resize_percent
+        self.resize_percent             = resize_percent
+        self.focus_roi                  = focus_roi
+        self.use_color_imbalance        = use_color_imbalance
+        self.color_imbalance_threshold  = color_imbalance_threshold
 
     # ──────────────────────────────────────────────────────────────────────────
     # Public API
@@ -80,37 +93,33 @@ class ImageQualityAnalyzer:
         """
         Analyse a single BGR/RGB numpy image.
 
+        Blur metrics operate on the focus ROI (if defined); brightness, contrast,
+        and exposure metrics always operate on the full frame.
+
         Returns a dict with raw metrics, boolean flags, and top-level summary:
             is_bad  (bool) – True if any enabled check fails
             reason  (str)  – comma-separated failing checks, or 'Nominal'
-
-        Metric keys (present when corresponding check is enabled):
-            blur_fft, is_blurry_fft
-            blur_laplacian, is_blurry_laplacian
-            is_blurry          (combined, respects blur_logic)
-            brightness, is_too_dark, is_too_light
-            contrast, is_low_contrast
-            clip_fraction, is_clipped
         """
-        gray    = self._preprocess(image)
-        result  = {}
-        reasons = []
+        gray_full  = self._preprocess(image, apply_roi=False)
+        gray_blur  = self._preprocess(image, apply_roi=True)
+        result     = {}
+        reasons    = []
 
-        # ── blur ──────────────────────────────────────────────────────────────
+        # ── blur (focus ROI if defined) ────────────────────────────────────
         fft_blurry = False
         lap_blurry = False
 
         if self.use_fft_blur:
-            blur_fft               = self._compute_blur_fft(gray)
+            blur_fft               = self._compute_blur_fft(gray_blur)
             result["blur_fft"]     = blur_fft
             fft_blurry             = blur_fft < self.fft_blur_threshold
             result["is_blurry_fft"] = fft_blurry
 
         if self.use_laplacian_blur:
-            lap_var                        = self._compute_laplacian_var(gray)
-            result["blur_laplacian"]       = lap_var
-            lap_blurry                     = lap_var < self.laplacian_threshold
-            result["is_blurry_laplacian"]  = lap_blurry
+            lap_var                       = self._compute_laplacian_var(gray_blur)
+            result["blur_laplacian"]      = lap_var
+            lap_blurry                    = lap_var < self.laplacian_threshold
+            result["is_blurry_laplacian"] = lap_blurry
 
         if self.use_fft_blur or self.use_laplacian_blur:
             is_blurry = (fft_blurry and lap_blurry) if self.blur_logic == "AND" else (fft_blurry or lap_blurry)
@@ -118,9 +127,9 @@ class ImageQualityAnalyzer:
             if is_blurry:
                 reasons.append("Blurry")
 
-        # ── brightness ────────────────────────────────────────────────────────
+        # ── brightness (always full frame) ────────────────────────────────
         if self.use_brightness:
-            brightness              = self._compute_brightness(gray)
+            brightness              = self._compute_brightness(gray_full)
             result["brightness"]    = brightness
             too_dark                = brightness < self.brightness_min
             too_light               = brightness > self.brightness_max
@@ -131,32 +140,38 @@ class ImageQualityAnalyzer:
             if too_light:
                 reasons.append("Too Light")
 
-        # ── contrast ──────────────────────────────────────────────────────────
+        # ── contrast (always full frame) ──────────────────────────────────
         if self.use_contrast:
-            contrast                    = self._compute_contrast(gray)
-            result["contrast"]          = contrast
-            low_contrast                = contrast < self.contrast_threshold
-            result["is_low_contrast"]   = low_contrast
+            contrast                  = self._compute_contrast(gray_full)
+            result["contrast"]        = contrast
+            low_contrast              = contrast < self.contrast_threshold
+            result["is_low_contrast"] = low_contrast
             if low_contrast:
                 reasons.append("Low Contrast")
 
-        # ── exposure clipping ─────────────────────────────────────────────────
+        # ── exposure clipping (always full frame) ─────────────────────────
         if self.use_exposure_clipping:
-            clip_fraction           = self._compute_clip_fraction(gray)
+            clip_fraction           = self._compute_clip_fraction(gray_full)
             result["clip_fraction"] = clip_fraction
             clipped                 = clip_fraction > self.clip_percent
             result["is_clipped"]    = clipped
             if clipped:
                 reasons.append("Exposure Clipped")
 
+        # ── color imbalance (full frame, RGB) ────────────────────────────
+        if self.use_color_imbalance:
+            imbalance = self._compute_color_imbalance(image)
+            result["color_imbalance"]    = imbalance
+            is_imbalanced                = imbalance > self.color_imbalance_threshold
+            result["is_color_imbalanced"] = is_imbalanced
+            if is_imbalanced:
+                reasons.append("Color Imbalance")
+
         result["is_bad"] = bool(reasons)
         result["reason"] = ", ".join(reasons) if reasons else "Nominal"
         return result
 
     def is_bad_image(self, image) -> tuple:
-        """
-        Convenience wrapper. Returns (is_bad: bool, reason: str).
-        """
         r = self.analyze(image)
         return r["is_bad"], r["reason"]
 
@@ -164,22 +179,50 @@ class ImageQualityAnalyzer:
     # Private helpers
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _preprocess(self, image) -> np.ndarray:
-        """Convert to grayscale (supports BGR and RGB inputs) and optionally resize."""
+    def _preprocess(self, image, apply_roi: bool = True) -> np.ndarray:
+        """
+        Convert to grayscale, optionally resize, then optionally crop to focus_roi.
+
+        Parameters
+        ----------
+        apply_roi : bool
+            If True and self.focus_roi is set, crop to the ROI after resize.
+            Pass False to get the full-frame gray (used for brightness etc.).
+        """
         if image.ndim == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
-            gray = image
+            gray = image.copy()
+
         if self.resize_percent != 100.0:
             scale = self.resize_percent / 100.0
             gray  = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        if apply_roi and self.focus_roi is not None:
+            gray = self._apply_focus_roi(gray)
+
         return gray
 
+    def _apply_focus_roi(self, gray: np.ndarray) -> np.ndarray:
+        """Crop gray image to the normalised focus_roi. Returns full image if crop is invalid."""
+        h, w = gray.shape
+        x  = int(self.focus_roi[0] * w)
+        y  = int(self.focus_roi[1] * h)
+        rw = int(self.focus_roi[2] * w)
+        rh = int(self.focus_roi[3] * h)
+
+        # Clamp
+        x  = max(0, min(w - 1, x))
+        y  = max(0, min(h - 1, y))
+        rw = max(1, min(w - x, rw))
+        rh = max(1, min(h - y, rh))
+
+        cropped = gray[y:y + rh, x:x + rw]
+        if cropped.size == 0:
+            return gray
+        return cropped
+
     def _compute_blur_fft(self, gray: np.ndarray) -> float:
-        """
-        FFT-based blur metric. Zero-out DC component, reconstruct, return mean
-        log-magnitude of high-frequency residual. Low score → blurry.
-        """
         h, w      = gray.shape
         cX, cY    = w // 2, h // 2
         fft_shift = np.fft.fftshift(np.fft.fft2(gray))
@@ -190,22 +233,32 @@ class ImageQualityAnalyzer:
         return float(np.mean(magnitude))
 
     def _compute_laplacian_var(self, gray: np.ndarray) -> float:
-        """Laplacian variance. Low value → blurry."""
         return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
     def _compute_brightness(self, gray: np.ndarray) -> float:
-        """
-        Mean pixel intensity after light Gaussian smoothing.
-        Matches original GRIME_AI_ImageTriage brightness calculation.
-        """
         smoothed = cv2.GaussianBlur(gray, (0, 0), 1)
         return float(cv2.mean(smoothed)[0])
 
     def _compute_contrast(self, gray: np.ndarray) -> float:
-        """Pixel value range (max − min)."""
         return float(int(gray.max()) - int(gray.min()))
 
+    def _compute_color_imbalance(self, image: np.ndarray) -> float:
+        """
+        Max channel fraction: R_mean / (R+G+B), G_mean / (R+G+B), B_mean / (R+G+B).
+        Returns the highest fraction. Perfectly balanced = 0.333. Flag if > threshold.
+        Operates on the full frame regardless of focus_roi (color is a global property).
+        """
+        if image.ndim == 2:
+            return 0.333   # grayscale — no color info, treat as balanced
+        # Support both BGR (cv2) and RGB inputs
+        b = float(np.mean(image[:, :, 0]))
+        g = float(np.mean(image[:, :, 1]))
+        r = float(np.mean(image[:, :, 2]))
+        total = r + g + b
+        if total < 1e-6:
+            return 0.333
+        return max(r / total, g / total, b / total)
+
     def _compute_clip_fraction(self, gray: np.ndarray) -> float:
-        """Fraction of pixels at or near black/white clipping limits."""
         clipped = np.sum((gray <= self.dark_clip) | (gray >= self.bright_clip))
         return float(clipped) / gray.size
