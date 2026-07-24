@@ -544,8 +544,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _on_mask_selected(self, mask_id: int):
         self.selected_mask_id = mask_id
+        # _start_flash renders the full canvas itself on every branch, and the
+        # selection is already set above, so it picks up the new highlight. A
+        # second _update_canvas() here doubled the (heavy) rebuild on every list
+        # click and immediately overwrote the first bright flash frame with a
+        # differently-rendered one.
         self._start_flash(mask_id)
-        self._update_canvas()
 
     def _start_flash(self, mask_id: int):
         """Restart the flash for a newly selected mask. Renders the full canvas
@@ -1228,9 +1232,18 @@ class MainWindow(QMainWindow):
 
     def _compute_other_overlay(self):
         """Transient 'Other' preview: complement of the union of all real masks,
-        in the Other color. Not stored — display only."""
+        in the Other color. Not stored - display only.
+
+        Cached against the controller's geometry counter: the union is
+        O(N x HxW) and _update_canvas runs on every repaint, including each
+        frame of a mask flash."""
         if self.controller is None or self.image_np is None:
             return None
+
+        sig = self._mask_geometry_signature()
+        if sig is not None and sig == getattr(self, "_other_overlay_sig", None):
+            return self._other_overlay_cache
+
         h, w = self.image_np.shape[:2]
         union = np.zeros((h, w), dtype=bool)
         for m in self.controller.masks:
@@ -1238,10 +1251,14 @@ class MainWindow(QMainWindow):
                 continue
             union |= m["mask"].astype(bool)
         complement = ~union
-        if not complement.any():
-            return None
-        return {"id": -999, "label": "Other", "mask": complement,
-                "color": (192, 38, 211), "visible": True}
+        result = None
+        if complement.any():
+            result = {"id": -999, "label": "Other", "mask": complement,
+                      "color": (192, 38, 211), "visible": True}
+
+        self._other_overlay_sig = sig
+        self._other_overlay_cache = result
+        return result
 
     def closeEvent(self, event):
         """On exit, if there are unsaved annotation edits, ask whether to save.
@@ -1379,9 +1396,35 @@ class MainWindow(QMainWindow):
         # Update segment button state
         self.sidebar.update_segment_button_state()
 
+    def _mask_geometry_signature(self):
+        """Cheap change stamp for the current mask set. Uses the controller's
+        explicit counter rather than inspecting the arrays: hashing or summing
+        them would be O(N x HxW) and defeat the purpose, and object identity is
+        unsafe because numpy reuses freed addresses - recompute_fill replaces
+        the 'Other' mask constantly with a same-shaped array under the same id."""
+        if self.controller is None:
+            return None
+        return (id(self.controller), self.controller.geometry_version)
+
     def _add_mask_items_to_canvas(self):
-        """Add invisible MaskItem polygons to canvas for right-click detection"""
+        """Rebuild the invisible MaskItem polygons used for right-click hit
+        detection.
+
+        This is the dominant cost on heavily annotated images: _update_canvas
+        runs from ~26 call sites, and each run re-ran findContours over every
+        mask and tore down and rebuilt every scene item. Two changes: skip
+        entirely when the mask set has not changed, and simplify the contours
+        so the scene is not carrying thousands of vertices per mask through
+        every repaint."""
         import cv2
+
+        if self.controller is None:
+            return
+
+        sig = self._mask_geometry_signature()
+        if sig == getattr(self, "_mask_items_sig", None):
+            return
+        self._mask_items_sig = sig
 
         # First, remove any existing mask items
         for item in self.canvas._scene.items():
@@ -1389,9 +1432,6 @@ class MainWindow(QMainWindow):
                 self.canvas._scene.removeItem(item)
 
         # Add new mask items for all masks (not just visible ones, so you can delete hidden ones too)
-        if self.controller is None:
-            return
-
         for m in self.controller.masks:
             mask = m["mask"].astype(np.uint8)
 
@@ -1404,6 +1444,14 @@ class MainWindow(QMainWindow):
             for cnt in contours:
                 if len(cnt) < 3:
                     continue
+
+                # Coarse simplification. These polygons are only ever used for
+                # "did the cursor land on this mask" - pixel-exact edges buy
+                # nothing and cost scene traversal time on every repaint.
+                eps = 0.005 * cv2.arcLength(cnt, True)
+                simplified = cv2.approxPolyDP(cnt, eps, True)
+                if len(simplified) >= 3:
+                    cnt = simplified
 
                 # Convert contour to list of (x, y) tuples
                 polygon_points = [(float(pt[0][0]), float(pt[0][1])) for pt in cnt]
@@ -1753,6 +1801,8 @@ class MainWindow(QMainWindow):
 
         # Reset controller + renderer
         self.controller = SegmentationController(self.model_manager, self.image_np)
+        # New image, new mask set: force the hit-test polygons to rebuild.
+        self._mask_items_sig = None
         self.selected_mask_id = -1
         self.controller.set_opacity(int(self._opacity_percent / 100 * 255))
         self.renderer = Renderer(self.image_np)

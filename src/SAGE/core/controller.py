@@ -19,6 +19,11 @@ class SegmentationController:
 
         self.opacity = 120
 
+        # Bumped whenever mask geometry changes (added, deleted, refilled).
+        # The UI uses this to skip rebuilding derived data - hit-test
+        # polygons, overlays - when nothing has actually changed.
+        self.geometry_version = 0
+
     # ---- point management ----
     def add_point(self, x, y, is_fg=True):
         if is_fg:
@@ -113,6 +118,7 @@ class SegmentationController:
         }
 
         self.masks.append(mask_entry)
+        self.geometry_version += 1
         self.recompute_fill()
         self.clear_points()
         return mask_entry
@@ -157,6 +163,7 @@ class SegmentationController:
             "stats": stats,
         }
         self.masks.append(mask_entry)
+        self.geometry_version += 1
         self.recompute_fill()
         self.clear_points()
         return mask_entry, info
@@ -182,6 +189,7 @@ class SegmentationController:
             "stats": compute_mask_stats(mask),
         }
         self.masks.append(entry)
+        self.geometry_version += 1
         self.recompute_fill()
         return entry
 
@@ -299,6 +307,7 @@ class SegmentationController:
             "is_fill": True,
         }
         self.masks.append(entry)
+        self.geometry_version += 1
         return entry
 
     def recompute_fill(self):
@@ -316,10 +325,13 @@ class SegmentationController:
         complement = ~union
         if not complement.any():
             self.masks = [m for m in self.masks if not m.get("is_fill")]
+            self.geometry_version += 1
             return
         fill["mask"] = complement
         fill["stats"] = compute_mask_stats(complement)
+        self.geometry_version += 1
 
     def delete_mask(self, mask_id):
         """Remove a mask by its ID."""
         self.masks = [m for m in self.masks if m["id"] != mask_id]
+        self.geometry_version += 1
