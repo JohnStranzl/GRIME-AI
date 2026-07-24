@@ -153,6 +153,10 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMenu
 from PyQt5.QtWidgets import QTreeWidgetItem
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
+from GRIME_AI.utils.window_utils import (
+    install_window_placement_guard,
+    reset_window_layout,
+)
 
 # pandas imported lazily inside functions
 
@@ -832,6 +836,16 @@ class MainWindow(QMainWindow):
         self._action_toggle_theme.triggered.connect(self._toggle_dark_mode)
         self._menu_view.addAction(self._action_toggle_theme)
 
+        # Escape hatch for users whose window ends up mispositioned or
+        # off-screen (e.g. after a VNC resolution change). Restores a sane
+        # default size and re-centers inside the usable screen area.
+        self._menu_view.addSeparator()
+        self._action_reset_layout = QAction("Reset Window Layout", self)
+        self._action_reset_layout.setStatusTip(
+            "Resize and re-center the GRIME AI window inside the visible screen area")
+        self._action_reset_layout.triggered.connect(self._reset_window_layout)
+        self._menu_view.addAction(self._action_reset_layout)
+
         # ------------------------------------------------------------------------------------------------------------------
         # MENU REORGANIZATION — split the crowded Tools menu into topic menus.
         # Actions already exist (from the .ui or created above); here they are
@@ -1034,6 +1048,16 @@ class MainWindow(QMainWindow):
 
         # Show main window
         self.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _reset_window_layout(self):
+        """View -> Reset Window Layout. Puts the window back on screen."""
+        try:
+            reset_window_layout(self)
+        except Exception as _e:
+            print(f"[WARN] Reset Window Layout failed: {_e}")
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -5403,7 +5427,22 @@ def run_gui():
 
     frame = MainWindow(splash=_splash)
 
-    frame.move(app.desktop().screen().rect().center() - frame.rect().center())
+    # ------------------------------------------------------------------------------------------------------------------
+    # WINDOW PLACEMENT
+    #
+    # Was:  frame.move(app.desktop().screen().rect().center() - frame.rect().center())
+    #
+    # That centered against the FULL screen rect (ignoring the desktop panel)
+    # and offset by the CLIENT rect (ignoring the title bar), so on Linux/X11
+    # the title bar ended up hidden underneath the panel and the user had to
+    # right-click -> Move to drag the window back into view. It also used the
+    # deprecated QApplication.desktop().
+    #
+    # install_window_placement_guard() shrinks the window to fit the usable
+    # work area first, then centers and clamps it, and re-checks whenever the
+    # screen resolution changes (e.g. reconnecting to a VNC session).
+    # ------------------------------------------------------------------------------------------------------------------
+    install_window_placement_guard(frame)
 
     # ------------------------------------------------------------------------------------------------------------------
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
@@ -5488,10 +5527,50 @@ def my_main():
                                 help='SAM2 model config YAML (default: sam2.1_hiera_l.yaml)')
     segment_parser.add_argument('--threshold',     type=float, default=0.2,
                                 help='Probability threshold for SegFormer mask (default: 0.2)')
+    # ------------------------------------------------------------------
+    # OUTPUT OPTIONS -- these mirror the 'Output Options' group box in the
+    # ML Image Processing dialog's Segment tab. The GUI path passes all four
+    # through segment_main() -> ML_Segmentation_Dispatcher(); the CLI path
+    # goes through run_sam2()/run_segformer(), which historically supported
+    # only masks and image copying. Defaults below match the GUI defaults
+    # (all four checked).
+    #
+    # --no-mask / --no-copy are retained as deprecated aliases so existing
+    # scripts and batch jobs keep working.
+    # ------------------------------------------------------------------
+    segment_parser.add_argument('--save-masks', dest='save_masks',
+                                action='store_true', default=True,
+                                help='Save predicted binary mask PNGs (default: on)')
+    segment_parser.add_argument('--no-save-masks', dest='save_masks',
+                                action='store_false',
+                                help='Do not save predicted binary mask PNGs')
+
+    segment_parser.add_argument('--save-probability-maps', dest='save_probability_maps',
+                                action='store_true', default=True,
+                                help='Save per-pixel probability maps (default: on)')
+    segment_parser.add_argument('--no-save-probability-maps', dest='save_probability_maps',
+                                action='store_false',
+                                help='Do not save per-pixel probability maps')
+
+    segment_parser.add_argument('--copy-original-images', dest='copy_original_image',
+                                action='store_true', default=True,
+                                help='Copy each source image into the output folder (default: on)')
+    segment_parser.add_argument('--no-copy-original-images', dest='copy_original_image',
+                                action='store_false',
+                                help='Do not copy source images into the output folder')
+
+    segment_parser.add_argument('--save-diagnostic-panels', dest='save_diagnostic_panels',
+                                action='store_true', default=True,
+                                help='Save side-by-side diagnostic panel images (default: on)')
+    segment_parser.add_argument('--no-save-diagnostic-panels', dest='save_diagnostic_panels',
+                                action='store_false',
+                                help='Do not save diagnostic panel images')
+
+    # DEPRECATED aliases -- resolved in the handler below.
     segment_parser.add_argument('--no-mask',       action='store_true',
-                                help='Skip saving binary mask PNG')
+                                help='DEPRECATED: use --no-save-masks')
     segment_parser.add_argument('--no-copy',       action='store_true',
-                                help='Skip copying original image to output folder')
+                                help='DEPRECATED: use --no-copy-original-images')
 
     # Train / fine-tune parser
     train_parser = subparsers.add_parser('train', help='Train / fine-tune a GRIME AI model from a site configuration (headless)')
@@ -5725,6 +5804,31 @@ def run_cli(args):
         print(f"[GRIME AI] Image:     {args.image}")
         print(f"[GRIME AI] Output:    {args.output}")
         print(f"[GRIME AI] Category:  {args.category_name} (ID: {args.category_id})")
+
+        # ------------------------------------------------------------------
+        # Resolve the deprecated negative flags onto the new positive ones.
+        # An explicit --no-mask/--no-copy still wins, so old scripts behave
+        # exactly as before.
+        # ------------------------------------------------------------------
+        if getattr(args, 'no_mask', False):
+            print("[GRIME AI] NOTE: --no-mask is deprecated; use --no-save-masks.")
+            args.save_masks = False
+        if getattr(args, 'no_copy', False):
+            print("[GRIME AI] NOTE: --no-copy is deprecated; use --no-copy-original-images.")
+            args.copy_original_image = False
+
+        # Aliases so run_sam2()/run_segformer() can read whichever attribute
+        # name they were written against.
+        args.no_mask = not args.save_masks
+        args.no_copy = not args.copy_original_image
+        args.save_probability_map = args.save_probability_maps
+        args.save_diagnostic_panel = args.save_diagnostic_panels
+
+        print(f"[GRIME AI] Output options:")
+        print(f"[GRIME AI]   Save predicted masks:    {args.save_masks}")
+        print(f"[GRIME AI]   Save probability maps:   {args.save_probability_maps}")
+        print(f"[GRIME AI]   Copy original images:    {args.copy_original_image}")
+        print(f"[GRIME AI]   Save diagnostic panels:  {args.save_diagnostic_panels}")
 
         if args.mode == 'sam2':
             run_sam2(args, device, category, progressBar=None)
