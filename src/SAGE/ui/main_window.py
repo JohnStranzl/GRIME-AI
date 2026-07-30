@@ -1050,7 +1050,8 @@ class MainWindow(QMainWindow):
         if cats:
             self.sidebar.set_label_classes(cats)
 
-        self.filmstrip.populate(folder, image_files)
+        self.filmstrip.populate(folder, image_files,
+                                annotated=self._annotated_image_names())
 
         if image_files:
             self._load_new_image(image_files[0])
@@ -1392,6 +1393,14 @@ class MainWindow(QMainWindow):
 
         # Add invisible mask items for right-click detection
         self._add_mask_items_to_canvas()
+
+        # Keep the filmstrip dot for the open image in sync, but only when the
+        # mask set actually changed - this method also runs on every flash tick,
+        # and the dot must not be recomputed 3x/second.
+        gv = getattr(self.controller, "geometry_version", None)
+        if gv != getattr(self, "_dot_synced_version", object()):
+            self._dot_synced_version = gv
+            self._refresh_current_dot()
 
         # Update segment button state
         self.sidebar.update_segment_button_state()
@@ -1755,6 +1764,28 @@ class MainWindow(QMainWindow):
             filename, self.controller.masks, h, w, name_to_id
         )
 
+    def _annotated_image_names(self):
+        """Filenames in the current buffer that carry >=1 annotation. Read from
+        the COCO doc (image_id -> file_name, then which ids appear in
+        annotations) so it reflects saved state without rasterizing anything."""
+        if self._coco_buffer is None:
+            return set()
+        doc = getattr(self._coco_buffer, "doc", None) or {}
+        id_to_name = {img.get("id"): img.get("file_name")
+                      for img in doc.get("images", [])}
+        annotated_ids = {ann.get("image_id") for ann in doc.get("annotations", [])}
+        return {id_to_name[i] for i in annotated_ids
+                if i in id_to_name and id_to_name[i]}
+
+    def _refresh_current_dot(self):
+        """Sync the filmstrip dot for the open image to its live mask count."""
+        if self.current_image_path is None:
+            return
+        name = os.path.basename(self.current_image_path)
+        has = bool(self.controller and any(
+            not m.get("is_fill") for m in self.controller.masks))
+        self.filmstrip.set_annotated(name, has)
+
     def _masks_from_buffer(self, filename):
         """Rasterize this image's buffered annotations into controller mask entries."""
         h, w = self.image_np.shape[:2]
@@ -1803,6 +1834,7 @@ class MainWindow(QMainWindow):
         self.controller = SegmentationController(self.model_manager, self.image_np)
         # New image, new mask set: force the hit-test polygons to rebuild.
         self._mask_items_sig = None
+        self._dot_synced_version = None
         self.selected_mask_id = -1
         self.controller.set_opacity(int(self._opacity_percent / 100 * 255))
         self.renderer = Renderer(self.image_np)
