@@ -48,12 +48,6 @@ _TOOL_SVGS = {
            '.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S12 3.17 12 4v7h1V1.5'
            'c0-.83.67-1.5 1.5-1.5S16 .67 16 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11'
            'h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z"/></svg>',
-    # Four-pointed sparkle: marks a mode whose result comes from SAM2.
-    "sam2": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-            '<path fill="{c}" d="M10 6 C10.6 11.2, 13.6 13.4, 18 14 C13.6 14.6, 10.6 16.8, 10 22'
-            ' C9.4 16.8, 6.4 14.6, 2 14 C6.4 13.4, 9.4 11.2, 10 6 Z"/>'
-            '<path fill="{c}" d="M18.5 2 C18.8 4.3, 20.2 5.2, 22 5.5 C20.2 5.8, 18.8 6.7, 18.5 9'
-            ' C18.2 6.7, 16.8 5.8, 15 5.5 C16.8 5.2, 18.2 4.3, 18.5 2 Z"/></svg>',
 }
 
 _TOOL_FALLBACK = {"draw": "Draw", "select": "Select", "pan": "Pan"}
@@ -68,17 +62,6 @@ def _tool_icon(kind: str, size: int = 22) -> QIcon:
     renderer.render(p)
     p.end()
     return QIcon(pix)
-
-
-def _mark_sam2(btn) -> None:
-    """Badge a mode button whose result comes from SAM2. Deliberately NOT
-    applied to Manual Polygon / Manual Free-form: those fill the drawn shape
-    directly, and the absence of the mark is what carries the distinction."""
-    if _HAS_SVG:
-        btn.setIcon(_tool_icon("sam2", 14))
-        btn.setIconSize(QSize(14, 14))
-    else:
-        btn.setText("\u2726  " + btn.text())   # QtSvg missing → glyph fallback
 import os
 
 
@@ -257,14 +240,12 @@ class Sidebar(QWidget):
         self.points_btn.setCheckable(True)
         self.points_btn.setChecked(True)
         self.points_btn.clicked.connect(lambda: self._on_mode_button_clicked("points"))
-        _mark_sam2(self.points_btn)
         mode_button_group.addButton(self.points_btn)
         mode_grid.addWidget(self.points_btn, 0, 0, 1, 2)
 
         self.polygon_btn = QPushButton("Polygon")
         self.polygon_btn.setCheckable(True)
         self.polygon_btn.clicked.connect(lambda: self._on_mode_button_clicked("polygon"))
-        _mark_sam2(self.polygon_btn)
         mode_button_group.addButton(self.polygon_btn)
         mode_grid.addWidget(self.polygon_btn, 1, 0)
 
@@ -298,14 +279,12 @@ class Sidebar(QWidget):
         self.mask_btn = QPushButton("Import Mask")
         self.mask_btn.setCheckable(True)
         self.mask_btn.clicked.connect(lambda: self._on_mode_button_clicked("mask"))
-        _mark_sam2(self.mask_btn)
         mode_button_group.addButton(self.mask_btn)
         mode_grid.addWidget(self.mask_btn, 5, 0, 1, 2)
 
         self.manual_draw_btn = QPushButton("Free-form")
         self.manual_draw_btn.setCheckable(True)
         self.manual_draw_btn.clicked.connect(lambda: self._on_mode_button_clicked("manual_draw"))
-        _mark_sam2(self.manual_draw_btn)
         mode_button_group.addButton(self.manual_draw_btn)
         mode_grid.addWidget(self.manual_draw_btn, 3, 0)
 
@@ -334,7 +313,6 @@ class Sidebar(QWidget):
             "+/- : adjust sample interval   [ / ] : adjust search width"
         )
         self.edge_trace_btn.clicked.connect(lambda: self._on_mode_button_clicked("edge_trace"))
-        _mark_sam2(self.edge_trace_btn)
         mode_button_group.addButton(self.edge_trace_btn)
         mode_grid.addWidget(self.edge_trace_btn, 4, 0, 1, 2)
 
@@ -639,6 +617,12 @@ class Sidebar(QWidget):
     def _label_color(self, index: int) -> str:
         return self._LABEL_COLORS[index % len(self._LABEL_COLORS)]
 
+    # IDs at or above this are reserved for special catch-all classes ('Other'
+    # = 999) and are NOT counted when assigning the next normal class id.
+    # Without this carve-out, registering 'Other' at 999 makes max(ids)+1 return
+    # 1000, so every user-added class climbs from 1000 instead of 1, 2, 3...
+    RESERVED_ID_MIN = 900
+
     def _names(self) -> list:
         return [lc["name"] for lc in self._label_classes]
 
@@ -646,7 +630,8 @@ class Sidebar(QWidget):
         return [lc["id"] for lc in self._label_classes]
 
     def _next_id(self) -> int:
-        return (max(self._ids()) + 1) if self._label_classes else 1
+        normal = [i for i in self._ids() if i < self.RESERVED_ID_MIN]
+        return (max(normal) + 1) if normal else 1
 
     def _add_label_class(self):
         """Add a new label class from the input field."""
