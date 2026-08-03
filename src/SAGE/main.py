@@ -50,6 +50,13 @@ def main():
     args = parse_args()
 
     app = QApplication(sys.argv)
+
+    # Theme the ENTIRE application once, here, so every widget - main window,
+    # menu bar, toolbar, canvas, filmstrip, sidebar - inherits it. Applying on
+    # the QApplication is the only scope a child widget cannot override or miss.
+    from SAGE.ui.theme import apply_theme
+    apply_theme(app, "light")   # switch to "dark" for dark mode
+
     app.processEvents()
 
     # Load splash image

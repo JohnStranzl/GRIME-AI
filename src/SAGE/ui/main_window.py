@@ -192,29 +192,9 @@ class MainWindow(QMainWindow):
         self._sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._sidebar_scroll.setMinimumHeight(0)
-        self._sidebar_scroll.setStyleSheet("""
-            QScrollBar::handle:vertical {
-                background: #a6a6a6;
-                border-radius: 2px;
-             }
-            QScrollBar:vertical {
-                width: 12px;
-                background: #cccccc;
-                margin: 12px 0 12px 0;  /* reserve space for top/bottom arrows */
-            }
-            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-                width: 8px;
-                height: 8px;
-            }
-            QScrollBar::add-line:vertical {
-                height: 12px;
-                subcontrol-position: bottom;
-                subcontrol-origin: margin;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
+        # Scrollbar appearance is inherited from theme.py. It used to be
+        # overridden here with literal grays (#a6a6a6 / #cccccc) that stayed
+        # pale in dark mode.
         layout.addWidget(self._sidebar_scroll, stretch=1)
         main_layout.addLayout(layout, stretch=1)
 
@@ -227,7 +207,9 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        toolbar.addWidget(QLabel("  Mask Opacity: "))
+        _op_caption = QLabel("Mask opacity")
+        _op_caption.setObjectName("toolbarCaption")
+        toolbar.addWidget(_op_caption)
         self.opacity_spinbox = QSpinBox()
         self.opacity_spinbox.setRange(0, 100)
         self.opacity_spinbox.setSuffix(" %")
@@ -239,6 +221,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
         self.border_checkbox = QCheckBox("Show Borders")
+        self.border_checkbox.setObjectName("toolbarToggle")
         self.border_checkbox.setChecked(False)
         self.border_checkbox.setToolTip("Show/hide the border outline around masked regions")
         self.border_checkbox.stateChanged.connect(self._on_border_checkbox_changed)
@@ -246,6 +229,7 @@ class MainWindow(QMainWindow):
         self._show_borders = False
 
         self.flash_checkbox = QCheckBox("Flash")
+        self.flash_checkbox.setObjectName("toolbarToggle")
         self.flash_checkbox.setChecked(True)
         self.flash_checkbox.setToolTip("Briefly flash a mask when selected")
         self.flash_checkbox.stateChanged.connect(self._on_flash_checkbox_changed)
@@ -253,12 +237,14 @@ class MainWindow(QMainWindow):
         self._flash_enabled = True
 
         self.other_checkbox = QCheckBox("Display Other")
+        self.other_checkbox.setObjectName("toolbarToggle")
         self.other_checkbox.setChecked(False)
         self.other_checkbox.setToolTip(
             "Preview the 'Other' region — every pixel not covered by a defined mask")
         self.other_checkbox.stateChanged.connect(self._on_other_checkbox_changed)
         toolbar.addWidget(self.other_checkbox)
         self._display_other = False
+        toolbar.addSeparator()
 
         # Flash animation state
         self._flash_timer = QTimer(self)
