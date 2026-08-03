@@ -19,6 +19,12 @@ ROLE_ANNOTATED = Qt.UserRole + 1     # bool: has >=1 saved annotation
 ROLE_DIMS = Qt.UserRole + 2          # (w, h) or None until known
 
 
+def _accent() -> str:
+    """Annotation-dot colour from the active palette."""
+    from SAGE.ui.theme import colors, active_mode
+    return colors(active_mode())["accent_bd"]
+
+
 class _DotDelegate(QStyledItemDelegate):
     """Draws the thumbnail normally, then a small filled dot centered beneath
     it when the item is flagged annotated. Painting in the delegate (rather than
@@ -29,9 +35,11 @@ class _DotDelegate(QStyledItemDelegate):
     DOT_D = 7        # diameter in px
     DOT_PAD = 3      # gap between thumbnail bottom and dot
 
-    def __init__(self, color=QColor(46, 204, 113), parent=None):
+    def __init__(self, color=None, parent=None):
         super().__init__(parent)
-        self._color = color
+        # Was a literal QColor(46, 204, 113) — a teal-green unrelated to the
+        # palette, so the dot drifted from the accent in both modes.
+        self._color = color if color is not None else QColor(_accent())
 
     def set_color(self, color):
         self._color = color
@@ -186,6 +194,11 @@ class Filmstrip(QListWidget):
             flag = it.data(ROLE_NAME) in wanted
             if bool(it.data(ROLE_ANNOTATED)) != flag:
                 it.setData(ROLE_ANNOTATED, flag)
+        self.viewport().update()
+
+    def refresh_theme(self):
+        """Re-read the accent after a theme switch."""
+        self._dot_delegate.set_color(QColor(_accent()))
         self.viewport().update()
 
     def set_dot_color(self, color):
