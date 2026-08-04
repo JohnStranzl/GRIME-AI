@@ -729,3 +729,4 @@ class ML_ImageProcessingDlg(QDialog):
 
     def get_selected_segment_model(self):
         return self.segment_tab.selected_segment_model
+
