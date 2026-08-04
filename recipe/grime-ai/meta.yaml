@@ -66,7 +66,6 @@ requirements:
     - pywavelets 1.8.*
     - pywin32 311  # [win]
     - requests 2.31.*
-    - rpy2 3.6.*
     - sam2 1.0.*
     - scikit-image 0.24.*
     - scikit-learn 1.*
@@ -79,8 +78,6 @@ requirements:
     - torchvision >=0.22,<=0.23
     - transformers 4.57.*
     - webdriver-manager 4.0.*
-    - r-base 4.4.*
-    - r-neonutilities 3.*
     - ultralytics 8.4.*
     - qdarkstyle 3.2.*
     - qtpy 2.4.*
