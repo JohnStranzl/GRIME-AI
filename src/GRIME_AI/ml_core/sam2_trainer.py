@@ -32,6 +32,7 @@ from sam2.modeling import sam2_base
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
@@ -157,7 +158,8 @@ class SAM2Trainer:
 
         # Track top N best validation checkpoints
         self.best_checkpoints = []  # List of (val_loss, path) tuples
-        self.max_best_checkpoints = 3  # Keep top 3 best checkpoints
+        # Populated from the site config in _load_site_config(); see schema default.
+        self.max_best_checkpoints = ModelConfigManager.get_default("max_best_checkpoints")
 
         # ALL FILES SAVED WILL BE TAGGED WITH THE DATE AND TIME THAT TRAINING STARTED.
         self.now = datetime.now()
@@ -216,7 +218,8 @@ class SAM2Trainer:
         self.loss_function = self.site_config.get('loss_function', 'BCE + Dice + Score')
         self.weight_decay = self.site_config['weight_decay']
         self.num_epochs = self.site_config['number_of_epochs']
-        self.save_model_frequency = self.site_config['save_model_frequency']
+        self.max_best_checkpoints = int(self.site_config.get(
+            'max_best_checkpoints', ModelConfigManager.get_default('max_best_checkpoints')))
         self.early_stopping = self.site_config['early_stopping']
         self.patience = self.site_config['patience']
 
@@ -230,7 +233,25 @@ class SAM2Trainer:
         self.blob_filter_mahal_fraction = None
 
         # Validation overlay settings (default: 5 samples per epoch)
-        self.validation_overlay_samples = self.site_config.get('validation_overlay_samples', 5)
+        _D = ModelConfigManager.get_default
+        self.validation_overlay_samples = self.site_config.get(
+            'validation_overlay_samples', _D('validation_overlay_samples'))
+
+        # Overlay write policy.
+        #   'last'     -> only the final epoch (legacy behavior)
+        #   'every'    -> every validation epoch
+        #   'interval' -> every Nth epoch, per validation_overlay_interval
+        # Regardless of mode, a guaranteed final overlay pass runs if the epoch
+        # loop exits early (early stopping, divergence, cancel) without having
+        # written any overlays. See _ensure_overlays_written().
+        self.validation_overlay_mode = str(
+            self.site_config.get('validation_overlay_mode', _D('validation_overlay_mode'))
+        ).lower()
+        self.validation_overlay_interval = int(
+            self.site_config.get('validation_overlay_interval', _D('validation_overlay_interval'))
+        )
+        # Set True by _validate_one_epoch the first time it writes overlay PNGs.
+        self._overlays_written = False
 
         self.dataset = {}
 
@@ -653,13 +674,44 @@ class SAM2Trainer:
         # AFTER PATIENCE=3 EPOCHS WITHOUT IMPROVEMENT. MIN_LR=1e-7 PREVENTS LR FROM
         # BECOMING TOO SMALL. VERBOSE=TRUE PRINTS WHEN LR CHANGES.
         # ============================================================================
+        # Scheduler patience must stay strictly below early-stopping patience,
+        # otherwise training halts before the LR is ever reduced and the
+        # scheduler is effectively dead code. Default to one-third of the
+        # early-stopping patience (min 1) unless explicitly configured.
+        _D = ModelConfigManager.get_default
+        self.lr_scheduler_enabled = bool(
+            self.site_config.get('lr_scheduler_enabled', _D('lr_scheduler_enabled')))
+        self.lr_scheduler_factor = float(
+            self.site_config.get('lr_scheduler_factor', _D('lr_scheduler_factor')))
+        self.lr_scheduler_patience = int(
+            self.site_config.get('lr_scheduler_patience', _D('lr_scheduler_patience')))
+        self.lr_scheduler_min_lr = float(
+            self.site_config.get('lr_scheduler_min_lr', _D('lr_scheduler_min_lr')))
+
+        if self.early_stopping and self.lr_scheduler_patience >= int(self.patience):
+            print(f"[SAM2Trainer] WARNING: LR scheduler patience "
+                  f"({self.lr_scheduler_patience}) >= early-stopping patience "
+                  f"({self.patience}). Training will stop before the learning "
+                  f"rate is ever reduced.")
+
         scheduler = ReduceLROnPlateau(
             optimizer,
-            mode='min',  # minimize validation loss
-            factor=0.5,  # multiply LR by 0.5 when plateau detected
-            patience=3,  # wait 3 epochs before reducing
-            min_lr=1e-7  # don't reduce below this value
-        )
+            mode='min',                        # minimize validation loss
+            factor=self.lr_scheduler_factor,   # multiply LR by this on plateau
+            patience=self.lr_scheduler_patience,
+            min_lr=self.lr_scheduler_min_lr
+        ) if self.lr_scheduler_enabled else None
+
+        if self.lr_scheduler_enabled:
+            print(f"[SAM2Trainer] ReduceLROnPlateau active: monitor=val_loss "
+                  f"mode=min factor={self.lr_scheduler_factor} "
+                  f"patience={self.lr_scheduler_patience} "
+                  f"min_lr={self.lr_scheduler_min_lr:g} initial_lr={learnrate:g}")
+        else:
+            print("[SAM2Trainer] LR scheduler disabled; learning rate is fixed.")
+
+        # Per-epoch LR history for the diagnostics report
+        self.lr_values = []
 
         # Note: loss_fn defined here but not passed to validation anymore
         use_amp = True
@@ -678,6 +730,7 @@ class SAM2Trainer:
         patience_counter = 0
         divergence_threshold = 1e3
         last_completed_epoch = 0
+        self._overlays_written = False
 
         # VRAM trend tracking
         _prev_train_vram_mb = None
@@ -786,13 +839,12 @@ class SAM2Trainer:
 
 
                 if val_cache:
-                    is_last_epoch = (epoch + 1 == epochs)
                     avg_val_loss, val_accuracy, miou, avg_val_dice, avg_val_iou = self._validate_one_epoch(
                         val_cache=val_cache,
                         predictor=predictor,
                         progressBar=progressBar,
                         target_label=target_label,
-                        save_overlays=is_last_epoch
+                        save_overlays=self._should_save_overlays(epoch + 1, epochs)
                     )
 
                     if avg_val_loss is None:
@@ -831,7 +883,13 @@ class SAM2Trainer:
                     # THIS STEP ALLOWS THE SCHEDULER TO MONITOR VALIDATION LOSS AND REDUCE
                     # LEARNING RATE IF NO IMPROVEMENT IS DETECTED FOR PATIENCE=3 EPOCHS
                     # ============================================================================
-                    scheduler.step(avg_val_loss)
+                    self._step_lr_scheduler(scheduler, optimizer, avg_val_loss, epoch + 1)
+
+            # ----------------------------------------------------------------
+            # POST-TRAINING: backstop so an early exit still produces overlays
+            # ----------------------------------------------------------------
+            self._ensure_overlays_written(val_cache, predictor, progressBar, target_label)
+
             # ----------------------------------------------------------------
             # POST-TRAINING: compute suggested blob filter radius and store
             # on self so the caller can retrieve it and prompt the user
@@ -1501,6 +1559,84 @@ class SAM2Trainer:
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
+    def _step_lr_scheduler(self, scheduler, optimizer, avg_val_loss, epoch_num):
+        """
+        Step ReduceLROnPlateau and report any LR change.
+
+        torch's `verbose` argument is deprecated, so the change is detected and
+        printed here instead. Without this the scheduler runs invisibly and
+        users cannot tell it is active.
+        """
+        lr_before = optimizer.param_groups[0]['lr']
+
+        if scheduler is not None:
+            scheduler.step(avg_val_loss)
+
+        lr_after = optimizer.param_groups[0]['lr']
+        self.lr_values.append(lr_after)
+
+        if lr_after < lr_before:
+            print(f"[SAM2Trainer] Epoch {epoch_num}: validation loss plateaued — "
+                  f"learning rate reduced {lr_before:.3e} -> {lr_after:.3e}")
+            if lr_after <= self.lr_scheduler_min_lr:
+                print(f"[SAM2Trainer] Learning rate has reached min_lr "
+                      f"({self.lr_scheduler_min_lr:g}); no further reductions.")
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _should_save_overlays(self, epoch_num, total_epochs):
+        """
+        Decide whether this validation epoch should write overlay PNGs.
+
+        epoch_num:    1-based epoch number
+        total_epochs: configured epoch count
+
+        Note that 'last' cannot fire when the epoch loop exits early (early
+        stopping, divergence, cancel). _ensure_overlays_written() is the
+        backstop for those paths.
+        """
+        mode = getattr(self, 'validation_overlay_mode', 'last')
+
+        if mode == 'every':
+            return True
+
+        if mode == 'interval':
+            interval = max(1, int(getattr(self, 'validation_overlay_interval', 5)))
+            return (epoch_num % interval == 0) or (epoch_num == total_epochs)
+
+        # Default / 'last'
+        return epoch_num == total_epochs
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    def _ensure_overlays_written(self, val_cache, predictor, progressBar, target_label):
+        """
+        Guarantee that validation_overlays/ is populated even when the epoch
+        loop exited before the final epoch.
+
+        Prior behavior gated overlay writing on (epoch + 1 == epochs), so any
+        early exit — early stopping, divergence abort, user cancel — produced a
+        model folder with no validation_overlays/ subfolder at all. This runs a
+        single extra overlay-only validation pass in that case.
+        """
+        if self._overlays_written or not val_cache:
+            return
+
+        print("[SAM2Trainer] Training ended before the final epoch; "
+              "running one validation pass to write validation_overlays/.")
+        try:
+            self._validate_one_epoch(
+                val_cache=val_cache,
+                predictor=predictor,
+                progressBar=progressBar,
+                target_label=target_label,
+                save_overlays=True
+            )
+        except Exception as e:
+            print(f"[SAM2Trainer] Final overlay pass failed: {e}")
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     def _validate_one_epoch(self, val_cache, predictor, progressBar, target_label,
                             save_overlays=False):
         """
@@ -1659,6 +1795,7 @@ class SAM2Trainer:
                         f"{self.formatted_time}_{self.site_name}_val_overlay_e{len(self.epoch_list)}_{val_idx}.png"
                     )
                     cv2.imwrite(out_path, cv2.cvtColor(blended, cv2.COLOR_RGB2BGR))
+                    self._overlays_written = True
 
                 del logit_tensor, logit_upsampled, prob_upsampled, pred_binary, val_true_mask_tensor, iou_actual
 
@@ -1854,9 +1991,22 @@ class SAM2Trainer:
             text_file.write(f"Loss Function: {self.loss_function}\n")
             text_file.write(f"Weight Decay: {self.weight_decay}\n")
             text_file.write(f"Number of Epochs: {self.num_epochs}\n")
-            text_file.write(f"Save Model Frequency: {self.save_model_frequency}\n")
+            text_file.write(f"Best Checkpoints Kept: {self.max_best_checkpoints}\n")
             text_file.write(f"Early Stopping: {self.early_stopping}\n")
             text_file.write(f"Patience: {self.patience}\n")
+            text_file.write("Early Stopping Monitor: validation loss (mode=min)\n")
+            _sched_on = getattr(self, 'lr_scheduler_enabled', True)
+            text_file.write(f"LR Scheduler: {'ReduceLROnPlateau' if _sched_on else 'None'}\n")
+            if _sched_on:
+                text_file.write(f"LR Scheduler Monitor: validation loss (mode=min)\n")
+                text_file.write(f"LR Scheduler Factor: {getattr(self, 'lr_scheduler_factor', 0.5)}\n")
+                text_file.write(f"LR Scheduler Patience: {getattr(self, 'lr_scheduler_patience', 3)}\n")
+                text_file.write(f"LR Scheduler Min LR: {getattr(self, 'lr_scheduler_min_lr', 1e-7):g}\n")
+                _lrs = getattr(self, 'lr_values', [])
+                if _lrs:
+                    text_file.write(f"Final Learning Rate: {_lrs[-1]:.3e}\n")
+                    text_file.write(f"LR Reductions: {sum(1 for i in range(1, len(_lrs)) if _lrs[i] < _lrs[i-1])}\n")
+            text_file.write(f"Validation Overlay Mode: {getattr(self, 'validation_overlay_mode', 'last')}\n")
             text_file.write(f"Device: {device}\n")
             text_file.write(f"Folders: {self.folders}\n")
             text_file.write(f"Annotations: {self.annotation_files}\n")

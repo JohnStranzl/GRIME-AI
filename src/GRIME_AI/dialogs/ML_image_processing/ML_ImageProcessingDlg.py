@@ -33,10 +33,10 @@ from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfi
 
 # ======================================================================================================================
 # ======================================================================================================================
-#  =====     =====     =====     =====     class GRIME_AI_ML_ImageProcessingDlg      =====     =====     =====     =====
+#  =====     =====     =====     =====     class ML_ImageProcessingDlg      =====     =====     =====     =====
 # ======================================================================================================================
 # ======================================================================================================================
-class GRIME_AI_ML_ImageProcessingDlg(QDialog):
+class ML_ImageProcessingDlg(QDialog):
 
     ml_train_signal = pyqtSignal()
     ml_segment_signal = pyqtSignal()
@@ -525,10 +525,21 @@ class GRIME_AI_ML_ImageProcessingDlg(QDialog):
         site_config["lora_target_modules"] = lora_target_modules
 
         # _____ GRIME AI ML parameters  _______________________________________
-        site_config["save_model_frequency"] = self.spinBox_saveFrequency.value()
-        site_config["validation_frequency"] = self.spinBox_validationFrequency.value()
+        site_config["max_best_checkpoints"] = \
+            self.training_tab.spinBox_maxBestCheckpoints.value()
         site_config["early_stopping"] = self.checkBox_earlyStopping.isChecked()
         site_config["patience"] = self.spinBox_patience.value()
+        site_config["validation_overlay_mode"] = self.training_tab._overlay_mode_from_ui()
+        site_config["validation_overlay_interval"] = \
+            self.training_tab.spinBox_validationOverlayInterval.value()
+        site_config["validation_overlay_samples"] = \
+            self.training_tab.spinBox_validationOverlaySamples.value()
+        site_config["lr_scheduler_enabled"] = self.training_tab.checkBox_lrScheduler.isChecked()
+        site_config["lr_scheduler_factor"] = \
+            self.training_tab.doubleSpinBox_lrSchedulerFactor.value()
+        site_config["lr_scheduler_patience"] = \
+            self.training_tab.spinBox_lrSchedulerPatience.value()
+        site_config["lr_scheduler_min_lr"] = self.training_tab._lr_min_from_ui()
         site_config["device"] = self.comboBox_device.currentText()
         site_config["folder_path"] = self.lineEdit_model_training_images_path.text()
         avail_root = self.training_tab.listWidget_availableFolders.invisibleRootItem()

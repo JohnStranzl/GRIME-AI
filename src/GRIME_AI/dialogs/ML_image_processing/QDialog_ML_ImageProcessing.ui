@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>GRIME_AI_ML_ImageProcessingDlg</class>
- <widget class="QDialog" name="GRIME_AI_ML_ImageProcessingDlg">
+ <class>ML_ImageProcessingDlg</class>
+ <widget class="QDialog" name="ML_ImageProcessingDlg">
   <property name="geometry">
    <rect>
     <x>0</x>

@@ -3,7 +3,7 @@
 # -*- coding: utf-8 -*-
 
 # Author: John Edward Stranzl, Jr.
-# Ported: direct port of Segment Images tab from GRIME_AI_ML_ImageProcessingDlg.py
+# Ported: direct port of Segment Images tab from ML_ImageProcessingDlg.py
 # License: Apache License, Version 2.0
 
 import os
