@@ -8,7 +8,6 @@
 # License: Apache License, Version 2.0, http://www.apache.org/licenses/LICENSE-2.0
 
 import os
-import getpass
 import cv2
 import json
 from json import JSONDecodeError
