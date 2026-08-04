@@ -182,7 +182,7 @@ All notable changes to GRIME AI will be documented in this file.
 - Fetch Images folder browsing functionality
 
 ### Removed
-- GRIME_AI_BuildModelDlg.py class (replaced by GRIME_AI_ML_ImageProcessingDlg.py)
+- GRIME_AI_BuildModelDlg.py class (replaced by ML_ImageProcessingDlg.py)
 - Classes and code not pertinent to USGS grant
 
 ## [0.0.6.0-beta.16] - 2025-08-27

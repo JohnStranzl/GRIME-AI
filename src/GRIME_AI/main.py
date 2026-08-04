@@ -643,6 +643,7 @@ class MainWindow(QMainWindow):
             QTabBar::tab {
                 background-color: white;
                 color: black;
+                font-size: 10pt;
             }
             QTabBar::tab:selected {
                 background-color: steelblue;
@@ -955,6 +956,15 @@ class MainWindow(QMainWindow):
         self.NEON_listboxSites.currentItemChanged.connect(self.NEON_SiteClicked)
         self.NEON_listboxSites.itemClicked.connect(self._neon_tree_item_clicked)
         self.NEON_listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
+
+        # List/tree row text size. These views set no font in the .ui, so they
+        # inherited the default (too large). Pin to Arial 10 to match the app.
+        _list_font = QFont("Arial", 10)
+        for _view_name in ("NEON_listboxSites", "NEON_listboxSiteProducts",
+                           "USGS_listboxSites"):
+            _view = getattr(self, _view_name, None)
+            if _view is not None:
+                _view.setFont(_list_font)
 
         # ------------------------------------------------------------------------------------------------------------------
         # USGS
@@ -2970,8 +2980,8 @@ class MainWindow(QMainWindow):
         _splash.show()
         QApplication.processEvents()
 
-        from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
-        hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
+        from GRIME_AI.dialogs.ML_image_processing.ML_ImageProcessingDlg import ML_ImageProcessingDlg
+        hyperparameterDlg = ML_ImageProcessingDlg(frame)
 
         _splash.finish(hyperparameterDlg)
 
@@ -5583,6 +5593,44 @@ def my_main():
                                    "Required when the config does not already specify one.")
     train_parser.add_argument('--mode',   required=True, choices=['sam2', 'segformer'],
                               help='Model type to train: sam2 or segformer')
+    train_parser.add_argument('--validation-overlay-mode',
+                              dest='validation_overlay_mode',
+                              required=False, default=None,
+                              choices=['last', 'every', 'interval'],
+                              help="When to write validation overlay PNGs. "
+                                   "'last' = final epoch only (default), 'every' = every "
+                                   "epoch, 'interval' = every N epochs (see "
+                                   "--validation-overlay-interval). Overlays are written at "
+                                   "least once regardless, even if training stops early. "
+                                   "Overrides the config.")
+    train_parser.add_argument('--validation-overlay-interval',
+                              dest='validation_overlay_interval',
+                              type=int, required=False, default=None,
+                              help='Write overlays every N epochs. Only used when '
+                                   "--validation-overlay-mode is 'interval'. Overrides the config.")
+    train_parser.add_argument('--lr-scheduler', dest='lr_scheduler_enabled',
+                              action='store_true', default=None,
+                              help='Enable the ReduceLROnPlateau scheduler. Overrides the config.')
+    train_parser.add_argument('--no-lr-scheduler', dest='lr_scheduler_enabled',
+                              action='store_false', default=None,
+                              help='Disable the scheduler and hold the learning rate fixed. '
+                                   'Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-factor', dest='lr_scheduler_factor',
+                              type=float, required=False, default=None,
+                              help='Multiply the learning rate by this on each plateau. '
+                                   'Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-patience', dest='lr_scheduler_patience',
+                              type=int, required=False, default=None,
+                              help='Epochs without improvement before the learning rate drops. '
+                                   'Keep below --patience. Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-min-lr', dest='lr_scheduler_min_lr',
+                              type=float, required=False, default=None,
+                              help='Floor for the learning rate (e.g. 1e-7). Overrides the config.')
+    train_parser.add_argument('--validation-overlay-samples',
+                              dest='validation_overlay_samples',
+                              type=int, required=False, default=None,
+                              help='Number of validation images to write overlays for on each '
+                                   'overlay-writing epoch. Overrides the config.')
 
     # ROI Analyzer parser
     roi_parser = subparsers.add_parser(
@@ -5848,6 +5896,37 @@ def run_cli(args):
         print(f"[GRIME AI] Training mode: {args.mode.upper()}")
         print(f"[GRIME AI] Config:        {args.config}")
         print(f"[GRIME AI] Site:          {site_config.get('siteName', '?')}")
+
+        # ------------------------------------------------------------------
+        # Validation overlay overrides. Only applied when the flag was passed,
+        # so an unflagged run uses whatever the config already specifies.
+        # ------------------------------------------------------------------
+        for _flag, _key in (
+            ('validation_overlay_mode',     'validation_overlay_mode'),
+            ('validation_overlay_interval', 'validation_overlay_interval'),
+            ('validation_overlay_samples',  'validation_overlay_samples'),
+            ('lr_scheduler_enabled',        'lr_scheduler_enabled'),
+            ('lr_scheduler_factor',         'lr_scheduler_factor'),
+            ('lr_scheduler_patience',       'lr_scheduler_patience'),
+            ('lr_scheduler_min_lr',         'lr_scheduler_min_lr'),
+        ):
+            _val = getattr(args, _flag, None)
+            if _val is not None:
+                site_config[_key] = _val
+                print(f"[GRIME AI] Override:      {_key} = {_val}")
+
+        if (site_config.get('validation_overlay_interval') is not None
+                and int(site_config.get('validation_overlay_interval', 5)) < 1):
+            print('[ERROR] --validation-overlay-interval must be >= 1.', file=sys.stderr)
+            sys.exit(1)
+        if (site_config.get('validation_overlay_samples') is not None
+                and int(site_config.get('validation_overlay_samples', 5)) < 1):
+            print('[ERROR] --validation-overlay-samples must be >= 1.', file=sys.stderr)
+            sys.exit(1)
+        print(f"[GRIME AI] Overlays:      "
+              f"mode={site_config.get('validation_overlay_mode', 'last')} "
+              f"interval={site_config.get('validation_overlay_interval', 5)} "
+              f"samples={site_config.get('validation_overlay_samples', 5)}")
 
         # ------------------------------------------------------------------
         # Resolve the training label. Reuses the site config editor's helpers
@@ -6564,5 +6643,4 @@ def segment_main(cfg: DictConfig) -> None:
 if __name__ == '__main__':
 
     my_main()
-
 
