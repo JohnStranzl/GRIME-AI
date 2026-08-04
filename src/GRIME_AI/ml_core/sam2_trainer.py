@@ -2328,3 +2328,4 @@ class SAM2Trainer:
             self.category_centroids[cat_id] = unique_centroids
             print(f"  Category {cat_id}: {before_count} collected  ->  {after_count} unique  "
                   f"({removed} removed as duplicates within {tolerance_px}px)")
+                  

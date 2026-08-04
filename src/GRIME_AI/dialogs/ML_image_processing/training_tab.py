@@ -2551,4 +2551,3 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
             print("[Blob Filter] Manual radius saved automatically: "
                   "{} px ({:.2f}% of diagonal).".format(
                       self.spinBox_blobFilterRadius.value(), manual_fraction * 100.0))
-

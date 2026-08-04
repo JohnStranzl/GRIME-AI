@@ -753,3 +753,4 @@ class SAM3Trainer:
         if progressBar:
             progressBar.close()
         del progressBar
+

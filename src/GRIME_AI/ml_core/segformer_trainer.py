@@ -1014,3 +1014,4 @@ class SegFormerTrainer:
             self._close_progress()
 
         return model
+

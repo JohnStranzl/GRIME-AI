@@ -438,3 +438,4 @@ class AnnotationTab(QWidget):
             for idx, shape in enumerate(shapes, start=1):
                 pts = shape['points']
                 print(f"  {idx}. {shape['type']} with {len(pts)} points → {pts}")
+

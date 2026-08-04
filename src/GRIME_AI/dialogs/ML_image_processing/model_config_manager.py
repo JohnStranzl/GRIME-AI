@@ -339,3 +339,4 @@ class ModelConfigManager:
         # Update manager state
         self.config = site_config
         return site_config
+
