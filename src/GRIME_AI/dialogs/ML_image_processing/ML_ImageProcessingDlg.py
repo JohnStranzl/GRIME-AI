@@ -20,6 +20,14 @@ import matplotlib
 matplotlib.use("Qt5Agg")      # <<< FORCE Qt5Agg backend for PyQt5
 
 from GRIME_AI.utils.resource_utils import ui_path
+#!/usr/bin/env python3
+#-*-coding:utf-8-*-
+
+#Author:JohnEdwardStranzl,Jr.
+#Affiliation(s):UniversityofNebraska-Lincoln,BladeVisionSystems,LLC
+#Contact:jstranzl2@huskers.unl.edu,johnstranzl@gmail.com
+#Created:Mar6,2022
+#License:ApacheLicense,Version2.0,http://www.apache.org/licenses/LICENSE-2.0
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QDialog, QSizePolicy, QListWidget
