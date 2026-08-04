@@ -20,7 +20,7 @@ from GRIME_AI.GRIME_AI_ImageAnnotatorDlg import ImageAnnotatorDialog
 class AnnotationTab(QWidget):
     """
     Encapsulates the Data Annotation tab controls, signals, slots, and state.
-    This is a direct port of the annotation-related code from GRIME_AI_ML_ImageProcessingDlg.
+    This is a direct port of the annotation-related code from ML_ImageProcessingDlg.
     """
 
     def __init__(self, parent=None):
@@ -438,3 +438,4 @@ class AnnotationTab(QWidget):
             for idx, shape in enumerate(shapes, start=1):
                 pts = shape['points']
                 print(f"  {idx}. {shape['type']} with {len(pts)} points → {pts}")
+

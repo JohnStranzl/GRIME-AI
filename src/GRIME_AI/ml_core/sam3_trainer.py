@@ -29,6 +29,7 @@ from GRIME_AI.utils.datasetutils import DatasetUtils
 
 # ===== Import adapter/predictor =====
 from GRIME_AI.ml_core.sam3_adapter import SAM3ImagePredictor
+from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -117,7 +118,8 @@ class SAM3Trainer:
         self.loss_function = self.site_config['loss_function']
         self.weight_decay = self.site_config['weight_decay']
         self.num_epochs = self.site_config['number_of_epochs']
-        self.save_model_frequency = self.site_config['save_model_frequency']
+        self.max_best_checkpoints = int(self.site_config.get(
+            'max_best_checkpoints', ModelConfigManager.get_default('max_best_checkpoints')))
         self.early_stopping = self.site_config['early_stopping']
         self.patience = self.site_config['patience']
         self.device = self.site_config.get('device', str(device))
@@ -638,7 +640,7 @@ class SAM3Trainer:
             text_file.write(f"Loss Function: {self.loss_function}\n")
             text_file.write(f"Weight Decay: {self.weight_decay}\n")
             text_file.write(f"Number of Epochs: {self.num_epochs}\n")
-            text_file.write(f"Save Model Frequency: {self.save_model_frequency}\n")
+            text_file.write(f"Best Checkpoints Kept: {self.max_best_checkpoints}\n")
             text_file.write(f"Early Stopping: {self.early_stopping}\n")
             text_file.write(f"Patience: {self.patience}\n")
             text_file.write(f"Device: {device}\n")
@@ -751,3 +753,4 @@ class SAM3Trainer:
         if progressBar:
             progressBar.close()
         del progressBar
+

@@ -355,12 +355,24 @@ class TrainingTab(QtWidgets.QWidget):
         # Cap spinbox widths so they don't stretch full column width
         for sb in [
             self.spinBox_epochs, self.spinBox_batchSize,
-            self.spinBox_saveFrequency, self.spinBox_validationFrequency,
+            self.spinBox_maxBestCheckpoints,
             self.spinBox_patience, self.spinBox_blobFilterRadius,
+            self.spinBox_validationOverlayInterval,
+            self.spinBox_validationOverlaySamples,
+            self.spinBox_lrSchedulerPatience,
             self.spinBox_loraRank, self.spinBox_loraAlpha,
             self.spinBox_trainSplit, self.spinBox_valSplit,
         ]:
             sb.setMaximumWidth(90)
+
+        self.comboBox_validationOverlayMode.setMaximumWidth(150)
+        self.doubleSpinBox_lrSchedulerFactor.setMaximumWidth(110)
+        self.lineEdit_lrSchedulerMinLR.setMaximumWidth(110)
+        self.checkBox_lrScheduler.toggled.connect(self._update_lr_scheduler_enabled)
+        self._update_lr_scheduler_enabled()
+        self.comboBox_validationOverlayMode.currentIndexChanged.connect(
+            self._update_overlay_interval_enabled)
+        self._update_overlay_interval_enabled()
 
         self.doubleSpinBox_weightDecay.setMaximumWidth(110)
         self.doubleSpinBox_loraDropout.setMaximumWidth(110)
@@ -657,10 +669,18 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
         self.doubleSpinBox_weightDecay.setValue(self.site_config.get("weight_decay", 0.0))
         self.spinBox_epochs.setValue(self.site_config.get("number_of_epochs", 0))
         self.spinBox_batchSize.setValue(self.site_config.get("batch_size", 0))
-        self.spinBox_saveFrequency.setValue(self.site_config.get("save_model_frequency", 0))
-        self.spinBox_validationFrequency.setValue(self.site_config.get("validation_frequency", 0))
+        self.spinBox_maxBestCheckpoints.setValue(
+            int(self.site_config.get("max_best_checkpoints",
+                                     ModelConfigManager.get_default("max_best_checkpoints"))))
         self.checkBox_earlyStopping.setChecked(self.site_config.get("early_stopping", False))
         self.spinBox_patience.setValue(self.site_config.get("patience", 0))
+        self._set_overlay_mode_ui(self.site_config.get("validation_overlay_mode", "last"))
+        self.spinBox_validationOverlayInterval.setValue(
+            int(self.site_config.get("validation_overlay_interval", 5) or 5))
+        self.spinBox_validationOverlaySamples.setValue(
+            int(self.site_config.get("validation_overlay_samples",
+                                     ModelConfigManager.get_default("validation_overlay_samples"))))
+        self._load_lr_scheduler_ui(self.site_config)
 
         device = self.site_config.get("device", "")
         idx = self.comboBox_device.findText(device)
@@ -1128,10 +1148,18 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
         self.doubleSpinBox_weightDecay.setValue(float(cfg.get("weight_decay", 0.01) or 0.01))
         self.spinBox_epochs.setValue(int(cfg.get("number_of_epochs", 20) or 20))
         self.spinBox_batchSize.setValue(int(cfg.get("batch_size", 32) or 32))
-        self.spinBox_saveFrequency.setValue(int(cfg.get("save_model_frequency", 20) or 20))
-        self.spinBox_validationFrequency.setValue(int(cfg.get("validation_frequency", 20) or 20))
+        self.spinBox_maxBestCheckpoints.setValue(
+            int(cfg.get("max_best_checkpoints",
+                        ModelConfigManager.get_default("max_best_checkpoints"))))
         self.checkBox_earlyStopping.setChecked(bool(cfg.get("early_stopping", False)))
         self.spinBox_patience.setValue(int(cfg.get("patience", 3) or 3))
+        self._set_overlay_mode_ui(cfg.get("validation_overlay_mode", "last"))
+        self.spinBox_validationOverlayInterval.setValue(
+            int(cfg.get("validation_overlay_interval", 5) or 5))
+        self.spinBox_validationOverlaySamples.setValue(
+            int(cfg.get("validation_overlay_samples",
+                        ModelConfigManager.get_default("validation_overlay_samples"))))
+        self._load_lr_scheduler_ui(cfg)
         self.comboBox_device.setCurrentText(cfg.get("device", "cpu"))
 
         # Blob filter radius — stored as fraction, displayed as pixels
@@ -1231,10 +1259,16 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
             "weight_decay": float(self.doubleSpinBox_weightDecay.value()),
             "number_of_epochs": int(self.spinBox_epochs.value()),
             "batch_size": int(self.spinBox_batchSize.value()),
-            "save_model_frequency": int(self.spinBox_saveFrequency.value()),
-            "validation_frequency": int(self.spinBox_validationFrequency.value()),
+            "max_best_checkpoints": int(self.spinBox_maxBestCheckpoints.value()),
             "early_stopping": bool(self.checkBox_earlyStopping.isChecked()),
             "patience": int(self.spinBox_patience.value()),
+            "validation_overlay_mode": self._overlay_mode_from_ui(),
+            "validation_overlay_interval": int(self.spinBox_validationOverlayInterval.value()),
+            "validation_overlay_samples": int(self.spinBox_validationOverlaySamples.value()),
+            "lr_scheduler_enabled": bool(self.checkBox_lrScheduler.isChecked()),
+            "lr_scheduler_factor": float(self.doubleSpinBox_lrSchedulerFactor.value()),
+            "lr_scheduler_patience": int(self.spinBox_lrSchedulerPatience.value()),
+            "lr_scheduler_min_lr": self._lr_min_from_ui(),
             "device": self.comboBox_device.currentText(),
             "blob_filter_radius": self._blob_pixels_to_fraction(),
             "val_split":   round(self.spinBox_valSplit.value()   / 100.0, 2),
@@ -2069,13 +2103,24 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
         if self.spinBox_batchSize.value() <= 0:
             missing.append("Batch size")
 
-        # Save frequency
-        if self.spinBox_saveFrequency.value() <= 0:
-            missing.append("Save model frequency")
+        # Best checkpoints to keep
+        if self.spinBox_maxBestCheckpoints.value() <= 0:
+            missing.append("Best checkpoints to keep")
 
-        # Validation frequency
-        if self.spinBox_validationFrequency.value() <= 0:
-            missing.append("Validation frequency")
+        # LR scheduler patience must fire before early stopping, or the run
+        # halts before the learning rate is ever reduced.
+        if (self.checkBox_lrScheduler.isChecked()
+                and self.checkBox_earlyStopping.isChecked()
+                and self.spinBox_lrSchedulerPatience.value() >= self.spinBox_patience.value()):
+            missing.append("LR scheduler patience (must be less than Patience)")
+
+        if self._lr_min_from_ui() <= 0.0:
+            missing.append("Minimum LR (must be greater than 0)")
+
+        # Overlay interval (only matters in "Every N epochs" mode)
+        if (self._overlay_mode_from_ui() == "interval"
+                and self.spinBox_validationOverlayInterval.value() <= 0):
+            missing.append("Validation overlay interval")
 
         # Patience (only matters if early stopping is checked)
         if self.checkBox_earlyStopping.isChecked() and self.spinBox_patience.value() <= 0:
@@ -2157,6 +2202,66 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
                     except Exception:
                         continue
         return None
+
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------------
+    # Validation overlay helpers
+    # ------------------------------------------------------------------------
+    # Combo index <-> config value. Stored values are stable strings so the
+    # config stays readable and CLI --validation-overlay-mode matches the GUI.
+    _OVERLAY_MODES = ("last", "every", "interval")
+
+    def _load_lr_scheduler_ui(self, cfg) -> None:
+        """Populate the LR scheduler widgets, defaulting through the schema."""
+        _D = ModelConfigManager.get_default
+        self.checkBox_lrScheduler.setChecked(
+            bool(cfg.get("lr_scheduler_enabled", _D("lr_scheduler_enabled"))))
+        self.doubleSpinBox_lrSchedulerFactor.setValue(
+            float(cfg.get("lr_scheduler_factor", _D("lr_scheduler_factor"))))
+        self.spinBox_lrSchedulerPatience.setValue(
+            int(cfg.get("lr_scheduler_patience", _D("lr_scheduler_patience"))))
+        self.lineEdit_lrSchedulerMinLR.setText(
+            f'{float(cfg.get("lr_scheduler_min_lr", _D("lr_scheduler_min_lr"))):g}')
+        self._update_lr_scheduler_enabled()
+
+    def _lr_min_from_ui(self) -> float:
+        """Parse the minimum-LR field; fall back to the schema default if unparseable."""
+        try:
+            return float(self.lineEdit_lrSchedulerMinLR.text().strip())
+        except (TypeError, ValueError):
+            return float(ModelConfigManager.get_default("lr_scheduler_min_lr"))
+
+    def _update_lr_scheduler_enabled(self, *_args) -> None:
+        """Scheduler parameters only apply when the scheduler is enabled."""
+        on = self.checkBox_lrScheduler.isChecked()
+        for w in (self.doubleSpinBox_lrSchedulerFactor, self.label_lrSchedulerFactor,
+                  self.spinBox_lrSchedulerPatience, self.label_lrSchedulerPatience,
+                  self.lineEdit_lrSchedulerMinLR, self.label_lrSchedulerMinLR):
+            w.setEnabled(on)
+
+    def _overlay_mode_from_ui(self) -> str:
+        """Return the stored config value for the current combo selection."""
+        idx = self.comboBox_validationOverlayMode.currentIndex()
+        if 0 <= idx < len(self._OVERLAY_MODES):
+            return self._OVERLAY_MODES[idx]
+        return "last"
+
+    def _set_overlay_mode_ui(self, value) -> None:
+        """Select the combo entry for a stored config value (default: last)."""
+        mode = str(value or "last").strip().lower()
+        try:
+            idx = self._OVERLAY_MODES.index(mode)
+        except ValueError:
+            idx = 0
+        self.comboBox_validationOverlayMode.setCurrentIndex(idx)
+        self._update_overlay_interval_enabled()
+
+    def _update_overlay_interval_enabled(self, *_args) -> None:
+        """The interval spinbox only applies in "Every N epochs" mode."""
+        is_interval = self._overlay_mode_from_ui() == "interval"
+        self.spinBox_validationOverlayInterval.setEnabled(is_interval)
+        self.label_validationOverlayInterval.setEnabled(is_interval)
 
     # ------------------------------------------------------------------------
     # ------------------------------------------------------------------------
@@ -2446,4 +2551,3 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
             print("[Blob Filter] Manual radius saved automatically: "
                   "{} px ({:.2f}% of diagonal).".format(
                       self.spinBox_blobFilterRadius.value(), manual_fraction * 100.0))
-

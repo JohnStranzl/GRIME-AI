@@ -63,15 +63,20 @@ class ModelConfigManager:
             "lora_dropout": 0.05,
             "lora_bias": "none",
             "lora_target_modules": ["query", "key", "value"],
-            "save_model_frequency": 20,
-            "validation_frequency": 20,
+            "max_best_checkpoints": 3,
             "early_stopping": False,
             "patience": 3,
+            "lr_scheduler_enabled": True,
+            "lr_scheduler_factor": 0.5,
+            "lr_scheduler_patience": 3,
+            "lr_scheduler_min_lr": 0.0000001,
             "device": "gpu",
             "save_model_masks": True,
             "copy_original_model_image": True,
             "num_clusters": 3,
             "validation_overlay_samples": 5,
+            "validation_overlay_mode": "last",
+            "validation_overlay_interval": 5,
             "val_split": 0.2,
             "yolo_base_weights": "",
             "SAM2_CHECKPOINT": "checkpoints/sam2.1_hiera_large.pt",
@@ -95,6 +100,22 @@ class ModelConfigManager:
     #  =====     =====     =====     =====     =====        CLASS FUNCTIONS        =====     =====     =====     =====     =====
     # ======================================================================================================================
 
+    @classmethod
+    def get_default(cls, key: str, fallback: Any = None) -> Any:
+        """
+        Single source of truth for default values.
+
+        Trainers, dialogs and the CLI all resolve missing config keys through
+        here rather than carrying their own literals, so a default is changed
+        in exactly one place.
+        """
+        template = cls.create_template()
+        if key in template:
+            return template[key]
+        return fallback
+
+    # --------------------------------------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------------------------------------
     @staticmethod
     def create_template() -> Dict[str, Any]:
         """
@@ -128,10 +149,13 @@ class ModelConfigManager:
             "lora_dropout": 0.05,
             "lora_bias": "none",
             "lora_target_modules": ["query", "key", "value"],
-            "save_model_frequency": 5,
-            "validation_frequency": 5,
+            "max_best_checkpoints": 3,
             "early_stopping": False,
             "patience": 3,
+            "lr_scheduler_enabled": True,
+            "lr_scheduler_factor": 0.5,
+            "lr_scheduler_patience": 3,
+            "lr_scheduler_min_lr": 0.0000001,
             "device": "gpu",
             "folder_path": "",
             "available_folders": [],
@@ -142,6 +166,8 @@ class ModelConfigManager:
             "save_diagnostic_panels": True,
             "num_clusters": 3,
             "validation_overlay_samples": 5,
+            "validation_overlay_mode": "last",
+            "validation_overlay_interval": 5,
             "val_split": 0.2,
             "yolo_base_weights": "",
             "holdout_seasons": [],
@@ -313,3 +339,4 @@ class ModelConfigManager:
         # Update manager state
         self.config = site_config
         return site_config
+
