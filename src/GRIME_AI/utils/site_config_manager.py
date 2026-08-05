@@ -13,19 +13,19 @@ the parameters you specify (a partial merge — everything else is preserved),
 validates, and writes it back. One script, two front-ends sharing one core:
 
   CLI (edit in place):
-      python GRIME_AI_site_config.py <path> --lr 0.003 --weight-decay 0.01
-      python GRIME_AI_site_config.py <path> --lr 0.003 --lr 0.001   # sweep
-      python GRIME_AI_site_config.py <path> --show
+      python site_config_manager.py <path> --lr 0.003 --weight-decay 0.01
+      python site_config_manager.py <path> --lr 0.003 --lr 0.001   # sweep
+      python site_config_manager.py <path> --show
 
   CLI (training datasets — same discovery rules as the Training tab):
-      python GRIME_AI_site_config.py <path> --images-root D:/sites --list-folders
-      python GRIME_AI_site_config.py <path> --images-root D:/sites --select-all
-      python GRIME_AI_site_config.py <path> --select Pecos/2023 --select Pecos/2024
-      python GRIME_AI_site_config.py <path> --deselect Pecos/2023
+      python site_config_manager.py <path> --images-root D:/sites --list-folders
+      python site_config_manager.py <path> --images-root D:/sites --select-all
+      python site_config_manager.py <path> --select Pecos/2023 --select Pecos/2024
+      python site_config_manager.py <path> --deselect Pecos/2023
 
   GUI (visual editor; also does Save As under a new filename):
-      python GRIME_AI_site_config.py --gui
-      python GRIME_AI_site_config.py            # no args -> GUI
+      python site_config_manager.py --gui
+      python site_config_manager.py            # no args -> GUI
       (or Tools -> Site Config Editor in GRIME AI)
 
 The core (the _PARAMS table, split validation, load/write) is stdlib-only. Qt is
@@ -44,7 +44,13 @@ import sys
 # ============================================================================
 
 # Editable scalar parameters: (flag, json_key, kind, help)
-# kind in {"float", "int", "str", "bool", "float_list"}
+# kind in {"float", "float_sci", "int", "str", "bool", "bool_flag", "choice",
+#          "float_list"}
+#
+#   bool       --flag true|false      (legacy convention, e.g. --early-stopping)
+#   bool_flag  --flag / --no-flag     (matches `main.py train`, e.g. --lr-scheduler)
+#   float_sci  free-text float that survives scientific notation (e.g. 1e-7);
+#              a QDoubleSpinBox would round it to zero.
 _PARAMS = [
     ("--site-name",      "siteName",                   "str",        "Site name"),
     ("--lr",             "learningRates",              "float_list", "Learning rate; repeat for a sweep (e.g. --lr 3e-3 --lr 1e-3)"),
@@ -55,6 +61,10 @@ _PARAMS = [
     ("--loss",           "loss_function",              "str",        "Loss function name (e.g. IOU, BCE + Dice + Score)"),
     ("--patience",       "patience",                   "int",        "Early-stopping patience (epochs)"),
     ("--early-stopping", "early_stopping",             "bool",       "Enable early stopping (true/false)"),
+    ("--lr-scheduler",          "lr_scheduler_enabled",  "bool_flag",  "Enable the ReduceLROnPlateau scheduler (--no-lr-scheduler to disable)"),
+    ("--lr-scheduler-factor",   "lr_scheduler_factor",   "float",      "Multiply the learning rate by this on each plateau (0 < factor < 1)"),
+    ("--lr-scheduler-patience", "lr_scheduler_patience", "int",        "Epochs without improvement before the LR drops; keep below --patience"),
+    ("--lr-scheduler-min-lr",   "lr_scheduler_min_lr",   "float_sci",  "Floor for the learning rate (e.g. 1e-7)"),
     ("--save-freq",      "save_model_frequency",       "int",        "Checkpoint save frequency (epochs)"),
     ("--val-freq",       "validation_frequency",       "int",        "Validation frequency (epochs)"),
     ("--device",         "device",                     "str",        "Device (gpu/cpu)"),
@@ -63,7 +73,9 @@ _PARAMS = [
     ("--blob-radius",    "blob_filter_radius",         "float",      "Blob-filter radius fraction"),
     ("--blob-mode",      "blob_radius_mode",           "choice",     "Blob radius mode (Computed or Manual)"),
     ("--num-clusters",   "num_clusters",               "int",        "Number of clusters"),
-    ("--overlay-samples","validation_overlay_samples", "int",        "Validation overlay sample count"),
+    ("--validation-overlay-mode",     "validation_overlay_mode",     "choice", "When to write validation overlay PNGs (last, every, interval)"),
+    ("--validation-overlay-interval", "validation_overlay_interval", "int",    "Write overlays every N epochs; only used when the mode is 'interval'"),
+    ("--validation-overlay-samples",  "validation_overlay_samples",  "int",    "Validation overlay sample count (per overlay-writing epoch)"),
     ("--yolo-weights",   "yolo_base_weights",          "str",        "YOLO base-weights filename"),
     ("--use-lora",       "use_lora",                   "bool",       "Enable LoRA (true/false)"),
     ("--lora-rank",      "lora_rank",                  "int",        "LoRA rank"),
@@ -95,6 +107,11 @@ _LABEL_OVERRIDES = {
     "siteName": "Site name",
     "learningRates": "Learning rates",
     "num_clusters": "Number of clusters",
+    "lr_scheduler_enabled": "LR scheduler",
+    "lr_scheduler_min_lr": "LR scheduler minimum LR",
+    "validation_overlay_mode": "Validation overlay mode",
+    "validation_overlay_interval": "Validation overlay interval",
+    "validation_overlay_samples": "Validation overlay samples",
 }
 
 
@@ -148,10 +165,66 @@ def _lock_reason(key):
 
 _CHOICES = {
     "blob_radius_mode": ["Computed", "Manual"],
+    # Order matters: the first entry is the default the trainer assumes when the
+    # key is absent, and must stay in step with main.py's train subparser.
+    "validation_overlay_mode": ["last", "every", "interval"],
 }
 
 # Choice keys forced back to their default on load, regardless of the file.
+# validation_overlay_mode is deliberately NOT forced — it is a real user choice.
 _FORCED_CHOICES = ("blob_radius_mode",)
+
+
+# ---------------------------------------------------------------------------
+# Per-key spin-box floors. Anything not listed keeps the generic 0 minimum.
+# These mirror the guards in main.py's train handler, which exits(1) on a value
+# below 1, so the editor cannot write a config the trainer will reject.
+# ---------------------------------------------------------------------------
+
+_INT_MINIMUMS = {
+    "validation_overlay_interval": 1,
+    "validation_overlay_samples": 1,
+    "lr_scheduler_patience": 1,
+}
+
+
+# ---------------------------------------------------------------------------
+# Conditional enablement in the GUI: {controlling_key: (dependent_keys, test)}.
+# The dependent rows stay visible but greyed out when the test fails, matching
+# how the model-locked keys behave.
+# ---------------------------------------------------------------------------
+
+_DEPENDENCIES = {
+    "validation_overlay_mode": (
+        ("validation_overlay_interval",),
+        lambda v: str(v).strip().lower() == "interval",
+    ),
+    "lr_scheduler_enabled": (
+        ("lr_scheduler_factor", "lr_scheduler_patience", "lr_scheduler_min_lr"),
+        bool,
+    ),
+}
+
+_DEPENDENCY_REASONS = {
+    "validation_overlay_interval":
+        "Applies only when the validation overlay mode is 'interval'.",
+    "lr_scheduler_factor":
+        "Applies only when the LR scheduler is enabled.",
+    "lr_scheduler_patience":
+        "Applies only when the LR scheduler is enabled.",
+    "lr_scheduler_min_lr":
+        "Applies only when the LR scheduler is enabled.",
+}
+
+
+# ---------------------------------------------------------------------------
+# Deprecated flag aliases: {old_flag: (new_flag, json_key)}. Retained so
+# existing scripts keep working; each prints a NOTE when used.
+# ---------------------------------------------------------------------------
+
+_DEPRECATED_FLAGS = {
+    "--overlay-samples": ("--validation-overlay-samples", "validation_overlay_samples"),
+}
 
 
 def _str2bool(v):
@@ -212,6 +285,75 @@ def _validate_split(cfg):
             f"exceeds 1.0. Splits may sum to at most 100% "
             f"(unlink allows less, never more)."
         )
+
+
+def _validate_training_extras(cfg):
+    """Enforce the overlay and scheduler invariants that main.py's train handler
+    checks at startup, so a config saved here cannot fail the run with exit 1.
+
+    Raises ValueError on a hard error. Soft problems are returned by
+    _warn_training_extras instead."""
+    mode = cfg.get("validation_overlay_mode")
+    if mode is not None:
+        valid = _CHOICES["validation_overlay_mode"]
+        if str(mode).strip().lower() not in valid:
+            raise ValueError(
+                f"validation_overlay_mode ({mode!r}) must be one of "
+                f"{', '.join(valid)}."
+            )
+
+    for key in ("validation_overlay_interval", "validation_overlay_samples",
+                "lr_scheduler_patience"):
+        val = cfg.get(key)
+        if val is not None and int(val) < 1:
+            raise ValueError(f"{key} ({val}) must be >= 1.")
+
+    factor = cfg.get("lr_scheduler_factor")
+    if factor is not None:
+        factor = float(factor)
+        if not (0.0 < factor < 1.0):
+            raise ValueError(
+                f"lr_scheduler_factor ({factor}) must be greater than 0 and "
+                f"less than 1; a factor of 1 never lowers the learning rate."
+            )
+
+    min_lr = cfg.get("lr_scheduler_min_lr")
+    if min_lr is not None and float(min_lr) < 0:
+        raise ValueError(f"lr_scheduler_min_lr ({min_lr}) must be non-negative.")
+
+
+def _warn_training_extras(cfg):
+    """Return a list of non-fatal advisories about the overlay and scheduler
+    settings. Nothing here blocks a save."""
+    msgs = []
+
+    mode = str(cfg.get("validation_overlay_mode", "") or "").strip().lower()
+    if mode and mode != "interval" and cfg.get("validation_overlay_interval") is not None:
+        msgs.append(
+            f"validation_overlay_interval is set but the overlay mode is "
+            f"'{mode}', so the interval is ignored."
+        )
+
+    if not cfg.get("lr_scheduler_enabled"):
+        idle = [k for k in ("lr_scheduler_factor", "lr_scheduler_patience",
+                            "lr_scheduler_min_lr") if cfg.get(k) is not None]
+        if idle:
+            msgs.append(
+                "The LR scheduler is disabled, so these are ignored: "
+                + ", ".join(idle) + "."
+            )
+
+    sched_pat = cfg.get("lr_scheduler_patience")
+    stop_pat = cfg.get("patience")
+    if (cfg.get("lr_scheduler_enabled") and sched_pat is not None
+            and stop_pat is not None and int(sched_pat) >= int(stop_pat)):
+        msgs.append(
+            f"lr_scheduler_patience ({sched_pat}) is not below patience "
+            f"({stop_pat}), so early stopping will fire before the learning "
+            f"rate ever drops."
+        )
+
+    return msgs
 
 
 # ============================================================================
@@ -559,18 +701,32 @@ def _add_config_arguments(p):
         if kind == "float_list":
             p.add_argument(flag, dest=dest, action="append", type=float,
                            default=None, help=help_text)
-        elif kind == "float":
+        elif kind in ("float", "float_sci"):
             p.add_argument(flag, dest=dest, type=float, default=None, help=help_text)
         elif kind == "int":
             p.add_argument(flag, dest=dest, type=int, default=None, help=help_text)
         elif kind == "bool":
             p.add_argument(flag, dest=dest, type=_str2bool, default=None,
                            metavar="{true,false}", help=help_text)
+        elif kind == "bool_flag":
+            # Bare on/off pair, matching main.py's train subparser rather than
+            # the older `--flag true|false` style used by --early-stopping.
+            p.add_argument(flag, dest=dest, action="store_const", const=True,
+                           default=None, help=help_text)
+            p.add_argument("--no-" + flag.lstrip("-"), dest=dest,
+                           action="store_const", const=False,
+                           help="Disable: " + help_text)
         elif kind == "choice":
             p.add_argument(flag, dest=dest, type=str, default=None,
                            choices=_CHOICES[key], help=help_text)
         else:  # str
             p.add_argument(flag, dest=dest, type=str, default=None, help=help_text)
+
+    # Deprecated aliases. Hidden from --help; resolved onto the current dest so
+    # existing scripts keep working. run_config prints a NOTE when one is used.
+    for old_flag, (_new_flag, key) in _DEPRECATED_FLAGS.items():
+        p.add_argument(old_flag, dest=key, type=int, default=None,
+                       help=argparse.SUPPRESS)
 
     p.add_argument("--link", dest="split_linked", action="store_const", const=True,
                    default=None, help="Mark the split as linked (complementary)")
@@ -838,6 +994,7 @@ def run_config(args):
 
     try:
         _validate_split(cfg)
+        _validate_training_extras(cfg)
     except ValueError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         print("        No changes were written.", file=sys.stderr)
@@ -866,6 +1023,13 @@ def run_config(args):
             print(f"  {k}: {_fmt(old)} -> {_fmt(new)}")
     elif not dataset_changed:
         print("  (values already matched; file rewritten unchanged)")
+
+    for old_flag, (new_flag, _key) in _DEPRECATED_FLAGS.items():
+        if old_flag in sys.argv:
+            print(f"[NOTE] {old_flag} is deprecated; use {new_flag}.")
+
+    for msg in _warn_training_extras(cfg):
+        print(f"[WARN] {msg}")
     return 0
 
 
@@ -1042,6 +1206,8 @@ def _get_editor_class():
                         part.setToolTip(reason)
 
                 self._form.addRow(label, w)
+
+            self._wire_dependencies()
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
@@ -1483,15 +1649,66 @@ def _get_editor_class():
         @staticmethod
         def _make_widget(kind, key=None):
             if kind == "int":
-                w = QSpinBox(); w.setRange(0, 1_000_000); return w
+                w = QSpinBox()
+                w.setRange(_INT_MINIMUMS.get(key, 0), 1_000_000)
+                return w
             if kind == "float":
                 w = QDoubleSpinBox(); w.setDecimals(6); w.setRange(0.0, 1_000_000.0)
                 w.setSingleStep(0.001); return w
-            if kind == "bool":
+            if kind == "float_sci":
+                # A spin box with 6 decimals rounds 1e-7 to 0.000000, so this
+                # kind stays free-text and is parsed on save.
+                w = QLineEdit(); w.setPlaceholderText("e.g. 1e-7"); return w
+            if kind in ("bool", "bool_flag"):
                 return QCheckBox()
             if kind == "choice":
                 w = QComboBox(); w.addItems(_CHOICES[key]); return w
             return QLineEdit()
+
+        # ---- conditional enablement ----
+        def _wire_dependencies(self):
+            """Connect each controlling widget so its dependent rows grey out
+            when they no longer apply."""
+            for key in _DEPENDENCIES:
+                w = self._widgets.get(key)
+                if w is None:
+                    continue
+                if isinstance(w, QCheckBox):
+                    w.toggled.connect(lambda _v: self._sync_dependent_widgets())
+                elif isinstance(w, QComboBox):
+                    w.currentIndexChanged.connect(
+                        lambda _i: self._sync_dependent_widgets())
+            self._sync_dependent_widgets()
+
+        def _current_widget_value(self, key):
+            w = self._widgets.get(key)
+            if isinstance(w, QCheckBox):
+                return w.isChecked()
+            if isinstance(w, QComboBox):
+                return w.currentText()
+            return None
+
+        def _sync_dependent_widgets(self):
+            for key, (dependents, test) in _DEPENDENCIES.items():
+                if key not in self._widgets:
+                    continue
+                active = bool(test(self._current_widget_value(key)))
+                for dep in dependents:
+                    w = self._widgets.get(dep)
+                    label = self._labels.get(dep)
+                    if w is None:
+                        continue
+                    # Never re-enable something the model gate has locked.
+                    if dep in _MODEL_LOCKED_KEYS:
+                        continue
+                    for part in (w, label):
+                        if part is None:
+                            continue
+                        part.setEnabled(active)
+                        part.setToolTip(
+                            _DEPENDENCY_REASONS.get(dep, "") if not active
+                            else next((h for _f, k, _k, h in _PARAMS if k == dep), "")
+                        )
 
         # ---- load / populate ----
         def _load_path(self, path):
@@ -1510,10 +1727,13 @@ def _get_editor_class():
                 present = key in self._cfg
                 val = self._cfg.get(key)
                 if kind == "int":
-                    w.setValue(int(val) if present and val is not None else 0)
+                    floor = _INT_MINIMUMS.get(key, 0)
+                    w.setValue(int(val) if present and val is not None else floor)
                 elif kind == "float":
                     w.setValue(float(val) if present and val is not None else 0.0)
-                elif kind == "bool":
+                elif kind == "float_sci":
+                    w.setText("" if not present or val is None else repr(float(val)))
+                elif kind in ("bool", "bool_flag"):
                     w.setChecked(bool(val) if present else False)
                 elif kind == "float_list":
                     w.setText(_fmt_float_list(val) if present else "")
@@ -1532,6 +1752,7 @@ def _get_editor_class():
             for key in _FORCED_CHOICES:
                 self._widgets[key].setCurrentIndex(0)
 
+            self._sync_dependent_widgets()
             self._populate_datasets_from_cfg()
 
         def _populate_datasets_from_cfg(self):
@@ -1562,7 +1783,20 @@ def _get_editor_class():
                     self._cfg[key] = int(w.value())
                 elif kind == "float":
                     self._cfg[key] = float(w.value())
-                elif kind == "bool":
+                elif kind == "float_sci":
+                    text = w.text().strip()
+                    if not text:
+                        self._cfg.pop(key, None)
+                    else:
+                        try:
+                            self._cfg[key] = float(text)
+                        except ValueError:
+                            raise ValueError(
+                                f"{_pretty_label(key)}: {text!r} is not a "
+                                f"number. Use a decimal or scientific "
+                                f"notation, e.g. 1e-7."
+                            )
+                elif kind in ("bool", "bool_flag"):
                     self._cfg[key] = bool(w.isChecked())
                 elif kind == "choice":
                     self._cfg[key] = w.currentText()
@@ -1635,6 +1869,19 @@ def _get_editor_class():
                 _validate_split(self._cfg)
             except ValueError as e:
                 QMessageBox.warning(self, "Invalid split", str(e)); return False
+            try:
+                _validate_training_extras(self._cfg)
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid training setting", str(e)); return False
+            advisories = _warn_training_extras(self._cfg)
+            if advisories:
+                body = "\n\n".join(f"\u2022 {m}" for m in advisories)
+                if QMessageBox.question(
+                        self, "Check These Settings",
+                        f"{body}\n\nSave anyway?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes) != QMessageBox.Yes:
+                    return False
             if not self._confirm_datasets():
                 return False
             try:
