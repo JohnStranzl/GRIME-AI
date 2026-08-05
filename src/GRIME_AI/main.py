@@ -3337,7 +3337,7 @@ class MainWindow(QMainWindow):
     def menubar_site_config_editor(self):
         """Open the standalone Site Config editor (Tools -> Site Config Editor)."""
         try:
-            from GRIME_AI.utils.GRIME_AI_site_config import open_editor
+            from GRIME_AI.utils.site_config_manager import open_editor
             open_editor(parent=self)
         except Exception as e:
             print(f"[ERROR] Failed to open Site Config Editor: {e}")
@@ -5933,7 +5933,7 @@ def run_cli(args):
         # so the CLI, the editor, and the Training tab all agree on the
         # 'id - name' format and on train_model.TRAINING_CATEGORIES.
         # ------------------------------------------------------------------
-        from GRIME_AI.utils.GRIME_AI_site_config import (
+        from GRIME_AI.utils.site_config_manager import (
             collect_training_labels, get_training_categories,
             set_training_categories, parse_label,
         )
