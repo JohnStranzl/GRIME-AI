@@ -517,7 +517,7 @@ QPushButton:hover { background: rgba(128,128,128,0.15); }
             if idx >= 0:
                 lbl = QtWidgets.QLabel(base_text, tree.parent())
                 lbl.setAlignment(QtCore.Qt.AlignCenter)
-                lbl.setStyleSheet("font: bold 10pt;")
+                lbl.setStyleSheet('font: bold 10pt "Arial";')
                 layout.insertWidget(idx, lbl)
                 layout.setStretch(idx,     0)
                 layout.setStretch(idx + 1, 1)

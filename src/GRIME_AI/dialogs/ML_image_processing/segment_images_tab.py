@@ -488,7 +488,8 @@ QPushButton {
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
-    font-size: 12pt;
+    font-family: "Arial";
+    font-size: 11pt;
     font-weight: bold;
 }
 QPushButton:hover { background-color: #5a93c2; }
