@@ -25,7 +25,7 @@
        <property name="font">
         <font>
          <family>Arial</family>
-         <pointsize>11</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="title">
@@ -39,7 +39,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="title">
@@ -52,7 +52,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -71,7 +71,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -87,7 +87,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -103,7 +103,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="title">
@@ -116,7 +116,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -132,7 +132,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -145,7 +145,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -161,7 +161,7 @@
                <property name="font">
                 <font>
                  <family>Arial</family>
-                 <pointsize>11</pointsize>
+                 <pointsize>10</pointsize>
                 </font>
                </property>
                <property name="text">
@@ -177,15 +177,15 @@
           </item>
           <item>
            <widget class="QGroupBox" name="groupBox_blobFilter_segment">
-            <property name="font"><font><family>Arial</family><pointsize>11</pointsize></font></property>
+            <property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property>
             <property name="title"><string>Spatial Filter (SAM2)</string></property>
             <property name="toolTip"><string>Post-processing filter applied to SAM2 masks. Mahalanobis uses the trained centroid distribution; Circular uses the radius; None disables filtering (raw model mask).</string></property>
             <layout class="QHBoxLayout" name="horizontalLayout_blobFilter_segment">
              <property name="topMargin"><number>6</number></property>
-             <item><widget class="QRadioButton" name="radioButton_blob_mahalanobis"><property name="font"><font><family>Arial</family><pointsize>11</pointsize></font></property><property name="toolTip"><string>Keep regions within the trained Mahalanobis centroid distribution.</string></property><property name="text"><string>Mahalanobis</string></property><property name="checked"><bool>true</bool></property></widget></item>
-             <item><widget class="QRadioButton" name="radioButton_blob_circular"><property name="font"><font><family>Arial</family><pointsize>11</pointsize></font></property><property name="toolTip"><string>Keep regions within the scalar radius of a prompt centroid.</string></property><property name="text"><string>Circular</string></property></widget></item>
-             <item><widget class="QRadioButton" name="radioButton_blob_knn"><property name="font"><font><family>Arial</family><pointsize>11</pointsize></font></property><property name="toolTip"><string>Keep regions within the k-th nearest training-centroid distance (handles multimodal targets).</string></property><property name="text"><string>kNN</string></property></widget></item>
-             <item><widget class="QRadioButton" name="radioButton_blob_none"><property name="font"><font><family>Arial</family><pointsize>11</pointsize></font></property><property name="toolTip"><string>Disable spatial filtering — use the raw model mask.</string></property><property name="text"><string>None</string></property></widget></item>
+             <item><widget class="QRadioButton" name="radioButton_blob_mahalanobis"><property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property><property name="toolTip"><string>Keep regions within the trained Mahalanobis centroid distribution.</string></property><property name="text"><string>Mahalanobis</string></property><property name="checked"><bool>true</bool></property></widget></item>
+             <item><widget class="QRadioButton" name="radioButton_blob_circular"><property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property><property name="toolTip"><string>Keep regions within the scalar radius of a prompt centroid.</string></property><property name="text"><string>Circular</string></property></widget></item>
+             <item><widget class="QRadioButton" name="radioButton_blob_knn"><property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property><property name="toolTip"><string>Keep regions within the k-th nearest training-centroid distance (handles multimodal targets).</string></property><property name="text"><string>kNN</string></property></widget></item>
+             <item><widget class="QRadioButton" name="radioButton_blob_none"><property name="font"><font><family>Arial</family><pointsize>10</pointsize></font></property><property name="toolTip"><string>Disable spatial filtering — use the raw model mask.</string></property><property name="text"><string>None</string></property></widget></item>
              <item><spacer name="horizontalSpacer_blobFilter_segment"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
             </layout>
            </widget>
@@ -200,7 +200,7 @@
        <property name="font">
         <font>
          <family>Arial</family>
-         <pointsize>11</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="title">
@@ -212,7 +212,7 @@
           <property name="font">
            <font>
             <family>Arial</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
            </font>
           </property>
           <property name="toolTip">
@@ -225,7 +225,7 @@
           <property name="font">
            <font>
             <family>Arial</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
            </font>
           </property>
           <property name="text">
@@ -241,7 +241,7 @@
        <property name="font">
         <font>
          <family>Arial</family>
-         <pointsize>11</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="title">
@@ -253,7 +253,7 @@
           <property name="font">
            <font>
             <family>Arial</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
            </font>
           </property>
           <property name="toolTip">
@@ -269,7 +269,7 @@
           <property name="font">
            <font>
             <family>Arial</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
            </font>
           </property>
           <property name="text">
@@ -285,7 +285,7 @@
        <property name="font">
         <font>
          <family>Arial</family>
-         <pointsize>11</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="title">
@@ -299,7 +299,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="text">
@@ -312,7 +312,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="text">
@@ -325,7 +325,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="text">
@@ -338,7 +338,7 @@
             <property name="font">
              <font>
               <family>Arial</family>
-              <pointsize>11</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="text">
@@ -353,7 +353,7 @@
           <property name="font">
            <font>
             <family>Arial</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
            </font>
           </property>
           <property name="toolTip">
@@ -499,7 +499,7 @@
       <property name="font">
        <font>
         <family>Arial</family>
-        <pointsize>11</pointsize>
+        <pointsize>10</pointsize>
         <weight>75</weight>
         <bold>true</bold>
        </font>
