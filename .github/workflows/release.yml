@@ -15,19 +15,16 @@ jobs:
           source /opt/conda/etc/profile.d/conda.sh
           conda activate base
           git clone -b $GITHUB_REF_NAME $GITHUB_SERVER_URL/$GITHUB_REPOSITORY .
-
       - name: Verify tag matches SW_VERSION
         run: |
           cd $GITHUB_WORKSPACE
           TAG="${GITHUB_REF_NAME#v}"
           VER=$(grep -Po '(?<=^SW_VERSION = ")[^"]+' src/GRIME_AI/version.py)
           [ "$TAG" = "$VER" ] || { echo "Tag $TAG != SW_VERSION $VER"; exit 1; }
-
       - name: Stamp release channel
         run: |
           cd $GITHUB_WORKSPACE
           sed -i 's/^RELEASE = .*/RELEASE = "stable"/' src/GRIME_AI/version.py
-
       - name: Build and upload to main label
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
@@ -39,7 +36,6 @@ jobs:
           conda build -c grimelab -e /opt/conda/conda_build_config.yaml \
           --label main --user grimelab --token $ANACONDA_API_TOKEN recipe/grime-ai
           conda clean -a -y
-
   release-container:
     name: Release Container Build
     runs-on: ubuntu-latest
@@ -50,22 +46,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-
       - name: Stamp release channel
         run: sed -i 's/^RELEASE = .*/RELEASE = "stable"/' src/GRIME_AI/version.py
-
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-
       - name: Read version.py metadata
         id: version
+        env:
+          BUILD_DATE: ${{ github.event.repository.updated_at }}
         run: |
           python - <<'EOF'
           import re, os
@@ -76,12 +70,11 @@ jobs:
               return match.group(1) if match else ""
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"version={get_var('SW_VERSION')}\n")
-              out.write(f"commit={get_var('SHA')[:7]}\n")
+              out.write(f"commit={os.environ['GITHUB_SHA'][:7]}\n")
               out.write(f"release={get_var('RELEASE')}\n")
-              out.write(f"date={get_var('BUILD_DATE')}\n")
+              out.write(f"date={os.environ['BUILD_DATE']}\n")
               out.write(f"package_name=grimelab::grime-ai={get_var('SW_VERSION')}\n")
           EOF
-
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v6
@@ -91,7 +84,6 @@ jobs:
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=${{ steps.version.outputs.commit }}
             type=raw,value=stable
-
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
