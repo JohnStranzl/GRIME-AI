@@ -22,12 +22,15 @@ jobs:
           VER=$(grep -Po '(?<=^SW_VERSION = ")[^"]+' src/GRIME_AI/version.py)
           [ "$TAG" = "$VER" ] || { echo "Tag $TAG != SW_VERSION $VER"; exit 1; }
       - name: Stamp release channel
+        id: stamp
         run: |
           cd $GITHUB_WORKSPACE
           sed -i 's/^RELEASE = .*/RELEASE = "stable"/' src/GRIME_AI/version.py
+          echo "package_version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
       - name: Build and upload to main label
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+          GRIME_PKG_VERSION: ${{ steps.stamp.outputs.package_version }}
         run: |
           source /opt/conda/etc/profile.d/conda.sh
           conda activate base
