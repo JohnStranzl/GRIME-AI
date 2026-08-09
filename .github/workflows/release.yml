@@ -24,13 +24,34 @@ jobs:
       - name: Stamp release channel
         id: stamp
         run: |
+          source /opt/conda/etc/profile.d/conda.sh
+          conda activate base
           cd $GITHUB_WORKSPACE
           sed -i 's/^RELEASE = .*/RELEASE = "stable"/' src/GRIME_AI/version.py
-          echo "package_version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          PKGVER="${GITHUB_REF_NAME#v}"
+
+          BN=$(curl -sf "https://api.anaconda.org/package/grimelab/grime-ai/files" \
+               | python -c "
+import sys, json
+ver = '$PKGVER'
+try:
+    files = json.load(sys.stdin)
+except Exception:
+    print(0); sys.exit()
+nums = [f.get('attrs', {}).get('build_number', 0)
+        for f in files if f.get('version') == ver]
+print(max(nums) + 1 if nums else 0)
+")
+          BN=${BN:-0}
+
+          echo "Building $PKGVER build $BN"
+          echo "package_version=$PKGVER" >> $GITHUB_OUTPUT
+          echo "build_number=$BN" >> $GITHUB_OUTPUT
       - name: Build and upload to main label
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
           GRIME_PKG_VERSION: ${{ steps.stamp.outputs.package_version }}
+          GRIME_BUILD_NUMBER: ${{ steps.stamp.outputs.build_number }}
         run: |
           source /opt/conda/etc/profile.d/conda.sh
           conda activate base
