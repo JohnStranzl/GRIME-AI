@@ -1,24 +1,14 @@
 {% set name = "grime-ai" %}
-
 {% set version_file = load_file_data('src/GRIME_AI/version.py', "toml") %}
-{% set version = version_file.get('SW_VERSION') %}
-{% set release = version_file.get('RELEASE') %}
-{% set build_date = version_file.get('BUILD_DATE').replace('-','') %}
-
-
+{% set sw_version = version_file.get('SW_VERSION') %}
+{% set pkg_version = environ.get('GRIME_PKG_VERSION', sw_version) %}
 package:
   name: {{ name|lower }}
-  {% if release == 'nightly' %}
-  version: {{ version }}.dev{{ build_date }}
-  {% else %}
-  version: {{ version }}
-  {% endif %}
-
+  version: {{ pkg_version }}
 source:
     path: ../..
   #git_url: https://github.com/JohnStranzl/GRIME-AI.git
   #git_rev: main
-
 build:
   number: 0
   noarch: python
@@ -28,13 +18,11 @@ build:
     - sed "s/__PKG_VERSION__/${PKG_VERSION}/g" "${RECIPE_DIR}/grimeai-menu.json" > "${PREFIX}/Menu/${PKG_NAME}_menu.json"
     - cp -v "src/GRIME_AI/resources/app_icons/GRIME-AI Logo.ico" ${PREFIX}/Menu/grimeai.ico
     - cp -v "src/SAGE/resources/sage_logo.ico" ${PREFIX}/Menu/sage.ico
-
   run_exports:
     - {{ pin_subpackage(name|lower, max_pin="x") }}
   entry_points:
     - grime-ai = GRIME_AI.main:my_main
     - sage = SAGE.main:main
-
 requirements:
   host:
     - python >=3.8,<4.0
@@ -82,15 +70,12 @@ requirements:
     - qdarkstyle 3.2.*
     - qtpy 2.4.*
     - grime-ai-post 1.0.2.*
-
   run_constrained:
     - cudnn <9.11
-
 test:
   commands:
     - grime-ai --version
     - sage --help
-
 app:
   entry: grime-ai
   name: GRIME-AI
@@ -99,7 +84,6 @@ app:
   icon: "../../src/GRIME_AI/resources/splash_screens/GRIME-AI Logo with Tagline.png"
   type: desk
   own_environment: True
-
 about:
   home: https://gaugecam.org/grime-ai-details/
   dev_url: https://github.com/JohnStranzl/GRIME-AI/
