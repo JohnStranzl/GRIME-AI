@@ -69,6 +69,14 @@ On anaconda.org, under the `grimelab` channel, the `main` label should read:
 There must be no `.dev` suffix. If one appears, the stamp step did not run.
 Delete any leftover `.dev` package carrying the same version number.
 
+> **The `_0` in the filename is expected.** The package file is named
+> `grime_ai-2.1.7.0-py_0.conda`. The trailing `py_0` is the conda *build
+> string*, generated from `build: number: 0` in `meta.yaml`. It is not part of
+> the version and is not a defect. Users never type it — `conda install
+> grime-ai=2.1.7.0` is sufficient, and conda selects the highest build number
+> automatically. Because no version is ever republished, the build number
+> remains `0` and every package carries `_0`.
+
 ## Step 5 — Bump for the next cycle
 
 Repeat Step 1 with the next version number, for example `2.1.8.0`. Nightly
