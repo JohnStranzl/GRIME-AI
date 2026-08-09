@@ -8,6 +8,9 @@ jobs:
     name: Nightly Conda Build
     runs-on: ubuntu-latest
     container: quay.io/condaforge/linux-anvil-cos7-x86_64
+    outputs:
+      built: ${{ steps.check.outputs.built }}
+      package_version: ${{ steps.check.outputs.package_version }}
     steps:
       - name: Checkout repo
         run: |
@@ -15,7 +18,50 @@ jobs:
           source /opt/conda/etc/profile.d/conda.sh
           conda activate base
           git clone -b $GITHUB_REF_NAME $GITHUB_SERVER_URL/$GITHUB_REPOSITORY .
+
+      - name: Decide whether to build
+        id: check
+        run: |
+          cd $GITHUB_WORKSPACE
+          TODAY=$(date -u +%Y-%m-%d)
+          LAST=$(git log -1 --format=%cd --date=format:%Y-%m-%d)
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run. Building."
+          elif [ "$LAST" != "$TODAY" ]; then
+            echo "No commits today. Nothing to build."
+            echo "built=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Stamp today's date into the working copy only. Not committed.
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$TODAY\"/" src/GRIME_AI/version.py
+
+          SW=$(grep -Po '(?<=^SW_VERSION = ")[^"]+' src/GRIME_AI/version.py)
+          PKGVER="${SW}.dev$(date -u +%Y%m%d)"
+
+          # Next free build number for this exact version on anaconda.org
+          BN=$(curl -sf "https://api.anaconda.org/package/grimelab/grime-ai/files" \
+               | python -c "
+import sys, json
+ver = '$PKGVER'
+try:
+    files = json.load(sys.stdin)
+except Exception:
+    print(0); sys.exit()
+nums = [f.get('attrs', {}).get('build_number', 0)
+        for f in files if f.get('version') == ver]
+print(max(nums) + 1 if nums else 0)
+")
+          BN=${BN:-0}
+
+          echo "Building $PKGVER build $BN"
+          echo "built=true" >> $GITHUB_OUTPUT
+          echo "package_version=$PKGVER" >> $GITHUB_OUTPUT
+          echo "GRIME_BUILD_NUMBER=$BN" >> $GITHUB_ENV
+
       - name: Build and upload to dev label
+        if: steps.check.outputs.built == 'true'
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
@@ -26,10 +72,12 @@ jobs:
           conda build -c grimelab -e /opt/conda/conda_build_config.yaml \
           --label dev --user grimelab --token $ANACONDA_API_TOKEN recipe/grime-ai
           conda clean -a -y
+
   nightly-container:
     name: Nightly Container Build
     runs-on: ubuntu-latest
     needs: nightly
+    if: needs.nightly.outputs.built == 'true'
     permissions:
       contents: read
       packages: write
@@ -37,7 +85,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -45,22 +92,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      - name: Read version.py metadata
+      - name: Assemble image metadata
         id: version
+        env:
+          PKG_VERSION: ${{ needs.nightly.outputs.package_version }}
         run: |
           python - <<'EOF'
-          import re, os
-          with open("src/GRIME_AI/version.py") as f:
-              content = f.read()
-          def get_var(name):
-              match = re.search(rf'^{name}\s*=\s*["\'](.+?)["\']', content, re.MULTILINE)
-              return match.group(1) if match else ""
+          import os
+          pkgver = os.environ["PKG_VERSION"]
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
-              out.write(f"version={get_var('SW_VERSION')}.dev{get_var('BUILD_DATE').replace('-','')}\n")
-              out.write(f"commit={get_var('SHA')[:7]}\n")
-              out.write(f"release={get_var('RELEASE')}\n")
-              out.write(f"date={get_var('BUILD_DATE')}\n")
-              out.write(f"package_name=grimelab/label/dev::grime-ai={get_var('SW_VERSION')}.dev{get_var('BUILD_DATE').replace('-','')}\n")
+              out.write(f"version={pkgver}\n")
+              out.write(f"commit={os.environ['GITHUB_SHA'][:7]}\n")
+              out.write(f"package_name=grimelab/label/dev::grime-ai={pkgver}\n")
           EOF
       - name: Extract metadata for Docker
         id: meta
@@ -70,12 +113,12 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=${{ steps.version.outputs.commit }}
-            type=raw,value=nightly,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=nightly
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: ./recipe/docker
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
