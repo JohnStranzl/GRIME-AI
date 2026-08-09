@@ -25,6 +25,7 @@ jobs:
           source /opt/conda/etc/profile.d/conda.sh
           conda activate base
           cd $GITHUB_WORKSPACE
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           TODAY=$(date -u +%Y-%m-%d)
           LAST=$(git log -1 --format=%cd --date=format:%Y-%m-%d)
 
