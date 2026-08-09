@@ -30,18 +30,19 @@ jobs:
           sed -i 's/^RELEASE = .*/RELEASE = "stable"/' src/GRIME_AI/version.py
           PKGVER="${GITHUB_REF_NAME#v}"
 
-          BN=$(curl -sf "https://api.anaconda.org/package/grimelab/grime-ai/files" \
-               | python -c "
-import sys, json
-ver = '$PKGVER'
-try:
-    files = json.load(sys.stdin)
-except Exception:
-    print(0); sys.exit()
-nums = [f.get('attrs', {}).get('build_number', 0)
-        for f in files if f.get('version') == ver]
-print(max(nums) + 1 if nums else 0)
-")
+          cat > /tmp/bn.py <<'PYEOF'
+          import sys, json, os
+          ver = os.environ["PKGVER"]
+          try:
+              files = json.load(sys.stdin)
+          except Exception:
+              print(0); sys.exit()
+          nums = [f.get('attrs', {}).get('build_number', 0)
+                  for f in files if f.get('version') == ver]
+          print(max(nums) + 1 if nums else 0)
+          PYEOF
+
+          BN=$(curl -sf "https://api.anaconda.org/package/grimelab/grime-ai/files" | PKGVER="$PKGVER" python /tmp/bn.py)
           BN=${BN:-0}
 
           echo "Building $PKGVER build $BN"
