@@ -22,6 +22,8 @@ jobs:
       - name: Decide whether to build
         id: check
         run: |
+          source /opt/conda/etc/profile.d/conda.sh
+          conda activate base
           cd $GITHUB_WORKSPACE
           TODAY=$(date -u +%Y-%m-%d)
           LAST=$(git log -1 --format=%cd --date=format:%Y-%m-%d)
