@@ -27,10 +27,12 @@ The package version is decided by the workflow and passed to `conda build`
 through the `GRIME_PKG_VERSION` environment variable. The recipe consumes that
 value and performs no derivation of its own:
 
+{% raw %}
 ```jinja
 {% set sw_version = version_file.get('SW_VERSION') %}
 {% set pkg_version = environ.get('GRIME_PKG_VERSION', sw_version) %}
 ```
+{% endraw %}
 
 The fallback to `SW_VERSION` covers local builds run outside CI, where the
 environment variable is absent.
