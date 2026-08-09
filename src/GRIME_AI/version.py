@@ -1,4 +1,4 @@
 SW_VERSION = "2.1.6.0"
 RELEASE = "official"
-SHA = "5dd1cf8d3f214c7d0633e751752ff6478bdd89dc"
+SHA = "844bd4fdd0f9ddf9aabf0018392b6d9e926e2f87"
 BUILD_DATE = "2026-08-09"
