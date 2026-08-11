@@ -2,7 +2,6 @@
 import sys
 import os
 import numpy as np
-import hydra
 from hydra.core.global_hydra import GlobalHydra
 from hydra import initialize_config_module
 

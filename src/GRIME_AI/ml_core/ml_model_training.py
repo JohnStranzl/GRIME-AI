@@ -20,6 +20,7 @@ from datetime import datetime
 from GRIME_AI.GRIME_AI_Save_Utils import GRIME_AI_Save_Utils
 from GRIME_AI.GRIME_AI_JSON_Editor import JsonEditor
 from GRIME_AI.ml_core.segformer_trainer import SegFormerConfig, SegFormerTrainer
+from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 from GRIME_AI.ml_core.lora_wrapper import GeneralLoRAWrapper
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -93,7 +94,8 @@ class MLModelTraining:
         self.loss_function = self.site_config['loss_function']
         self.weight_decay = self.site_config['weight_decay']
         self.num_epochs = self.site_config['number_of_epochs']
-        self.save_model_frequency = self.site_config['save_model_frequency']
+        self.max_best_checkpoints = self.site_config.get(
+            'max_best_checkpoints', ModelConfigManager.get_default('max_best_checkpoints'))
         self.early_stopping = self.site_config['early_stopping']
         self.patience = self.site_config['patience']
         self.device = self.site_config.get('device', str(device))
@@ -195,11 +197,31 @@ class MLModelTraining:
                 images_dir="",
                 ann_path="",
                 num_epochs=self.num_epochs,
-                batch_size=self.site_config.get('batch_size', 8),
-                lr=self.learning_rates[0] if self.learning_rates else 0.0003,
+                batch_size=self.site_config.get(
+                    'batch_size', ModelConfigManager.get_default('batch_size')),
+                lr=(self.learning_rates[0] if self.learning_rates
+                    else ModelConfigManager.get_default('learningRates')[0]),
                 weight_decay=self.weight_decay,
                 early_stopping=self.early_stopping,
                 patience=self.patience,
+                max_best_checkpoints=self.max_best_checkpoints,
+                lr_scheduler_enabled=self.site_config.get(
+                    'lr_scheduler_enabled', ModelConfigManager.get_default('lr_scheduler_enabled')),
+                lr_scheduler_factor=self.site_config.get(
+                    'lr_scheduler_factor', ModelConfigManager.get_default('lr_scheduler_factor')),
+                lr_scheduler_patience=self.site_config.get(
+                    'lr_scheduler_patience', ModelConfigManager.get_default('lr_scheduler_patience')),
+                lr_scheduler_min_lr=self.site_config.get(
+                    'lr_scheduler_min_lr', ModelConfigManager.get_default('lr_scheduler_min_lr')),
+                num_val_overlays=self.site_config.get(
+                    'validation_overlay_samples',
+                    ModelConfigManager.get_default('validation_overlay_samples')),
+                validation_overlay_mode=self.site_config.get(
+                    'validation_overlay_mode',
+                    ModelConfigManager.get_default('validation_overlay_mode')),
+                validation_overlay_interval=self.site_config.get(
+                    'validation_overlay_interval',
+                    ModelConfigManager.get_default('validation_overlay_interval')),
                 categories=self.categories,
                 target_category_name=self.site_config["train_model"]["TRAINING_CATEGORIES"][0]["label_name"],
                 output_dir=self.model_output_folder,

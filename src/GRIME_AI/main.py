@@ -158,6 +158,10 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QMenu
 from PyQt5.QtWidgets import QTreeWidgetItem
 
 from GRIME_AI.GRIME_AI_SplashScreen import GRIME_AI_SplashScreen
+from GRIME_AI.utils.window_utils import (
+    install_window_placement_guard,
+    reset_window_layout,
+)
 
 # pandas imported lazily inside functions
 
@@ -644,6 +648,7 @@ class MainWindow(QMainWindow):
             QTabBar::tab {
                 background-color: white;
                 color: black;
+                font-size: 10pt;
             }
             QTabBar::tab:selected {
                 background-color: steelblue;
@@ -837,6 +842,16 @@ class MainWindow(QMainWindow):
         self._action_toggle_theme.triggered.connect(self._toggle_dark_mode)
         self._menu_view.addAction(self._action_toggle_theme)
 
+        # Escape hatch for users whose window ends up mispositioned or
+        # off-screen (e.g. after a VNC resolution change). Restores a sane
+        # default size and re-centers inside the usable screen area.
+        self._menu_view.addSeparator()
+        self._action_reset_layout = QAction("Reset Window Layout", self)
+        self._action_reset_layout.setStatusTip(
+            "Resize and re-center the GRIME AI window inside the visible screen area")
+        self._action_reset_layout.triggered.connect(self._reset_window_layout)
+        self._menu_view.addAction(self._action_reset_layout)
+
         # ------------------------------------------------------------------------------------------------------------------
         # MENU REORGANIZATION — split the crowded Tools menu into topic menus.
         # Actions already exist (from the .ui or created above); here they are
@@ -947,6 +962,15 @@ class MainWindow(QMainWindow):
         self.NEON_listboxSites.itemClicked.connect(self._neon_tree_item_clicked)
         self.NEON_listboxSiteProducts.itemClicked.connect(self.NEON_ProductClicked)
 
+        # List/tree row text size. These views set no font in the .ui, so they
+        # inherited the default (too large). Pin to Arial 10 to match the app.
+        _list_font = QFont("Arial", 10)
+        for _view_name in ("NEON_listboxSites", "NEON_listboxSiteProducts",
+                           "USGS_listboxSites"):
+            _view = getattr(self, _view_name, None)
+            if _view is not None:
+                _view.setFont(_list_font)
+
         # ------------------------------------------------------------------------------------------------------------------
         # USGS
         # ------------------------------------------------------------------------------------------------------------------
@@ -1039,6 +1063,16 @@ class MainWindow(QMainWindow):
 
         # Show main window
         self.show()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _reset_window_layout(self):
+        """View -> Reset Window Layout. Puts the window back on screen."""
+        try:
+            reset_window_layout(self)
+        except Exception as _e:
+            print(f"[WARN] Reset Window Layout failed: {_e}")
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -2951,8 +2985,8 @@ class MainWindow(QMainWindow):
         _splash.show()
         QApplication.processEvents()
 
-        from GRIME_AI.dialogs.ML_image_processing.GRIME_AI_ML_ImageProcessingDlg import GRIME_AI_ML_ImageProcessingDlg
-        hyperparameterDlg = GRIME_AI_ML_ImageProcessingDlg(frame)
+        from GRIME_AI.dialogs.ML_image_processing.ML_ImageProcessingDlg import ML_ImageProcessingDlg
+        hyperparameterDlg = ML_ImageProcessingDlg(frame)
 
         _splash.finish(hyperparameterDlg)
 
@@ -3308,7 +3342,7 @@ class MainWindow(QMainWindow):
     def menubar_site_config_editor(self):
         """Open the standalone Site Config editor (Tools -> Site Config Editor)."""
         try:
-            from GRIME_AI.utils.GRIME_AI_site_config import open_editor
+            from GRIME_AI.utils.site_config_manager import open_editor
             open_editor(parent=self)
         except Exception as e:
             print(f"[ERROR] Failed to open Site Config Editor: {e}")
@@ -3602,10 +3636,16 @@ class MainWindow(QMainWindow):
     # ==================================================================================================================
     def edgeDetectionMethod(self, edgeMethod):
         global g_edgeMethodSettings
+        global g_featureMethodSettings
+
+        # Symmetry with featureDetectionMethod(), which already clears the edge method.
+        # Without this, selecting SIFT and then Canny left the feature method set to SIFT.
+        g_featureMethodSettings.method = featureMethodsClass.NONE
+
         g_edgeMethodSettings = edgeMethod
 
-        processLocalImage(self)
-
+        # refreshImage() calls processImage() itself; the former processLocalImage() call
+        # here made that happen twice per parameter change.
         self.refreshImage()
 
     # ==================================================================================================================
@@ -4640,8 +4680,10 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
 
         self.labelOriginalImage.setPixmap(currentImageRescaled)
 
-        pix = processImage(self, currentImage)
-        gray = cv2.cvtColor(numpyImage, cv2.COLOR_BGR2GRAY)
+        # REMOVED: `pix = processImage(self, currentImage)` and its companion
+        # grayscale conversion. The result was discarded -- the display block below
+        # that consumed it is commented out -- while refreshImage() recomputes the
+        # identical thing. Every parameter change was running the pipeline twice.
 
         '''
         entropy_image = entropy(gray, disk(7))
@@ -4662,6 +4704,23 @@ def processLocalImage(self, nImageIndex=0, imageFileFolder=''):
 
 
 # ======================================================================================================================
+# PREPROCESSING CONFIGURATION FOR EDGE / FEATURE DETECTION
+#
+# Set USE_CLAHE True to apply locally-adaptive contrast enhancement before edge detection.
+# Unlike the global cv2.equalizeHist() that was used here previously, CLAHE does not rescale
+# the intensity distribution on a per-frame basis, so threshold values remain meaningful and
+# reproducible across frames. Recommended for low-contrast water / sandbar boundaries.
+# ======================================================================================================================
+USE_CLAHE  = False
+CLAHE_CLIP = 2.0
+CLAHE_TILE = (8, 8)
+
+# Pre-blur kernel size. Must be odd. 5 is the standard choice ahead of Canny.
+# This was formerly 15, which destroyed the very gradients being detected.
+PREBLUR_KSIZE = 5
+
+
+# ======================================================================================================================
 # THIS FUNCTION WILL PROCESS THE CURRENT IMAGE BASED UPON THE SETTINGS SELECTED BY THE END-USER.
 # THE IMAGE STORAGE TYPE IS QImage
 # ======================================================================================================================
@@ -4671,43 +4730,84 @@ def processImage(self, myImage):
 
     pix = []
 
-    if not myImage == []:
-        # CONVERT IMAGE FROM QImage FORMAT TO Mat FORMAT (BYTE ORDER IS R, G, B)
-        img1 = GRIME_AI_Utils().convertQImageToMat(myImage.toImage())
+    if myImage is None or myImage == []:
+        return pix
 
-        #JES if self.checkboxKMeans.isChecked():
-        #    myGRIMe_Color = GRIMe_Color()
-        #    qImg, clusterCenters, hist = myGRIMe_Color.KMeans(img1, self.spinBoxColorClusters.value())
+    # CONVERT IMAGE FROM QImage FORMAT TO Mat FORMAT.
+    #
+    # convertQImageToMat() returns channel order R, G, B. If that ever changes, change it
+    # HERE and nowhere else. The original code disagreed with itself: this function used
+    # COLOR_RGB2GRAY while processLocalImage() used COLOR_BGR2GRAY on the same source. The
+    # luma weights are 0.299R + 0.587G + 0.114B, so swapping R and B is not cosmetic for
+    # river imagery -- water is blue-dominant and sandbars are red/tan-dominant, meaning the
+    # wrong conversion directly weakens contrast at the boundary of interest.
+    img_rgb = GRIME_AI_Utils().convertQImageToMat(myImage.toImage())
 
-        # CONVERT COLOR IMAGE TO GRAY SCALE
-        gray = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+    if img_rgb is None or img_rgb.size == 0:
+        return pix
 
-        # REMOVE NOISE FROM THE IMAGE
-        if len(gray) != 0:
-            grayEQ = cv2.equalizeHist(gray)
-            grayBlur = cv2.GaussianBlur(grayEQ, (15, 15), 0)
-            cv2.erode(grayBlur, (7,7), gray)
+    # NOTE: len(arr) returns the ROW COUNT, not emptiness. The former `len(gray) != 0`
+    # guard was always true for any real image.
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
 
-        # EDGE DETECTION METHODS
-        if len(gray) != 0:
+    # ------------------------------------------------------------------------------------
+    # PREPROCESSING
+    #
+    # Order is: contrast (optional, local only) -> denoise -> detect.
+    #
+    # Removed from this block:
+    #   cv2.equalizeHist()  - global equalization rescaled intensities per frame, which made
+    #                         every threshold value frame-dependent and non-reproducible.
+    #   (15,15) blur        - erased the gradients the operators are looking for.
+    #   cv2.erode(...)      - (7,7) was a shape-(2,) array, NOT a 7x7 structuring element;
+    #                         it also wrote into `gray` through the dst argument as a hidden
+    #                         side effect. Morphological erosion ahead of an edge operator
+    #                         displaces edge LOCATION by roughly the kernel radius, which is
+    #                         unacceptable when the edge is a measurement (waterline).
+    # ------------------------------------------------------------------------------------
+    if USE_CLAHE:
+        clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP, tileGridSize=CLAHE_TILE)
+        gray = clahe.apply(gray)
 
-            from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
-            myProcessImage = GRIME_AI_ProcessImage()
+    gray = cv2.GaussianBlur(gray, (PREBLUR_KSIZE, PREBLUR_KSIZE), 0)
 
-            if g_edgeMethodSettings.method == edgeMethodsClass.CANNY:
-                pix = myProcessImage.processCanny(img1, gray, g_edgeMethodSettings)
+    # ------------------------------------------------------------------------------------
+    # DISPATCH
+    #
+    # Edge and feature detection are now separate branches. Previously SIFT and ORB sat in
+    # the same elif chain gated on g_edgeMethodSettings.method, so they were only reachable
+    # by accident of the dialog zeroing out the edge method first.
+    # ------------------------------------------------------------------------------------
+    from GRIME_AI.GRIME_AI_ProcessImage import GRIME_AI_ProcessImage
+    myProcessImage = GRIME_AI_ProcessImage()
 
-            elif g_edgeMethodSettings.method == edgeMethodsClass.LAPLACIAN:
-                pix = myProcessImage.processLaplacian(img1)
+    edge_method    = g_edgeMethodSettings.method
+    feature_method = g_featureMethodSettings.method
 
-            elif g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_X or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_Y or g_edgeMethodSettings.method == edgeMethodsClass.SOBEL_XY:
-                pix = myProcessImage.processSobel(gray, g_edgeMethodSettings.getSobelKernel(), g_edgeMethodSettings.method)
+    if edge_method != edgeMethodsClass.NONE:
 
-            elif g_featureMethodSettings.method == featureMethodsClass.SIFT:
-                pix = myProcessImage.processSIFT(img1, gray)
+        if edge_method == edgeMethodsClass.CANNY:
+            pix = myProcessImage.processCanny(img_rgb, gray, g_edgeMethodSettings)
 
-            elif g_featureMethodSettings.method == featureMethodsClass.ORB:
-                pix = myProcessImage.processORB(img1, gray, g_featureMethodSettings)
+        elif edge_method == edgeMethodsClass.LAPLACIAN:
+            # WAS: processLaplacian(img1) -- passed the 3-channel color image while every
+            # other branch passed grayscale.
+            pix = myProcessImage.processLaplacian(gray)
+
+        elif edge_method in (edgeMethodsClass.SOBEL_X,
+                             edgeMethodsClass.SOBEL_Y,
+                             edgeMethodsClass.SOBEL_XY):
+            pix = myProcessImage.processSobel(gray,
+                                              g_edgeMethodSettings.getSobelKernel(),
+                                              edge_method)
+
+    elif feature_method != featureMethodsClass.NONE:
+
+        if feature_method == featureMethodsClass.SIFT:
+            pix = myProcessImage.processSIFT(img_rgb, gray)
+
+        elif feature_method == featureMethodsClass.ORB:
+            pix = myProcessImage.processORB(img_rgb, gray, g_featureMethodSettings)
 
     return pix
 
@@ -5342,7 +5442,22 @@ def run_gui():
 
     frame = MainWindow(splash=_splash)
 
-    frame.move(app.desktop().screen().rect().center() - frame.rect().center())
+    # ------------------------------------------------------------------------------------------------------------------
+    # WINDOW PLACEMENT
+    #
+    # Was:  frame.move(app.desktop().screen().rect().center() - frame.rect().center())
+    #
+    # That centered against the FULL screen rect (ignoring the desktop panel)
+    # and offset by the CLIENT rect (ignoring the title bar), so on Linux/X11
+    # the title bar ended up hidden underneath the panel and the user had to
+    # right-click -> Move to drag the window back into view. It also used the
+    # deprecated QApplication.desktop().
+    #
+    # install_window_placement_guard() shrinks the window to fit the usable
+    # work area first, then centers and clamps it, and re-checks whenever the
+    # screen resolution changes (e.g. reconnecting to a VNC session).
+    # ------------------------------------------------------------------------------------------------------------------
+    install_window_placement_guard(frame)
 
     # ------------------------------------------------------------------------------------------------------------------
     # PROCESS ANY EVENTS THAT WERE DELAYED BECAUSE OF THE SPLASH SCREEN
@@ -5427,17 +5542,100 @@ def my_main():
                                 help='SAM2 model config YAML (default: sam2.1_hiera_l.yaml)')
     segment_parser.add_argument('--threshold',     type=float, default=0.2,
                                 help='Probability threshold for SegFormer mask (default: 0.2)')
+    # ------------------------------------------------------------------
+    # OUTPUT OPTIONS -- these mirror the 'Output Options' group box in the
+    # ML Image Processing dialog's Segment tab. The GUI path passes all four
+    # through segment_main() -> ML_Segmentation_Dispatcher(); the CLI path
+    # goes through run_sam2()/run_segformer(), which historically supported
+    # only masks and image copying. Defaults below match the GUI defaults
+    # (all four checked).
+    #
+    # --no-mask / --no-copy are retained as deprecated aliases so existing
+    # scripts and batch jobs keep working.
+    # ------------------------------------------------------------------
+    segment_parser.add_argument('--save-masks', dest='save_masks',
+                                action='store_true', default=True,
+                                help='Save predicted binary mask PNGs (default: on)')
+    segment_parser.add_argument('--no-save-masks', dest='save_masks',
+                                action='store_false',
+                                help='Do not save predicted binary mask PNGs')
+
+    segment_parser.add_argument('--save-probability-maps', dest='save_probability_maps',
+                                action='store_true', default=True,
+                                help='Save per-pixel probability maps (default: on)')
+    segment_parser.add_argument('--no-save-probability-maps', dest='save_probability_maps',
+                                action='store_false',
+                                help='Do not save per-pixel probability maps')
+
+    segment_parser.add_argument('--copy-original-images', dest='copy_original_image',
+                                action='store_true', default=True,
+                                help='Copy each source image into the output folder (default: on)')
+    segment_parser.add_argument('--no-copy-original-images', dest='copy_original_image',
+                                action='store_false',
+                                help='Do not copy source images into the output folder')
+
+    segment_parser.add_argument('--save-diagnostic-panels', dest='save_diagnostic_panels',
+                                action='store_true', default=True,
+                                help='Save side-by-side diagnostic panel images (default: on)')
+    segment_parser.add_argument('--no-save-diagnostic-panels', dest='save_diagnostic_panels',
+                                action='store_false',
+                                help='Do not save diagnostic panel images')
+
+    # DEPRECATED aliases -- resolved in the handler below.
     segment_parser.add_argument('--no-mask',       action='store_true',
-                                help='Skip saving binary mask PNG')
+                                help='DEPRECATED: use --no-save-masks')
     segment_parser.add_argument('--no-copy',       action='store_true',
-                                help='Skip copying original image to output folder')
+                                help='DEPRECATED: use --no-copy-original-images')
 
     # Train / fine-tune parser
     train_parser = subparsers.add_parser('train', help='Train / fine-tune a GRIME AI model from a site configuration (headless)')
     train_parser.add_argument('--config', required=True,
                               help='Path to a site_config.json (as produced by the Training tab)')
+    train_parser.add_argument('--label',  required=False, default=None,
+                              help="Training category to train against, overriding the config's "
+                                   "train_model.TRAINING_CATEGORIES. Accepts 'id - name' "
+                                   "(e.g. '1 - water'), a bare name, or a bare id. "
+                                   "Required when the config does not already specify one.")
     train_parser.add_argument('--mode',   required=True, choices=['sam2', 'segformer'],
                               help='Model type to train: sam2 or segformer')
+    train_parser.add_argument('--validation-overlay-mode',
+                              dest='validation_overlay_mode',
+                              required=False, default=None,
+                              choices=['last', 'every', 'interval'],
+                              help="When to write validation overlay PNGs. "
+                                   "'last' = final epoch only (default), 'every' = every "
+                                   "epoch, 'interval' = every N epochs (see "
+                                   "--validation-overlay-interval). Overlays are written at "
+                                   "least once regardless, even if training stops early. "
+                                   "Overrides the config.")
+    train_parser.add_argument('--validation-overlay-interval',
+                              dest='validation_overlay_interval',
+                              type=int, required=False, default=None,
+                              help='Write overlays every N epochs. Only used when '
+                                   "--validation-overlay-mode is 'interval'. Overrides the config.")
+    train_parser.add_argument('--lr-scheduler', dest='lr_scheduler_enabled',
+                              action='store_true', default=None,
+                              help='Enable the ReduceLROnPlateau scheduler. Overrides the config.')
+    train_parser.add_argument('--no-lr-scheduler', dest='lr_scheduler_enabled',
+                              action='store_false', default=None,
+                              help='Disable the scheduler and hold the learning rate fixed. '
+                                   'Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-factor', dest='lr_scheduler_factor',
+                              type=float, required=False, default=None,
+                              help='Multiply the learning rate by this on each plateau. '
+                                   'Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-patience', dest='lr_scheduler_patience',
+                              type=int, required=False, default=None,
+                              help='Epochs without improvement before the learning rate drops. '
+                                   'Keep below --patience. Overrides the config.')
+    train_parser.add_argument('--lr-scheduler-min-lr', dest='lr_scheduler_min_lr',
+                              type=float, required=False, default=None,
+                              help='Floor for the learning rate (e.g. 1e-7). Overrides the config.')
+    train_parser.add_argument('--validation-overlay-samples',
+                              dest='validation_overlay_samples',
+                              type=int, required=False, default=None,
+                              help='Number of validation images to write overlays for on each '
+                                   'overlay-writing epoch. Overrides the config.')
 
     # ROI Analyzer parser
     roi_parser = subparsers.add_parser(
@@ -5660,6 +5858,31 @@ def run_cli(args):
         print(f"[GRIME AI] Output:    {args.output}")
         print(f"[GRIME AI] Category:  {args.category_name} (ID: {args.category_id})")
 
+        # ------------------------------------------------------------------
+        # Resolve the deprecated negative flags onto the new positive ones.
+        # An explicit --no-mask/--no-copy still wins, so old scripts behave
+        # exactly as before.
+        # ------------------------------------------------------------------
+        if getattr(args, 'no_mask', False):
+            print("[GRIME AI] NOTE: --no-mask is deprecated; use --no-save-masks.")
+            args.save_masks = False
+        if getattr(args, 'no_copy', False):
+            print("[GRIME AI] NOTE: --no-copy is deprecated; use --no-copy-original-images.")
+            args.copy_original_image = False
+
+        # Aliases so run_sam2()/run_segformer() can read whichever attribute
+        # name they were written against.
+        args.no_mask = not args.save_masks
+        args.no_copy = not args.copy_original_image
+        args.save_probability_map = args.save_probability_maps
+        args.save_diagnostic_panel = args.save_diagnostic_panels
+
+        print(f"[GRIME AI] Output options:")
+        print(f"[GRIME AI]   Save predicted masks:    {args.save_masks}")
+        print(f"[GRIME AI]   Save probability maps:   {args.save_probability_maps}")
+        print(f"[GRIME AI]   Copy original images:    {args.copy_original_image}")
+        print(f"[GRIME AI]   Save diagnostic panels:  {args.save_diagnostic_panels}")
+
         if args.mode == 'sam2':
             run_sam2(args, device, category, progressBar=None)
         elif args.mode == 'segformer':
@@ -5678,6 +5901,88 @@ def run_cli(args):
         print(f"[GRIME AI] Training mode: {args.mode.upper()}")
         print(f"[GRIME AI] Config:        {args.config}")
         print(f"[GRIME AI] Site:          {site_config.get('siteName', '?')}")
+
+        # ------------------------------------------------------------------
+        # Validation overlay overrides. Only applied when the flag was passed,
+        # so an unflagged run uses whatever the config already specifies.
+        # ------------------------------------------------------------------
+        for _flag, _key in (
+            ('validation_overlay_mode',     'validation_overlay_mode'),
+            ('validation_overlay_interval', 'validation_overlay_interval'),
+            ('validation_overlay_samples',  'validation_overlay_samples'),
+            ('lr_scheduler_enabled',        'lr_scheduler_enabled'),
+            ('lr_scheduler_factor',         'lr_scheduler_factor'),
+            ('lr_scheduler_patience',       'lr_scheduler_patience'),
+            ('lr_scheduler_min_lr',         'lr_scheduler_min_lr'),
+        ):
+            _val = getattr(args, _flag, None)
+            if _val is not None:
+                site_config[_key] = _val
+                print(f"[GRIME AI] Override:      {_key} = {_val}")
+
+        if (site_config.get('validation_overlay_interval') is not None
+                and int(site_config.get('validation_overlay_interval', 5)) < 1):
+            print('[ERROR] --validation-overlay-interval must be >= 1.', file=sys.stderr)
+            sys.exit(1)
+        if (site_config.get('validation_overlay_samples') is not None
+                and int(site_config.get('validation_overlay_samples', 5)) < 1):
+            print('[ERROR] --validation-overlay-samples must be >= 1.', file=sys.stderr)
+            sys.exit(1)
+        print(f"[GRIME AI] Overlays:      "
+              f"mode={site_config.get('validation_overlay_mode', 'last')} "
+              f"interval={site_config.get('validation_overlay_interval', 5)} "
+              f"samples={site_config.get('validation_overlay_samples', 5)}")
+
+        # ------------------------------------------------------------------
+        # Resolve the training label. Reuses the site config editor's helpers
+        # so the CLI, the editor, and the Training tab all agree on the
+        # 'id - name' format and on train_model.TRAINING_CATEGORIES.
+        # ------------------------------------------------------------------
+        from GRIME_AI.utils.site_config_manager import (
+            collect_training_labels, get_training_categories,
+            set_training_categories, parse_label,
+        )
+
+        images_root = site_config.get('segmentation_images_path', '')
+        selected_folders = [str(s) for s in site_config.get('selected_folders', [])]
+
+        if args.label:
+            available, _coverage, _conflicts = collect_training_labels(
+                images_root, selected_folders)
+            wanted = str(args.label).strip()
+            resolved = None
+            for candidate in available:
+                parsed = parse_label(candidate)
+                if parsed is None:
+                    continue
+                label_id, label_name = parsed
+                if wanted in (candidate, label_id, label_name) or \
+                        wanted.lower() == label_name.lower():
+                    resolved = candidate
+                    break
+
+            if resolved is None:
+                print(f"[ERROR] Label '{wanted}' was not found in the selected datasets.",
+                      file=sys.stderr)
+                if not images_root or not selected_folders:
+                    print("        The config has no images root or no selected folders; "
+                          "open it in the Site Config Editor first.", file=sys.stderr)
+                else:
+                    print(f"        Available: {', '.join(available) or '(none)'}",
+                          file=sys.stderr)
+                sys.exit(1)
+
+            set_training_categories(site_config, resolved)
+            print(f"[GRIME AI] Label:         {resolved}  (--label overrides the config)")
+        else:
+            current_label = get_training_categories(site_config)
+            if not current_label:
+                print("[ERROR] No training label specified and the config does not set "
+                      "train_model.TRAINING_CATEGORIES.", file=sys.stderr)
+                print("        Pass --label, or set one in the Site Config Editor.",
+                      file=sys.stderr)
+                sys.exit(1)
+            print(f"[GRIME AI] Label:         {current_label}")
 
         # Build the SAM2 model config headlessly (the GUI path uses
         # @hydra.main); SegFormer does not need a Hydra cfg.
@@ -6343,5 +6648,4 @@ def segment_main(cfg: DictConfig) -> None:
 if __name__ == '__main__':
 
     my_main()
-
 

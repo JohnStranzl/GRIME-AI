@@ -65,6 +65,7 @@ class MainWindow(QMainWindow):
         self.seed_mask_path = None  # path to .tif/.tiff mask
         self.seed_mask_bool = None  # cached boolean mask resized to current image
         self.auto_seed_enabled = True  # auto-apply when each image loads
+        self._loaded_signature = None  # content hash of masks as last loaded/saved
         self.eraser_radius = 18
         self._opacity_percent = int(120 / 255 * 100)  # default; overwritten below from sage.json
 
@@ -113,6 +114,10 @@ class MainWindow(QMainWindow):
             on_right_click=self._on_right_click_handler,
             parent=self
         )
+        # Expand to fill the window, and allow it to shrink so the window can
+        # collapse smaller (QGraphicsView otherwise floors the height).
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.canvas.setMinimumSize(0, 0)
         self.canvas.eraser_move.connect(self._erase_seeds_at)
         # Default "Click or Drag" button maps to paint-style placement.
         self.canvas.set_segmentation_mode("paint")
@@ -167,11 +172,31 @@ class MainWindow(QMainWindow):
         # when no label is active, instead of looping on every drag event.
         self.canvas._can_annotate = lambda: self.sidebar.get_active_label() is not None
         self.canvas.label_required.connect(self._warn_no_label)
+        self.canvas._is_owned_pixel = self._pixel_is_owned
+        self.canvas.annotation_blocked.connect(self._warn_pixel_owned)
         self.sidebar.tool_mode_changed.connect(self.canvas.set_tool_mode)
         self.canvas.mask_clicked.connect(self._on_canvas_mask_clicked)
 
-        layout.addWidget(self.sidebar, stretch=1)
-        main_layout.addLayout(layout)
+        # Wrap the sidebar in a scroll area so the window can shrink below the
+        # combined height of the sidebar's stacked widgets. The scroll area is
+        # forced to a zero minimum height, so instead of flooring the window it
+        # shows a vertical scrollbar when the viewport is shorter than the
+        # sidebar needs. widgetResizable keeps the sidebar filling the column
+        # width (no horizontal scrollbar).
+        from PyQt5.QtWidgets import QScrollArea
+        self.sidebar.setMinimumHeight(0)
+        self._sidebar_scroll = QScrollArea()
+        self._sidebar_scroll.setWidget(self.sidebar)
+        self._sidebar_scroll.setWidgetResizable(True)
+        self._sidebar_scroll.setFrameShape(QScrollArea.NoFrame)
+        self._sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._sidebar_scroll.setMinimumHeight(0)
+        # Scrollbar appearance is inherited from theme.py. It used to be
+        # overridden here with literal grays (#a6a6a6 / #cccccc) that stayed
+        # pale in dark mode.
+        layout.addWidget(self._sidebar_scroll, stretch=1)
+        main_layout.addLayout(layout, stretch=1)
 
         self.setCentralWidget(central)
 
@@ -182,7 +207,9 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        toolbar.addWidget(QLabel("  Mask Opacity: "))
+        _op_caption = QLabel("Mask opacity")
+        _op_caption.setObjectName("toolbarCaption")
+        toolbar.addWidget(_op_caption)
         self.opacity_spinbox = QSpinBox()
         self.opacity_spinbox.setRange(0, 100)
         self.opacity_spinbox.setSuffix(" %")
@@ -194,6 +221,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
         self.border_checkbox = QCheckBox("Show Borders")
+        self.border_checkbox.setObjectName("toolbarToggle")
         self.border_checkbox.setChecked(False)
         self.border_checkbox.setToolTip("Show/hide the border outline around masked regions")
         self.border_checkbox.stateChanged.connect(self._on_border_checkbox_changed)
@@ -201,6 +229,7 @@ class MainWindow(QMainWindow):
         self._show_borders = False
 
         self.flash_checkbox = QCheckBox("Flash")
+        self.flash_checkbox.setObjectName("toolbarToggle")
         self.flash_checkbox.setChecked(True)
         self.flash_checkbox.setToolTip("Briefly flash a mask when selected")
         self.flash_checkbox.stateChanged.connect(self._on_flash_checkbox_changed)
@@ -208,12 +237,14 @@ class MainWindow(QMainWindow):
         self._flash_enabled = True
 
         self.other_checkbox = QCheckBox("Display Other")
+        self.other_checkbox.setObjectName("toolbarToggle")
         self.other_checkbox.setChecked(False)
         self.other_checkbox.setToolTip(
             "Preview the 'Other' region — every pixel not covered by a defined mask")
         self.other_checkbox.stateChanged.connect(self._on_other_checkbox_changed)
         toolbar.addWidget(self.other_checkbox)
         self._display_other = False
+        toolbar.addSeparator()
 
         # Flash animation state
         self._flash_timer = QTimer(self)
@@ -499,8 +530,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------------
     def _on_mask_selected(self, mask_id: int):
         self.selected_mask_id = mask_id
+        # _start_flash renders the full canvas itself on every branch, and the
+        # selection is already set above, so it picks up the new highlight. A
+        # second _update_canvas() here doubled the (heavy) rebuild on every list
+        # click and immediately overwrote the first bright flash frame with a
+        # differently-rendered one.
         self._start_flash(mask_id)
-        self._update_canvas()
 
     def _start_flash(self, mask_id: int):
         """Restart the flash for a newly selected mask. Renders the full canvas
@@ -590,9 +625,13 @@ class MainWindow(QMainWindow):
         """Propagate a label class rename to all existing mask entries."""
         if self.controller is None:
             return
+        renamed = False
         for m in self.controller.masks:
             if m["label"] == old_name:
                 m["label"] = new_name
+                renamed = True
+        if renamed:
+            self.controller.dirty = True
         self.sidebar.refresh_masks()
 
     def _on_mask_renamed(self, mask_id: int, new_name: str):
@@ -603,6 +642,7 @@ class MainWindow(QMainWindow):
             if m["id"] == mask_id:
                 m["label"] = new_name
                 m["color"] = self.sidebar.get_color_for_label(new_name)
+                self.controller.dirty = True
                 break
         self.sidebar.refresh_masks()
         self._update_canvas()
@@ -996,7 +1036,8 @@ class MainWindow(QMainWindow):
         if cats:
             self.sidebar.set_label_classes(cats)
 
-        self.filmstrip.populate(folder, image_files)
+        self.filmstrip.populate(folder, image_files,
+                                annotated=self._annotated_image_names())
 
         if image_files:
             self._load_new_image(image_files[0])
@@ -1146,11 +1187,50 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "No Label Defined",
             "Please define or select a label class before annotating.")
 
+    def _pixel_is_owned(self, x, y):
+        """True if (x, y) already belongs to a mask, so drawing there must be
+        refused. The 'Other' fill is skipped - it is the complement of the real
+        masks, not an annotation, and would otherwise block the whole frame."""
+        if self.controller is None or self.image_np is None:
+            return False
+        h, w = self.image_np.shape[:2]
+        xi, yi = int(x), int(y)
+        if not (0 <= xi < w and 0 <= yi < h):
+            return False
+        for m in self.controller.masks:
+            if m.get("is_fill"):
+                continue
+            if m["mask"][yi, xi]:
+                return True
+        return False
+
+    def _warn_pixel_owned(self):
+        """Transient feedback when a click lands on an existing mask. Uses a
+        tooltip at the cursor rather than a status bar or a modal box: it costs
+        no layout, and a click-rate message must not be dismissable."""
+        from PyQt5.QtWidgets import QToolTip
+        from PyQt5.QtGui import QCursor
+
+        QToolTip.showText(
+            QCursor.pos(),
+            "Already annotated - delete the existing mask to draw here.",
+            self.canvas,
+        )
+
     def _compute_other_overlay(self):
         """Transient 'Other' preview: complement of the union of all real masks,
-        in the Other color. Not stored — display only."""
+        in the Other color. Not stored - display only.
+
+        Cached against the controller's geometry counter: the union is
+        O(N x HxW) and _update_canvas runs on every repaint, including each
+        frame of a mask flash."""
         if self.controller is None or self.image_np is None:
             return None
+
+        sig = self._mask_geometry_signature()
+        if sig is not None and sig == getattr(self, "_other_overlay_sig", None):
+            return self._other_overlay_cache
+
         h, w = self.image_np.shape[:2]
         union = np.zeros((h, w), dtype=bool)
         for m in self.controller.masks:
@@ -1158,10 +1238,14 @@ class MainWindow(QMainWindow):
                 continue
             union |= m["mask"].astype(bool)
         complement = ~union
-        if not complement.any():
-            return None
-        return {"id": -999, "label": "Other", "mask": complement,
-                "color": (192, 38, 211), "visible": True}
+        result = None
+        if complement.any():
+            result = {"id": -999, "label": "Other", "mask": complement,
+                      "color": (192, 38, 211), "visible": True}
+
+        self._other_overlay_sig = sig
+        self._other_overlay_cache = result
+        return result
 
     def closeEvent(self, event):
         """On exit, if there are unsaved annotation edits, ask whether to save.
@@ -1256,11 +1340,16 @@ class MainWindow(QMainWindow):
             self.controller.clear_points()
             return
         color = self.sidebar.get_color_for_label(label)
-        mask_entry = self.controller.run_segmentation(label=label, color=color)
+
+        # The drawn shape is a hard boundary, not just a seeding region:
+        # SAM2 may only annotate pixels inside it.
+        mask_entry = self.controller.run_segmentation(
+            label=label, color=color, roi=self._rasterize_roi(points)
+        )
 
         if mask_entry is not None:
             self.sidebar.refresh_masks()
-            self._update_canvas()
+        self._update_canvas()
 
     # ---------------------------------------------------------
     # Rendering
@@ -1291,12 +1380,46 @@ class MainWindow(QMainWindow):
         # Add invisible mask items for right-click detection
         self._add_mask_items_to_canvas()
 
+        # Keep the filmstrip dot for the open image in sync, but only when the
+        # mask set actually changed - this method also runs on every flash tick,
+        # and the dot must not be recomputed 3x/second.
+        gv = getattr(self.controller, "geometry_version", None)
+        if gv != getattr(self, "_dot_synced_version", object()):
+            self._dot_synced_version = gv
+            self._refresh_current_dot()
+
         # Update segment button state
         self.sidebar.update_segment_button_state()
 
+    def _mask_geometry_signature(self):
+        """Cheap change stamp for the current mask set. Uses the controller's
+        explicit counter rather than inspecting the arrays: hashing or summing
+        them would be O(N x HxW) and defeat the purpose, and object identity is
+        unsafe because numpy reuses freed addresses - recompute_fill replaces
+        the 'Other' mask constantly with a same-shaped array under the same id."""
+        if self.controller is None:
+            return None
+        return (id(self.controller), self.controller.geometry_version)
+
     def _add_mask_items_to_canvas(self):
-        """Add invisible MaskItem polygons to canvas for right-click detection"""
+        """Rebuild the invisible MaskItem polygons used for right-click hit
+        detection.
+
+        This is the dominant cost on heavily annotated images: _update_canvas
+        runs from ~26 call sites, and each run re-ran findContours over every
+        mask and tore down and rebuilt every scene item. Two changes: skip
+        entirely when the mask set has not changed, and simplify the contours
+        so the scene is not carrying thousands of vertices per mask through
+        every repaint."""
         import cv2
+
+        if self.controller is None:
+            return
+
+        sig = self._mask_geometry_signature()
+        if sig == getattr(self, "_mask_items_sig", None):
+            return
+        self._mask_items_sig = sig
 
         # First, remove any existing mask items
         for item in self.canvas._scene.items():
@@ -1304,9 +1427,6 @@ class MainWindow(QMainWindow):
                 self.canvas._scene.removeItem(item)
 
         # Add new mask items for all masks (not just visible ones, so you can delete hidden ones too)
-        if self.controller is None:
-            return
-
         for m in self.controller.masks:
             mask = m["mask"].astype(np.uint8)
 
@@ -1319,6 +1439,14 @@ class MainWindow(QMainWindow):
             for cnt in contours:
                 if len(cnt) < 3:
                     continue
+
+                # Coarse simplification. These polygons are only ever used for
+                # "did the cursor land on this mask" - pixel-exact edges buy
+                # nothing and cost scene traversal time on every repaint.
+                eps = 0.005 * cv2.arcLength(cnt, True)
+                simplified = cv2.approxPolyDP(cnt, eps, True)
+                if len(simplified) >= 3:
+                    cnt = simplified
 
                 # Convert contour to list of (x, y) tuples
                 polygon_points = [(float(pt[0][0]), float(pt[0][1])) for pt in cnt]
@@ -1348,6 +1476,25 @@ class MainWindow(QMainWindow):
                 self._update_canvas()
 
         super().keyPressEvent(event)
+
+    # ---------------------------------------------------------
+    # ROI rasterization
+    # ---------------------------------------------------------
+    def _rasterize_roi(self, points):
+        """
+        Fill the drawn shape (polygon vertices or freehand path) into a boolean
+        mask. cv2.fillPoly closes the ring implicitly, so both modes share this.
+        Returns None if the shape is degenerate.
+        """
+        if self.image_np is None or len(points) < 3:
+            return None
+
+        import cv2
+
+        h, w = self.image_np.shape[:2]
+        roi = np.zeros((h, w), dtype=np.uint8)
+        cv2.fillPoly(roi, [np.array(points, dtype=np.int32)], 1)
+        return roi.astype(bool)
 
     # ---------------------------------------------------------
     # Polygon sampling strategies
@@ -1552,6 +1699,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", str(e))
             return
+        if self.controller is not None:
+            self.controller.dirty = False
+            self._loaded_signature = self._masks_signature()
 
         n_imgs = len(self._coco_buffer.doc["images"])
         n_anns = len(self._coco_buffer.doc["annotations"])
@@ -1564,12 +1714,34 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------
     # Load a new image when double-clicked in the sidebar
     # ---------------------------------------------------------
+    def _masks_signature(self):
+        """Content hash of the current masks (id, label, visibility, pixels).
+        Stable across a lossless load->flush round-trip; changes only on a real
+        edit. Drift-proof: needs nothing from the controller object."""
+        import hashlib
+        if self.controller is None:
+            return None
+        h = hashlib.md5()
+        for m in sorted(self.controller.masks, key=lambda mm: mm.get("id", 0)):
+            h.update(str(m.get("id", "")).encode())
+            h.update(str(m.get("label", "")).encode())
+            h.update(b"1" if m.get("visible", True) else b"0")
+            h.update(np.ascontiguousarray(m["mask"]).tobytes())
+        return h.hexdigest()
+
     def _flush_current_to_buffer(self):
         """Write the open image's masks to the disk buffer as polygons+RLE+bbox."""
         if self._coco_buffer is None or self.current_image_path is None:
             return
-        if self.controller is not None:
-            self.controller.recompute_fill()   # keep 'Other' exact after edits
+        # Only flush images whose mask CONTENT actually changed since load/save.
+        # A content signature is drift-proof and can't be fooled by a re-encode
+        # (polygon->RLE) that leaves the masks identical — which is what caused
+        # the spurious 'unsaved changes' prompt on close.
+        if self.controller is None:
+            return
+        if self._masks_signature() == self._loaded_signature:
+            return
+        self.controller.recompute_fill()   # keep 'Other' exact after edits
         filename = os.path.basename(self.current_image_path)
         h, w = self.image_np.shape[:2]
         name_to_id = {n: i for n, i in self.sidebar.get_label_classes_with_ids()}
@@ -1577,6 +1749,28 @@ class MainWindow(QMainWindow):
         self._coco_buffer.flush_image(
             filename, self.controller.masks, h, w, name_to_id
         )
+
+    def _annotated_image_names(self):
+        """Filenames in the current buffer that carry >=1 annotation. Read from
+        the COCO doc (image_id -> file_name, then which ids appear in
+        annotations) so it reflects saved state without rasterizing anything."""
+        if self._coco_buffer is None:
+            return set()
+        doc = getattr(self._coco_buffer, "doc", None) or {}
+        id_to_name = {img.get("id"): img.get("file_name")
+                      for img in doc.get("images", [])}
+        annotated_ids = {ann.get("image_id") for ann in doc.get("annotations", [])}
+        return {id_to_name[i] for i in annotated_ids
+                if i in id_to_name and id_to_name[i]}
+
+    def _refresh_current_dot(self):
+        """Sync the filmstrip dot for the open image to its live mask count."""
+        if self.current_image_path is None:
+            return
+        name = os.path.basename(self.current_image_path)
+        has = bool(self.controller and any(
+            not m.get("is_fill") for m in self.controller.masks))
+        self.filmstrip.set_annotated(name, has)
 
     def _masks_from_buffer(self, filename):
         """Rasterize this image's buffered annotations into controller mask entries."""
@@ -1624,6 +1818,9 @@ class MainWindow(QMainWindow):
 
         # Reset controller + renderer
         self.controller = SegmentationController(self.model_manager, self.image_np)
+        # New image, new mask set: force the hit-test polygons to rebuild.
+        self._mask_items_sig = None
+        self._dot_synced_version = None
         self.selected_mask_id = -1
         self.controller.set_opacity(int(self._opacity_percent / 100 * 255))
         self.renderer = Renderer(self.image_np)
@@ -1633,6 +1830,9 @@ class MainWindow(QMainWindow):
             self.controller.masks = copy.deepcopy(self.mask_store[full_path])
         elif self._coco_buffer is not None:
             self.controller.masks = self._masks_from_buffer(filename)
+        # Restored state is not an edit; snapshot it as the clean baseline.
+        self.controller.dirty = False
+        self._loaded_signature = self._masks_signature()
 
         # Auto-seed points from seed mask if available
         if self.seed_mask_path and self.auto_seed_enabled:

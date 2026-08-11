@@ -21,6 +21,7 @@ from GRIME_AI.ml_core.coco_segmentation_datasets import MultiCocoTargetDataset
 from GRIME_AI.ml_core.lora_segmentation_losses import BinaryDiceLoss, MultiClassDiceLoss
 from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
 from GRIME_AI.ml_core.model_training_visualization import ModelTrainingVisualization
+from GRIME_AI.dialogs.ML_image_processing.model_config_manager import ModelConfigManager
 import torchvision.transforms.functional as TF
 
 # ======================================================================================================================
@@ -107,15 +108,34 @@ class SegFormerConfig:
     grad_clip_norm: float = 1.0
 
     # Early stopping
+    # Early stopping monitors validation loss (mode=min), matching the SAM2
+    # trainer so both backends stop on the same criterion.
     early_stopping: bool = False
     patience: int = 10
 
+    # Learning rate scheduler (ReduceLROnPlateau)
+    # Monitors the same metric as early stopping (validation loss, mode=min).
+    lr_scheduler_enabled: bool = field(
+        default_factory=lambda: ModelConfigManager.get_default("lr_scheduler_enabled"))
+    lr_scheduler_factor: float = field(
+        default_factory=lambda: ModelConfigManager.get_default("lr_scheduler_factor"))
+    lr_scheduler_patience: int = field(
+        default_factory=lambda: ModelConfigManager.get_default("lr_scheduler_patience"))
+    lr_scheduler_min_lr: float = field(
+        default_factory=lambda: ModelConfigManager.get_default("lr_scheduler_min_lr"))
+
     # Checkpoint management
-    max_best_checkpoints: int = 3
+    max_best_checkpoints: int = field(
+        default_factory=lambda: ModelConfigManager.get_default("max_best_checkpoints"))
 
     # Validation overlays
     save_val_overlays: bool = True
-    num_val_overlays: int = 5  # Save overlays for first N validation images
+    num_val_overlays: int = field(
+        default_factory=lambda: ModelConfigManager.get_default("validation_overlay_samples"))
+    validation_overlay_mode: str = field(
+        default_factory=lambda: ModelConfigManager.get_default("validation_overlay_mode"))
+    validation_overlay_interval: int = field(
+        default_factory=lambda: ModelConfigManager.get_default("validation_overlay_interval"))
 
     # Inference threshold (should match inference engine)
     inference_threshold: float = 0.2  # Probability threshold for positive prediction
@@ -154,14 +174,15 @@ class SegFormerTrainer:
     def __init__(self, cfg: SegFormerConfig, parent_widget=None):
         self.cfg = cfg
         self.parent_widget = parent_widget
-        self.best_iou = 0.0
         self.progressBar = None
         self._last_checkpoint_path = None
         self._progress_total = 0
 
         # Early stopping tracking
         self.patience_counter = 0
-        self.best_val_iou = 0.0
+        # Set True once overlay PNGs have been written for this run.
+        self._overlays_written = False
+        self.best_val_loss = float("inf")
 
         # Checkpoint management
         self.best_checkpoints = []  # List of (val_iou, filepath) tuples
@@ -340,6 +361,16 @@ class SegFormerTrainer:
 
     # ------------------------------------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
+    def _should_save_overlays(self, epoch_num, total_epochs):
+        """Overlay write policy. Mirrors the SAM2 trainer."""
+        mode = str(getattr(self.cfg, "validation_overlay_mode", "last") or "last").lower()
+        if mode == "every":
+            return True
+        if mode == "interval":
+            interval = max(1, int(getattr(self.cfg, "validation_overlay_interval", 5)))
+            return (epoch_num % interval == 0) or (epoch_num == total_epochs)
+        return epoch_num == total_epochs
+
     def save_validation_overlay(self, epoch, images, pred_masks, true_masks, output_dir):
         """Save validation overlays showing prediction vs ground truth (SAM2 style)"""
         overlay_dir = os.path.join(output_dir, "validation_overlays")
@@ -571,7 +602,7 @@ class SegFormerTrainer:
                         learnrate, epochs, output_dir,
                         suffix=None, val_loss=None, val_accuracy=None, miou=None, target_category_name=None,
                         val_iou=None, epoch_num=None):
-        """Save checkpoint with top-N management based on val_iou"""
+        """Save checkpoint with top-N management based on validation loss (lower is better)."""
         timestamp = str(np.datetime64('now', 's')).replace('-', '').replace(':', '').replace('T', '_')
 
         ckpt = {
@@ -603,14 +634,15 @@ class SegFormerTrainer:
             self._last_checkpoint_path = save_path
             return save_path
 
-        # Top-N checkpoint management based on val_iou
+        # Top-N checkpoint management based on validation loss (lower is better),
+        # matching the SAM2 trainer.
         temp_filename = f"temp_{timestamp}_{site_name}_{target_category_name}_ep{epoch_num:03d}_lr{learnrate}.torch"
         temp_path = os.path.join(output_dir, temp_filename)
         torch.save(ckpt, temp_path)
 
         # Add to tracking list
-        self.best_checkpoints.append((val_iou, temp_path))
-        self.best_checkpoints.sort(key=lambda x: x[0], reverse=True)  # Sort by IoU descending
+        self.best_checkpoints.append((val_loss, temp_path))
+        self.best_checkpoints.sort(key=lambda x: x[0])  # Sort by val loss ascending
 
         # Remove worst checkpoints if exceeding max
         while len(self.best_checkpoints) > self.cfg.max_best_checkpoints:
@@ -623,15 +655,15 @@ class SegFormerTrainer:
                     print(f"Failed to remove {worst_path}: {e}")
 
         # Rename all checkpoints with their current rank
-        for rank, (iou, old_path) in enumerate(self.best_checkpoints, 1):
+        for rank, (loss, old_path) in enumerate(self.best_checkpoints, 1):
             rank_suffix = {1: "1st", 2: "2nd", 3: "3rd"}.get(rank, f"{rank}th")
-            new_filename = f"best_{rank_suffix}_{target_category_name}_epoch{epoch_num:03d}_iou{iou:.4f}_lr{learnrate}.torch"
+            new_filename = f"best_{rank_suffix}_{target_category_name}_epoch{epoch_num:03d}_valloss{loss:.4f}_lr{learnrate}.torch"
             new_path = os.path.join(output_dir, new_filename)
 
             if old_path != new_path:
                 if os.path.exists(old_path):
                     os.rename(old_path, new_path)
-                    self.best_checkpoints[rank - 1] = (iou, new_path)
+                    self.best_checkpoints[rank - 1] = (loss, new_path)
                     print(f"Ranked #{rank}: {os.path.basename(new_path)}")
 
         self._last_checkpoint_path = self.best_checkpoints[0][1] if self.best_checkpoints else temp_path
@@ -716,6 +748,35 @@ class SegFormerTrainer:
             lr=self.cfg.lr,
             weight_decay=self.cfg.weight_decay
         )
+
+        # ====================================================================
+        # LEARNING RATE SCHEDULER: REDUCE ON PLATEAU
+        # Monitors validation loss (mode='min') to match the early-stopping
+        # criterion below. Scheduler patience must stay below early-stopping
+        # patience or training halts before the LR is ever reduced.
+        # ====================================================================
+        scheduler = None
+        if self.cfg.lr_scheduler_enabled:
+            from torch.optim.lr_scheduler import ReduceLROnPlateau
+            sched_patience = self.cfg.lr_scheduler_patience
+            if self.cfg.early_stopping and sched_patience >= self.cfg.patience:
+                sched_patience = max(1, self.cfg.patience // 3)
+                print(f"[SegFormer] LR scheduler patience lowered to {sched_patience} "
+                      f"so it can fire before early stopping (patience={self.cfg.patience}).")
+            scheduler = ReduceLROnPlateau(
+                optimizer,
+                mode='min',                       # minimize validation loss
+                factor=self.cfg.lr_scheduler_factor,
+                patience=sched_patience,
+                min_lr=self.cfg.lr_scheduler_min_lr
+            )
+            print(f"[SegFormer] ReduceLROnPlateau active: monitor=val_loss mode=min "
+                  f"factor={self.cfg.lr_scheduler_factor} patience={sched_patience} "
+                  f"min_lr={self.cfg.lr_scheduler_min_lr:g} initial_lr={self.cfg.lr:g}")
+        else:
+            print("[SegFormer] LR scheduler disabled; learning rate is fixed.")
+
+        self.lr_values = []
 
         ce_loss = nn.CrossEntropyLoss(ignore_index=255)
         # Use appropriate Dice loss based on number of classes
@@ -846,8 +907,9 @@ class SegFormerTrainer:
                         f"F1: {metrics['f1']:.4f}"
                     )
 
-                    # Save validation overlays
-                    if self.cfg.save_val_overlays:
+                    # Save validation overlays (same policy as the SAM2 trainer)
+                    if self.cfg.save_val_overlays and self._should_save_overlays(
+                            epoch, self.cfg.num_epochs):
                         val_iter = iter(val_loader)
                         sample_imgs, sample_masks = next(val_iter)
                         sample_imgs = sample_imgs.to(self.cfg.device)
@@ -867,12 +929,25 @@ class SegFormerTrainer:
                         self.save_validation_overlay(
                             epoch, sample_imgs, sample_preds, sample_masks_binary, self.cfg.output_dir
                         )
+                        self._overlays_written = True
 
-                    # Early stopping and checkpoint management
-                    current_val_iou = metrics['mean_iou']
+                    # Early stopping and checkpoint management.
+                    # Monitors validation loss (min), matching the SAM2 trainer.
+                    current_val_iou = metrics['mean_iou']   # reported, not used for stopping
 
-                    if current_val_iou > self.best_val_iou:
-                        self.best_val_iou = current_val_iou
+                    # Step the LR scheduler before any early-stopping break so
+                    # the final epoch's result still feeds the scheduler.
+                    _lr_before = optimizer.param_groups[0]['lr']
+                    if scheduler is not None:
+                        scheduler.step(avg_val_loss)
+                    _lr_after = optimizer.param_groups[0]['lr']
+                    self.lr_values.append(_lr_after)
+                    if _lr_after < _lr_before:
+                        print(f"[SegFormer] Epoch {epoch}: validation loss plateaued — "
+                              f"learning rate reduced {_lr_before:.3e} -> {_lr_after:.3e}")
+
+                    if avg_val_loss < self.best_val_loss:
+                        self.best_val_loss = avg_val_loss
                         self.patience_counter = 0
 
                         self.save_checkpoint(
@@ -885,6 +960,7 @@ class SegFormerTrainer:
                             miou=current_val_iou,
                             target_category_name=self.cfg.target_category_name,
                             val_iou=current_val_iou,
+                            val_loss=avg_val_loss,
                             epoch_num=epoch
                         )
                     else:
@@ -906,6 +982,30 @@ class SegFormerTrainer:
                             **metrics
                         }) + "\n")
 
+            # Guarantee overlays even if the loop exited before the final
+            # epoch (early stopping, cancel). Mirrors the SAM2 backstop.
+            if self.cfg.save_val_overlays and not self._overlays_written:
+                print("[SegFormer] Training ended before the final epoch; "
+                      "running one validation pass to write validation_overlays/.")
+                try:
+                    sample_imgs, sample_masks = next(iter(val_loader))
+                    sample_imgs = sample_imgs.to(self.cfg.device)
+                    sample_masks = sample_masks.to(self.cfg.device)
+                    with torch.no_grad():
+                        _out = model(pixel_values=sample_imgs)
+                        _logits = torch.nn.functional.interpolate(
+                            _out.logits, size=sample_masks.shape[-2:],
+                            mode="bilinear", align_corners=False)
+                        _probs = torch.softmax(_logits, dim=1)
+                        _preds = (_probs[:, self.cfg.target_class_id]
+                                  > self.cfg.inference_threshold).long()
+                        _true = (sample_masks == self.cfg.target_class_id).long()
+                    self.save_validation_overlay(
+                        last_completed_epoch, sample_imgs, _preds, _true, self.cfg.output_dir)
+                    self._overlays_written = True
+                except Exception as e:
+                    print(f"[SegFormer] Final overlay pass failed: {e}")
+
         finally:
             if last_completed_epoch > 0:
                 print(f"Saving final checkpoint for epoch {last_completed_epoch}")
@@ -914,3 +1014,4 @@ class SegFormerTrainer:
             self._close_progress()
 
         return model
+

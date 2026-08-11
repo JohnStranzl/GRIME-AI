@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # ROIAnalyzerTab.py
-# Direct port of the ROI Analyzer functionality and signal wiring from GRIME_AI_ML_ImageProcessingDlg
+# Direct port of the ROI Analyzer functionality and signal wiring from ML_ImageProcessingDlg
 # Author: John Edward Stranzl, Jr.
 # License: Apache License, Version 2.0
 

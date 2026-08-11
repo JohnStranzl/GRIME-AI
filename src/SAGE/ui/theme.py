@@ -4,55 +4,112 @@ Light / dark QSS theme for the SAGE panel.
 
 Separation comes from card-style QGroupBoxes on a recessed page: each section
 is a raised surface with a hairline border, and the gaps between them do the
-separating — no heavy divider lines. One accent (blue) marks selection; one
-commit color (green) marks Save. Everything else stays neutral.
+separating - no heavy divider lines. One accent (green) marks selection and the
+Save commit; everything else stays neutral.
+
+The accent moved from blue to green so the app reads with GRIME's identity
+colour. Selection, focus rings, checked mode buttons, and Save all draw from the
+same green ramp; status colours (info / ok / warn used by the seed sub-panels)
+are separate tokens so they adapt between light and dark instead of being
+hard-coded per widget.
 
 Usage:
     from SAGE.ui.theme import apply_theme
-    apply_theme(widget, "dark")   # or "light"
+    apply_theme(widget, "dark")          # or "light"
+    # status colours for code that styles widgets directly:
+    from SAGE.ui.theme import colors
+    c = colors("dark")
+    label.setStyleSheet(f"color: {c['warn_tx']};")
 """
 
 _LIGHT = {
-    "page":        "#e8eaee",
-    "card":        "#fbfcfd",
+    "page":        "#e8eae6",
+    "card":        "#fbfcfa",
     "surface":     "#ffffff",
-    "border":      "#e0e3e8",
-    "border_soft": "#eef0f3",
-    "text":        "#2b3038",
-    "text_muted":  "#6b7280",
-    "btn":         "#f4f5f7",
-    "btn_hover":   "#eaecef",
-    "btn_border":  "#e0e3e8",
-    "accent_bg":   "#e6f0fd",
-    "accent_bd":   "#7fb0ee",
-    "accent_tx":   "#1c5fa8",
-    "sel_row":     "#eaf1fb",
-    "header":      "#f5f6f8",
-    "disabled_tx": "#a2a7ad",
+    "border":      "#dfe3dc",
+    "border_soft": "#eef0ec",
+    "text":        "#2b302b",
+    "text_muted":  "#6b7269",
+    "btn":         "#f3f5f1",
+    "btn_hover":   "#e9ece6",
+    "btn_border":  "#dfe3dc",
+    # accent = green
+    "accent_bg":   "#e2f2e5",
+    "accent_bd":   "#5cb27a",
+    "accent_tx":   "#1f7a44",
+    "sel_row":     "#e9f4ec",
+    "header":      "#f4f6f2",
+    "disabled_tx": "#a5aaa0",
     "save":        "#2e9e6b",
     "save_hover":  "#28885b",
+    # ---- status tokens (seed sub-panels: info / ok / warn) ----
+    "info_bg":     "#f0f1ef",
+    "info_bd":     "#c3c8bf",
+    "info_tx":     "#7b8175",
+    "ok_bg":       "#eef8ef",
+    "ok_bd":       "#a5d6a7",
+    "ok_tx":       "#2e7d32",
+    "warn_bg":     "#fbf6e6",
+    "warn_bd":     "#e6cf87",
+    "warn_tx":     "#8a5a12",
+    "warn_tx2":    "#6b4610",
+    # ---- added: chrome + control tokens ----
+    "toolbar":     "#f4f6f2",
+    "icon":        "#6b7269",
+    "icon_on":     "#1f7a44",
+    "pill":        "#eef0ec",
+    "pill_tx":     "#6b7269",
+    "swatch_bd":   "#cfd4cb",
+    "canvas_bg":   "#20241f",
 }
 
 _DARK = {
-    "page":        "#191c21",
-    "card":        "#262a31",
-    "surface":     "#1f232a",
-    "border":      "#343943",
-    "border_soft": "#2b3038",
-    "text":        "#d5d9df",
-    "text_muted":  "#8b929c",
-    "btn":         "#2f343c",
-    "btn_hover":   "#373d46",
-    "btn_border":  "#343943",
-    "accent_bg":   "#22405f",
-    "accent_bd":   "#4a90e2",
-    "accent_tx":   "#9cc4f5",
-    "sel_row":     "#243447",
-    "header":      "#2b3038",
-    "disabled_tx": "#5f6672",
+    "page":        "#191c1a",
+    "card":        "#262a27",
+    "surface":     "#1f231f",
+    "border":      "#343a34",
+    "border_soft": "#2b302b",
+    "text":        "#d5dad3",
+    "text_muted":  "#8b928a",
+    "btn":         "#2f342f",
+    "btn_hover":   "#373d37",
+    "btn_border":  "#343a34",
+    # accent = green
+    "accent_bg":   "#234630",
+    "accent_bd":   "#4caf72",
+    "accent_tx":   "#8fd6a4",
+    "sel_row":     "#223a2a",
+    "header":      "#2b302b",
+    "disabled_tx": "#5f665f",
     "save":        "#2e9e6b",
     "save_hover":  "#37b07b",
+    # ---- status tokens ----
+    "info_bg":     "#2a2f2a",
+    "info_bd":     "#3a413a",
+    "info_tx":     "#8b928a",
+    "ok_bg":       "#1e3524",
+    "ok_bd":       "#3f7a4e",
+    "ok_tx":       "#7fc98d",
+    "warn_bg":     "#332d1c",
+    "warn_bd":     "#6b5a2c",
+    "warn_tx":     "#d9b25f",
+    "warn_tx2":    "#c39a45",
+    # ---- added: chrome + control tokens ----
+    "toolbar":     "#222623",
+    "icon":        "#8b928a",
+    "icon_on":     "#8fd6a4",
+    "pill":        "#2b302b",
+    "pill_tx":     "#8b928a",
+    "swatch_bd":   "#3d443d",
+    "canvas_bg":   "#141613",
 }
+
+
+def colors(mode: str = "dark") -> dict:
+    """Return the raw token dict for `mode`. Use for widgets styled in code
+    (e.g. the seed sub-panels) so their colours track the active theme instead
+    of being hard-coded."""
+    return dict(_DARK if str(mode).lower() == "dark" else _LIGHT)
 
 
 def _qss(c):
@@ -61,8 +118,33 @@ def _qss(c):
         color: {c['text']};
         font-size: 12px;
     }}
+QMainWindow {{ background: {c['page']}; }}
+    QScrollArea {{ background: {c['page']}; border: none; }}
+    QScrollArea > QWidget > QWidget {{ background: {c['page']}; }}
+    QMenuBar {{ background: {c['card']}; color: {c['text']}; border-bottom: 1px solid {c['border']}; }}
+    QMenuBar::item {{ background: transparent; padding: 5px 10px; border-radius: 5px; }}
+    QMenuBar::item:selected {{ background: {c['accent_bg']}; color: {c['accent_tx']}; }}
+    QMenu {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 4px; }}
+    QMenu::item {{ padding: 5px 20px 5px 12px; border-radius: 4px; color: {c['text']}; }}
+    QMenu::item:selected {{ background: {c['accent_bg']}; color: {c['accent_tx']}; }}
+    QSpinBox, QDoubleSpinBox {{
+        background: {c['surface']};
+        color: {c['text']};
+        border: 1px solid {c['border']};
+        border-radius: 5px;
+        padding: 3px 6px;
+    }}
+    QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {c['accent_bd']}; }}
+    QComboBox {{
+        background: {c['surface']};
+        color: {c['text']};
+        border: 1px solid {c['border']};
+        border-radius: 5px;
+        padding: 4px 8px;
+    }}
+    QComboBox:focus {{ border: 1px solid {c['accent_bd']}; }}
     QWidget#sagePanel {{ background: {c['page']}; }}
-    QGroupBox {{
+        QGroupBox {{
         background: {c['card']};
         border: 1px solid {c['border']};
         border-radius: 7px;
@@ -131,6 +213,15 @@ def _qss(c):
     QTableWidget {{ gridline-color: {c['border_soft']}; }}
     QRadioButton {{ color: {c['text']}; spacing: 6px; padding: 1px 0; }}
     QRadioButton:disabled {{ color: {c['disabled_tx']}; }}
+    QCheckBox {{ color: {c['text']}; spacing: 6px; }}
+    QCheckBox:disabled {{ color: {c['disabled_tx']}; }}
+    QToolTip {{
+        background: {c['card']};
+        color: {c['text']};
+        border: 1px solid {c['border']};
+        border-radius: 4px;
+        padding: 4px 6px;
+    }}
     QScrollBar:vertical {{ background: {c['card']}; width: 10px; margin: 0; }}
     QScrollBar::handle:vertical {{
         background: {c['btn_border']};
@@ -138,10 +229,157 @@ def _qss(c):
         min-height: 24px;
     }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+    /* ---- seed sub-panel states (objectName-scoped) ---- */
+    QFrame#subpanel_locked {{
+        background: {c['info_bg']};
+        border: 1px dashed {c['info_bd']};
+        border-radius: 4px;
+    }}
+    QFrame#subpanel_loaded {{
+        background: {c['ok_bg']};
+        border: 1px solid {c['ok_bd']};
+        border-radius: 4px;
+    }}
+    QFrame#subpanel_persists {{
+        background: {c['warn_bg']};
+        border: 1px solid {c['warn_bd']};
+        border-radius: 4px;
+    }}
+
+    /* =======================================================
+       Toolbar chrome
+       ======================================================= */
+    QToolBar {{
+        background: {c['toolbar']};
+        border: none;
+        border-bottom: 1px solid {c['border']};
+        padding: 4px 8px;
+        spacing: 8px;
+    }}
+    QToolBar::separator {{
+        background: {c['border']};
+        width: 1px;
+        margin: 3px 6px;
+    }}
+    QLabel#toolbarCaption {{
+        color: {c['text_muted']};
+        font-size: 11px;
+        padding-right: 2px;
+    }}
+
+    /* Checkboxes were colliding in the toolbar because they had no spacing
+       between the indicator and the label, and none between siblings. The
+       native indicator is deliberately left unstyled so the checkmark glyph
+       is preserved. */
+    QCheckBox {{
+        color: {c['text']};
+        spacing: 6px;
+        padding: 2px 4px;
+    }}
+    QCheckBox:disabled {{ color: {c['disabled_tx']}; }}
+
+    /* =======================================================
+       Panel section headings
+       ======================================================= */
+    QLabel#sectionCaption {{
+        color: {c['text_muted']};
+        font-size: 11px;
+        font-weight: 500;
+        padding: 0 2px 2px 2px;
+    }}
+    QLabel#hintText {{
+        color: {c['text_muted']};
+        font-size: 11px;
+    }}
+    QLabel#okText   {{ color: {c['ok_tx']};   font-size: 11px; font-weight: 500; }}
+    QLabel#warnText {{ color: {c['warn_tx']}; font-size: 11px; font-weight: 500; }}
+    QLabel#warnSub  {{ color: {c['warn_tx2']}; font-size: 10px; }}
+
+    /* =======================================================
+       Segmentation-mode buttons
+       ======================================================= */
+    QPushButton#modeButton {{
+        background: {c['btn']};
+        border: 1px solid {c['btn_border']};
+        border-radius: 5px;
+        padding: 6px 6px;
+        color: {c['text']};
+        text-align: center;
+    }}
+    QPushButton#modeButton:hover {{ background: {c['btn_hover']}; }}
+    QPushButton#modeButton:checked {{
+        background: {c['accent_bg']};
+        border: 1px solid {c['accent_bd']};
+        color: {c['accent_tx']};
+        font-weight: 500;
+    }}
+
+    /* =======================================================
+       Tool rail: Draw / Select / Pan (icon over caption)
+       ======================================================= */
+    QToolButton#toolButton {{
+        background: {c['btn']};
+        border: 1px solid {c['btn_border']};
+        border-radius: 6px;
+        padding: 5px 2px;
+        color: {c['text_muted']};
+        font-size: 10px;
+    }}
+    QToolButton#toolButton:hover {{ background: {c['btn_hover']}; }}
+    QToolButton#toolButton:checked {{
+        background: {c['accent_bg']};
+        border: 1px solid {c['accent_bd']};
+        color: {c['accent_tx']};
+        font-weight: 500;
+    }}
+
+    /* =======================================================
+       Seeding pills (replaces the loose radio column)
+       ======================================================= */
+    QPushButton#seedPill {{
+        background: {c['pill']};
+        border: 1px solid transparent;
+        border-radius: 9px;
+        padding: 3px 10px;
+        color: {c['pill_tx']};
+        font-size: 11px;
+    }}
+    QPushButton#seedPill:hover {{ background: {c['btn_hover']}; }}
+    QPushButton#seedPill:checked {{
+        background: {c['accent_bg']};
+        border: 1px solid {c['accent_bd']};
+        color: {c['accent_tx']};
+        font-weight: 500;
+    }}
+    QPushButton#seedPill:disabled {{ color: {c['disabled_tx']}; background: {c['pill']}; }}
+    QWidget#seedRow {{
+        background: {c['surface']};
+        border: 1px solid {c['border_soft']};
+        border-radius: 6px;
+    }}
+    QLabel#seedCaption {{ color: {c['text_muted']}; font-size: 10px; }}
     """
+
+
+_ACTIVE_MODE = "light"
+
+
+def active_mode() -> str:
+    """The mode passed to the most recent apply_theme() call. Lets widgets that
+    paint themselves in code (icons, swatches) pick colours without each one
+    having to track the theme separately."""
+    return _ACTIVE_MODE
+
+
+def icon_color(mode: str = None, on: bool = False) -> str:
+    """Colour for hand-rendered icons. `on` selects the checked/accent variant."""
+    c = colors(mode or _ACTIVE_MODE)
+    return c["icon_on"] if on else c["icon"]
 
 
 def apply_theme(widget, mode: str = "dark"):
     """Apply the light or dark QSS to `widget` (and, via cascade, its children)."""
-    palette = _DARK if str(mode).lower() == "dark" else _LIGHT
+    global _ACTIVE_MODE
+    _ACTIVE_MODE = "dark" if str(mode).lower() == "dark" else "light"
+    palette = _DARK if _ACTIVE_MODE == "dark" else _LIGHT
     widget.setStyleSheet(_qss(palette))

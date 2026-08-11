@@ -3,7 +3,7 @@
 # -*- coding: utf-8 -*-
 
 # Author: John Edward Stranzl, Jr.
-# Ported: direct port of Segment Images tab from GRIME_AI_ML_ImageProcessingDlg.py
+# Ported: direct port of Segment Images tab from ML_ImageProcessingDlg.py
 # License: Apache License, Version 2.0
 
 import os
@@ -488,7 +488,8 @@ QPushButton {
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
-    font-size: 12pt;
+    font-family: "Arial";
+    font-size: 11pt;
     font-weight: bold;
 }
 QPushButton:hover { background-color: #5a93c2; }
