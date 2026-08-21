@@ -36,7 +36,9 @@ from GRIME_AI.ml_core.ml_helpers import (init_coco_structure, add_coco_entries, 
 # ======================================================================================================================
 class SegFormerInferenceEngine:
     def __init__(self, device, segformer_model, input_dir, output_dir,
-                 image_size: int = 512, threshold: float = 0.2, class_index = 1):
+                 image_size: int = 512, threshold: float = None, class_index = 1):
+        # `threshold` is retained for call-site compatibility but unused: the
+        # decision rule is argmax over classes, matching segformer_trainer.
         # Original attributes
         self.device = device
         self.SEGFORMER_MODEL = segformer_model
@@ -195,10 +197,10 @@ class SegFormerInferenceEngine:
             pil_image = Image.open(image_path).convert("RGB")
             image_array = np.array(pil_image)
 
-            # Threshold using the class's threshold to keep behavior consistent
-            mask = (water_prob > self.threshold).astype(np.uint8)
-            # Score kept for parity with Block B's computation
-            score = float(np.mean(water_prob))  # not used by add_coco_entries, retained for completeness
+            # COCO export uses the same argmax mask that was saved/overlaid, so
+            # every artifact from this engine agrees with training/validation.
+            mask = pred.astype(np.uint8)
+            score = float(np.mean(water_prob))  # informational only
 
             add_coco_entries(coco_data, image_path, mask, image_array, image_id, annotation_id)
             image_id += 1

@@ -104,6 +104,12 @@ os.environ["HYDRA_FULL_ERROR"] = "1"
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
 
+# Required by torch.use_deterministic_algorithms(True) (set in sam2_trainer)
+# for cuBLAS matmuls on CUDA >= 10.2. cuBLAS reads this once, at handle
+# creation, so it must be set at process entry before any GPU matmul runs.
+# setdefault preserves an externally configured value.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import sys
 import argparse
 import shutil
