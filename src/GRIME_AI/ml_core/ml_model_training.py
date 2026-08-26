@@ -90,8 +90,10 @@ class MLModelTraining:
 
         self.site_name = self.site_config['siteName']
         self.learning_rates = self.site_config['learningRates']
-        self.optimizer_type = self.site_config['optimizer']
-        self.loss_function = self.site_config['loss_function']
+        # Stale config keys: optimizer/loss selection was removed from the UI.
+        # Each trainer hardcodes its own (SAM2 -> AdamW, BCE + Dice + Score).
+        self.optimizer_type = "AdamW"
+        self.loss_function = self.site_config.get('loss_function', 'BCE + Dice + Score')
         self.weight_decay = self.site_config['weight_decay']
         self.num_epochs = self.site_config['number_of_epochs']
         self.max_best_checkpoints = self.site_config.get(
