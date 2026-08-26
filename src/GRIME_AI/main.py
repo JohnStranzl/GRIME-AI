@@ -725,6 +725,10 @@ class MainWindow(QMainWindow):
         self.NEON_labelLatestImage.installEventFilter(self)
         self.labelEdgeImage.installEventFilter(self)
         self.labelOriginalImage.installEventFilter(self)
+
+        # Double-clicking the USGS Sites *tab* (the tab itself, not the page)
+        # toggles the display of hidden cameras in the site list.
+        self.tabWidget.tabBar().installEventFilter(self)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         self.pushButton_RetrieveNEONData.clicked.connect(self.pushbutton_NEONDownloadClicked)
@@ -1178,22 +1182,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[USGS startup] Could not connect HIVIS to USGS service: {e}")
 
-        self.USGS_listboxSites.clear()
-        for camID in self.cameraList:
-            site_item = QTreeWidgetItem([camID])
-            site_item.setData(0, QtCore.Qt.UserRole, camID)
-            for line in self.myHIVIS.get_camera_info(camID):
-                child = QTreeWidgetItem([line])
-                child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
-                site_item.addChild(child)
-            placeholder = QTreeWidgetItem(["  Time series: loading..."])
-            placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
-            placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
-            site_item.addChild(placeholder)
-            self.USGS_listboxSites.addTopLevelItem(site_item)
+        self._populate_usgs_sites_tree()
 
         self.USGS_listboxSites.itemExpanded.connect(self._on_usgs_site_expanded)
-        self.USGS_listboxSites.collapseAll()
         self.USGS_listboxSites.show()
 
         cameraIndex = 1
@@ -2285,6 +2276,80 @@ class MainWindow(QMainWindow):
     # ======================================================================================================================
     #
     # ======================================================================================================================
+    def _populate_usgs_sites_tree(self):
+        """(Re)build the USGS site tree from self.cameraList.
+        Hidden cameras (when shown) are rendered in gray italics.
+        """
+        self.USGS_listboxSites.clear()
+        for camID in self.cameraList:
+            site_item = QTreeWidgetItem([camID])
+            site_item.setData(0, QtCore.Qt.UserRole, camID)
+
+            # Visually distinguish hidden cameras when they are displayed
+            try:
+                if self.myHIVIS.is_hidden(camID):
+                    font = site_item.font(0)
+                    font.setItalic(True)
+                    site_item.setFont(0, font)
+                    site_item.setForeground(0, QtGui.QBrush(QtGui.QColor("gray")))
+                    site_item.setToolTip(0, "Hidden camera (hideCam=True)")
+            except Exception:
+                pass
+
+            for line in self.myHIVIS.get_camera_info(camID):
+                child = QTreeWidgetItem([line])
+                child.setFlags(child.flags() & ~QtCore.Qt.ItemIsSelectable)
+                site_item.addChild(child)
+            placeholder = QTreeWidgetItem(["  Time series: loading..."])
+            placeholder.setData(0, QtCore.Qt.UserRole, "__nwis_placeholder__")
+            placeholder.setFlags(placeholder.flags() & ~QtCore.Qt.ItemIsSelectable)
+            site_item.addChild(placeholder)
+            self.USGS_listboxSites.addTopLevelItem(site_item)
+
+        self.USGS_listboxSites.collapseAll()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _usgs_sites_tab_index(self):
+        """Return the tabWidget index of the tab containing the USGS site list."""
+        widget = self.USGS_listboxSites
+        while widget is not None:
+            idx = self.tabWidget.indexOf(widget)
+            if idx != -1:
+                return idx
+            widget = widget.parentWidget()
+        return -1
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _toggle_usgs_hidden_cameras(self):
+        """Toggle display of hidden USGS cameras and rebuild the site tree.
+        Triggered by double-clicking the USGS Sites tab.
+        """
+        if not getattr(self, "_usgs_startup_ready", False) or self.myHIVIS is None:
+            return
+
+        show_hidden = self.myHIVIS.toggle_show_hidden()
+
+        # Refresh the cached dictionary/list to reflect the new filter
+        self.cameraDictionary = self.myHIVIS.get_camera_dictionary()
+        self.cameraList       = self.myHIVIS.get_camera_list()
+
+        self._populate_usgs_sites_tree()
+
+        state = "SHOWN" if show_hidden else "HIDDEN"
+        print(f"[USGS] Hidden cameras {state} - {len(self.cameraList)} cameras listed")
+        try:
+            self.statusBar().showMessage(
+                f"USGS hidden cameras {state.lower()} ({len(self.cameraList)} cameras)", 4000)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
     def USGS_updateSiteInfo(self, item):
         currentItem = self.USGS_listboxSites.currentItem()
         if currentItem is None:
@@ -4057,6 +4122,14 @@ class MainWindow(QMainWindow):
     # INFORMATION, VIEWS, POP-UP MENUS AND DRAWING REGIONS-OF-INTEREST (ROI) AROUND SPECIFIC AREAS OF AN IMAGE.
     # ==================================================================================================================
     def eventFilter(self, source, event):
+
+        # Double-click on the USGS Sites tab (the tab itself) toggles hidden cameras
+        if (event.type() == QtCore.QEvent.MouseButtonDblClick
+                and source is self.tabWidget.tabBar()):
+            idx = self.tabWidget.tabBar().tabAt(event.pos())
+            if idx != -1 and idx == self._usgs_sites_tab_index():
+                self._toggle_usgs_hidden_cameras()
+                return True
 
         if event.type() == QtCore.QEvent.MouseMove and source is self.labelEdgeImage:
             # print("A")

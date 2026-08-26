@@ -124,6 +124,8 @@ class USGSService:
     # --------------------------------------------------------------------------------
     def __init__(self, hivis_instance=None):
         self._camera_dict: Dict[str, dict] = {}
+        self._all_camera_dict: Dict[str, dict] = {}   # unfiltered (includes hidden cameras)
+        self._show_hidden: bool = False
         self._site_count: int = 0
         self._nwis_id: Optional[str] = None
         self._cam_id: Optional[str] = None
@@ -194,9 +196,8 @@ class USGSService:
                     resp.raise_for_status()
                     camera_data = resp.json()
                     for element in camera_data:
-                        # Skip hidden cameras: show only when hideCam is present and False.
-                        if element.get("hideCam", True):
-                            continue
+                        # Keep ALL cameras (including hidden); visibility is
+                        # applied later by _apply_hidden_filter().
                         cam_id = element.get("camId")
                         if isinstance(cam_id, str):
                             cam_dict[cam_id] = element
@@ -206,21 +207,55 @@ class USGSService:
                     data = urllib.request.urlopen(uri, timeout=15).read()
                     camera_data = json.loads(data.decode("utf-8"))
                     for element in camera_data:
-                        if element.get("locus") == "aws" and not element.get("hideCam", True):
+                        if element.get("locus") == "aws":
                             cam_id = element.get("camId")
                             if isinstance(cam_id, str):
                                 cam_dict[cam_id] = element
 
                 print(f"[USGSService] Loaded {len(cam_dict)} cameras from {label} endpoint")
-                self._camera_dict = cam_dict
                 break  # success - no need to try fallback
 
             except Exception as e:
                 print(f"[USGSService] {label} endpoint failed: {e}")
                 cam_dict = {}
 
-        self._camera_dict = cam_dict
+        self._all_camera_dict = cam_dict
+        self._apply_hidden_filter()
+
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    def _apply_hidden_filter(self) -> None:
+        """Rebuild the visible camera dict from the unfiltered one.
+        A camera is considered hidden when hideCam is missing or True.
+        """
+        if self._show_hidden:
+            self._camera_dict = dict(self._all_camera_dict)
+        else:
+            self._camera_dict = {
+                cam_id: element
+                for cam_id, element in self._all_camera_dict.items()
+                if not element.get("hideCam", True)
+            }
         self._site_count = len(self._camera_dict)
+
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    def set_show_hidden(self, show: bool) -> None:
+        """Include (True) or exclude (False) hidden cameras in the camera list."""
+        self._show_hidden = bool(show)
+        self._apply_hidden_filter()
+
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    def show_hidden(self) -> bool:
+        return self._show_hidden
+
+    # --------------------------------------------------------------------------------
+    # --------------------------------------------------------------------------------
+    def is_hidden(self, cam_id: str) -> bool:
+        """True if the camera is flagged hidden (hideCam missing or True)."""
+        element = self._all_camera_dict.get(cam_id, {})
+        return element.get("hideCam", True)
 
     # --------------------------------------------------------------------------------
     # --------------------------------------------------------------------------------
