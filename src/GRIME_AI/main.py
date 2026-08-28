@@ -1126,18 +1126,113 @@ class MainWindow(QMainWindow):
     #
     # ------------------------------------------------------------------------------------------------------------------
     def _toggle_dark_mode(self):
-        self._is_dark_mode = not self._is_dark_mode
         app = QApplication.instance()
-        if self._is_dark_mode:
-            try:
-                import qdarkstyle
-                app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
-            except ImportError:
-                pass
+
+        # Snapshot the light-mode look once so it can be fully restored
+        if not hasattr(self, "_light_palette"):
+            self._light_palette = QtGui.QPalette(app.palette())
+            self._light_style   = app.style().objectName()
+
+        if not self._is_dark_mode:
+            if not self._apply_dark_theme(app):
+                # Nothing was applied - stay in light mode and tell the user
+                # instead of silently doing nothing.
+                try:
+                    self.statusBar().showMessage(
+                        "Dark mode unavailable: could not apply a dark theme "
+                        "(install 'qdarkstyle' for the full theme).", 8000)
+                except Exception:
+                    pass
+                return
+            self._is_dark_mode = True
+            self._apply_tab_styles(dark=True)
             self._action_toggle_theme.setText("Light Mode")
         else:
+            # Restore the saved light-mode style, palette, and stylesheet
             app.setStyleSheet("")
+            try:
+                app.setStyle(self._light_style)
+            except Exception:
+                pass
+            app.setPalette(self._light_palette)
+            self._is_dark_mode = False
+            self._apply_tab_styles(dark=False)
             self._action_toggle_theme.setText("Dark Mode")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _apply_dark_theme(self, app) -> bool:
+        """Apply a dark theme to the whole application.
+        Prefers qdarkstyle; falls back to Qt's built-in Fusion style with a
+        dark palette when qdarkstyle is not installed. Returns True if a
+        dark theme was applied.
+        """
+        # Preferred: qdarkstyle stylesheet
+        try:
+            import qdarkstyle
+            app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
+            return True
+        except Exception as e:
+            print(f"[Theme] qdarkstyle unavailable ({e}); using built-in dark palette")
+
+        # Fallback: Fusion style + dark QPalette (no external dependency)
+        try:
+            app.setStyle("Fusion")
+            palette = QtGui.QPalette()
+            palette.setColor(QtGui.QPalette.Window,          QtGui.QColor(53, 53, 53))
+            palette.setColor(QtGui.QPalette.WindowText,      QtCore.Qt.white)
+            palette.setColor(QtGui.QPalette.Base,            QtGui.QColor(35, 35, 35))
+            palette.setColor(QtGui.QPalette.AlternateBase,   QtGui.QColor(53, 53, 53))
+            palette.setColor(QtGui.QPalette.ToolTipBase,     QtGui.QColor(53, 53, 53))
+            palette.setColor(QtGui.QPalette.ToolTipText,     QtCore.Qt.white)
+            palette.setColor(QtGui.QPalette.Text,            QtCore.Qt.white)
+            palette.setColor(QtGui.QPalette.Button,          QtGui.QColor(53, 53, 53))
+            palette.setColor(QtGui.QPalette.ButtonText,      QtCore.Qt.white)
+            palette.setColor(QtGui.QPalette.BrightText,      QtCore.Qt.red)
+            palette.setColor(QtGui.QPalette.Link,            QtGui.QColor(42, 130, 218))
+            palette.setColor(QtGui.QPalette.Highlight,       QtGui.QColor(42, 130, 218))
+            palette.setColor(QtGui.QPalette.HighlightedText, QtCore.Qt.black)
+            palette.setColor(QtGui.QPalette.Disabled, QtGui.QPalette.Text,       QtGui.QColor(127, 127, 127))
+            palette.setColor(QtGui.QPalette.Disabled, QtGui.QPalette.ButtonText, QtGui.QColor(127, 127, 127))
+            app.setPalette(palette)
+            app.setStyleSheet("")
+            return True
+        except Exception as e:
+            print(f"[Theme] Could not apply fallback dark palette: {e}")
+            return False
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _apply_tab_styles(self, dark: bool):
+        """Restyle the main tab bar to match the active theme. The tab bar has
+        its own widget-level stylesheet, which would otherwise override the
+        application-wide dark theme and stay white."""
+        if dark:
+            self.tabWidget.setStyleSheet("""
+                QTabBar::tab {
+                    background-color: #353535;
+                    color: #dddddd;
+                    font-size: 10pt;
+                }
+                QTabBar::tab:selected {
+                    background-color: steelblue;
+                    color: white;
+                }
+            """)
+        else:
+            self.tabWidget.setStyleSheet("""
+                QTabBar::tab {
+                    background-color: white;
+                    color: black;
+                    font-size: 10pt;
+                }
+                QTabBar::tab:selected {
+                    background-color: steelblue;
+                    color: white;
+                }
+            """)
 
     def _show_about_dialog(self):
         try:
