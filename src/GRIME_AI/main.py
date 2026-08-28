@@ -885,10 +885,22 @@ class MainWindow(QMainWindow):
         _after_file = _bar_actions[1] if len(_bar_actions) > 1 else _help_action
         self.menuBar().insertMenu(_after_file, self._menu_view)
 
+        self._action_follow_system = QAction("Follow System Theme", self)
+        self._action_follow_system.setCheckable(True)
+        self._action_follow_system.setStatusTip(
+            "Automatically match the operating system's light/dark theme")
+        self._action_follow_system.toggled.connect(self._on_follow_system_toggled)
+        self._menu_view.addAction(self._action_follow_system)
+
         self._action_toggle_theme = QAction("Dark Mode", self)
         self._action_toggle_theme.setStatusTip("Toggle between dark and light application theme")
         self._action_toggle_theme.triggered.connect(self._toggle_dark_mode)
         self._menu_view.addAction(self._action_toggle_theme)
+
+        # Re-apply the persisted theme settings from the previous run.
+        # Fresh install (nothing saved): light mode, Follow System off.
+        self._theme_poll_timer = None
+        self._restore_theme_settings()
 
         # Escape hatch for users whose window ends up mispositioned or
         # off-screen (e.g. after a VNC resolution change). Restores a sane
@@ -1147,6 +1159,7 @@ class MainWindow(QMainWindow):
             self._is_dark_mode = True
             self._apply_tab_styles(dark=True)
             self._action_toggle_theme.setText("Light Mode")
+            self._save_theme_setting()
         else:
             # Restore the saved light-mode style, palette, and stylesheet
             app.setStyleSheet("")
@@ -1158,6 +1171,7 @@ class MainWindow(QMainWindow):
             self._is_dark_mode = False
             self._apply_tab_styles(dark=False)
             self._action_toggle_theme.setText("Dark Mode")
+            self._save_theme_setting()
 
     # ------------------------------------------------------------------------------------------------------------------
     #
@@ -1233,6 +1247,103 @@ class MainWindow(QMainWindow):
                     color: white;
                 }
             """)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _restore_theme_settings(self):
+        """Apply the theme settings persisted from the previous run.
+        Follow System takes precedence over the manual Dark_Mode setting.
+        With nothing saved (fresh install), the app starts in light mode."""
+        if self._json_flag("Dark_Mode_Follow_System"):
+            # setChecked fires _on_follow_system_toggled, which applies the
+            # OS theme and starts the polling timer.
+            self._action_follow_system.setChecked(True)
+        elif self._json_flag("Dark_Mode"):
+            self._toggle_dark_mode()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _json_flag(key) -> bool:
+        """Read a boolean setting from the application settings JSON."""
+        try:
+            value = JsonEditor().getValue(key)
+        except Exception:
+            return False
+        return str(value).strip().lower() in ("true", "1", "yes")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _save_theme_setting(self):
+        """Persist the current manual dark/light choice."""
+        try:
+            JsonEditor().update_json_entry("Dark_Mode", str(bool(self._is_dark_mode)))
+        except Exception as e:
+            print(f"[Theme] Could not save Dark_Mode setting: {e}")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _detect_os_theme(self):
+        """Return True if the OS theme is dark, False if light, or None when
+        detection is unavailable (darkdetect missing or unsupported platform)."""
+        try:
+            import darkdetect
+            result = darkdetect.isDark()
+            return None if result is None else bool(result)
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_follow_system_toggled(self, checked):
+        """Enable/disable following the OS theme. While enabled, the manual
+        toggle is greyed out and a timer re-checks the OS theme every 2 s."""
+        try:
+            JsonEditor().update_json_entry("Dark_Mode_Follow_System", str(bool(checked)))
+        except Exception as e:
+            print(f"[Theme] Could not save Dark_Mode_Follow_System setting: {e}")
+
+        if checked:
+            if self._detect_os_theme() is None:
+                try:
+                    self.statusBar().showMessage(
+                        "Follow System Theme requires the 'darkdetect' package "
+                        "(pip install darkdetect).", 8000)
+                except Exception:
+                    pass
+                self._action_follow_system.blockSignals(True)
+                self._action_follow_system.setChecked(False)
+                self._action_follow_system.blockSignals(False)
+                try:
+                    JsonEditor().update_json_entry("Dark_Mode_Follow_System", "False")
+                except Exception:
+                    pass
+                return
+
+            self._action_toggle_theme.setEnabled(False)
+            self._sync_to_os_theme()
+            if self._theme_poll_timer is None:
+                self._theme_poll_timer = QtCore.QTimer(self)
+                self._theme_poll_timer.timeout.connect(self._sync_to_os_theme)
+            self._theme_poll_timer.start(2000)
+        else:
+            if self._theme_poll_timer is not None:
+                self._theme_poll_timer.stop()
+            self._action_toggle_theme.setEnabled(True)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    #
+    # ------------------------------------------------------------------------------------------------------------------
+    def _sync_to_os_theme(self):
+        """Switch the application theme to match the OS theme if they differ."""
+        os_dark = self._detect_os_theme()
+        if os_dark is not None and os_dark != self._is_dark_mode:
+            self._toggle_dark_mode()
 
     def _show_about_dialog(self):
         try:
