@@ -352,67 +352,110 @@ class PhenocamDownloadWorker(QtCore.QThread):
         self._cancelled = True
 
     def run(self):
-        import urllib.request, os, datetime as dt_mod
+        import urllib.request, os, datetime as dt_mod, threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from GRIME_AI.phenocam.GRIME_AI_PhenoCam import GRIME_AI_PhenoCam
 
         # All PhenoCam filename timestamps are local time (both NEON via PhenoCam
         # and strictly PhenoCam sites), so the user's local start/end times are
-        # compared directly — no UTC conversion needed.
+        # compared directly - no UTC conversion needed.
         start_date, end_date = self.start_dt.date(), self.end_dt.date()
         start_time, end_time = self.start_dt.time(), self.end_dt.time()
 
-        image_list = []
-        total_days = (end_date - start_date).days + 1
-
-        current, day_idx = start_date, 0
-        while current <= end_date:
-            if self._cancelled:
-                self.finished.emit(-1)
-                return
-
-            day_idx += 1
-            t0, t1 = start_time, end_time
-
-            url = (
-                f"https://phenocam.nau.edu/webcam/browse/{self.site_name}/"
-                f"{current.year}/{str(current.month).zfill(2)}/{str(current.day).zfill(2)}"
-            )
-
-            try:
-                image_list.extend(
-                    GRIME_AI_PhenoCam().getVisibleImages(url, t0, t1).getVisibleList()
-                )
-            except Exception as e:
-                print(f"[PhenocamDownloadWorker] Error scanning {current}: {e}")
-
-            self.progress.emit(day_idx, total_days, f"Scanning {current.strftime('%Y-%m-%d')}...")
-            current += dt_mod.timedelta(days=1)
-
-        if not image_list:
-            self.finished.emit(0)
-            return
-
         os.makedirs(self.save_folder, exist_ok=True)
 
-        total, downloaded = len(image_list), 0
-        for i, img in enumerate(image_list):
-            if self._cancelled:
-                self.finished.emit(-1)
-                return
+        # ------------------------------------------------------------------
+        # Pipelined scan + download: each day's images are handed to a small
+        # download pool the moment that day's scan completes, so downloading
+        # overlaps the remaining scanning instead of waiting for all of it.
+        # Scanning stays sequential (one browse-page request at a time) and
+        # the pool is kept small to stay polite to the PhenoCam server.
+        # ------------------------------------------------------------------
+        counters = {"downloaded": 0, "done": 0}
+        lock = threading.Lock()
 
+        def _fetch(img):
+            if self._cancelled:
+                return
             filename = os.path.basename(img.fullPathAndFilename)
             dest = os.path.join(self.save_folder, filename)
-
+            got = 0
             if not os.path.isfile(dest):
                 try:
                     urllib.request.urlretrieve(img.fullPathAndFilename, dest)
-                    downloaded += 1
+                    got = 1
                 except Exception as e:
                     print(f"[PhenocamDownloadWorker] Error downloading {filename}: {e}")
+            with lock:
+                counters["done"] += 1
+                counters["downloaded"] += got
 
-            self.progress.emit(i + 1, total, f"Downloading {filename}")
+        futures = []
+        total_days = (end_date - start_date).days + 1
+        pool = ThreadPoolExecutor(max_workers=4)
+        try:
+            current, day_idx = start_date, 0
+            while current <= end_date:
+                if self._cancelled:
+                    break
 
-        self.finished.emit(downloaded)
+                day_idx += 1
+                url = (
+                    f"https://phenocam.nau.edu/webcam/browse/{self.site_name}/"
+                    f"{current.year}/{str(current.month).zfill(2)}/{str(current.day).zfill(2)}"
+                )
+
+                try:
+                    day_images = GRIME_AI_PhenoCam().getVisibleImages(
+                        url, start_time, end_time
+                    ).getVisibleList()
+                except Exception as e:
+                    print(f"[PhenocamDownloadWorker] Error scanning {current}: {e}")
+                    day_images = []
+
+                for img in day_images:
+                    futures.append(pool.submit(_fetch, img))
+
+                with lock:
+                    dl = counters["downloaded"]
+                self.progress.emit(
+                    day_idx, total_days,
+                    f"Scanning {current.strftime('%Y-%m-%d')}... "
+                    f"({len(futures)} images found, {dl} downloaded)"
+                )
+                current += dt_mod.timedelta(days=1)
+
+            # Scanning finished (or cancelled): report on the remaining
+            # downloads as they complete.
+            total = len(futures)
+            for f in as_completed(futures):
+                if self._cancelled:
+                    break
+                with lock:
+                    done = counters["done"]
+                self.progress.emit(done, max(total, 1),
+                                   f"Downloading... {done}/{total}")
+        finally:
+            pool.shutdown(wait=not self._cancelled, cancel_futures=self._cancelled)
+
+        if self._cancelled:
+            self.finished.emit(-1)
+            return
+
+        if not futures:
+            self.finished.emit(0)
+            return
+
+        # Generate the completeness/gap report (HTML + CSV + optional PDF)
+        # in the download folder.  PhenoCam filename timestamps are already
+        # site-local, so no timezone conversion is applied.  Never fatal.
+        try:
+            from GRIME_AI.reporting.gap_report import generate_gap_report
+            generate_gap_report(self.save_folder)
+        except Exception as e:
+            print(f"[PhenocamDownloadWorker] Gap report skipped: {e}")
+
+        self.finished.emit(counters["downloaded"])
 
 
 class NEONPreviewFetcher(QtCore.QThread):
@@ -4636,7 +4679,7 @@ def fetchLocalImageList(self, filePath, bFetchRecursive, bCreateEXIFFile, start_
                     myEXIFData.extractEXIFData(fullPathAndFilename)
 
                     strTemp = str(myEXIFData.getEXIF()[8])
-                    timeOriginal = re.search(' \d{2}:\d{2}:\d{2}', strTemp).group(0)
+                    timeOriginal = re.search(r' \d{2}:\d{2}:\d{2}', strTemp).group(0)
 
                     nHours = int(str(timeOriginal[1:3]))
                     nMins = int(str(timeOriginal[4:6]))
@@ -5101,10 +5144,121 @@ def NEON_dateChangeMethod(date_widget, tableWidget, bUniqueDates):
 #
 # ======================================================================================================================
 def DP1_20002_fetchImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time, downloadsFilePath):
+    """
+    Pipelined NEON (via PhenoCam) image fetch: each day's browse-page scan
+    hands its images straight to a small download pool, so downloading runs
+    in parallel with -- lagging just behind -- the remaining scanning.  The
+    function itself stays synchronous: it returns only when all images are
+    on disk, because the caller immediately processes the download folder.
+    """
+    global SITECODE, DOMAINCODE, dailyImagesList, gWebImageCount
 
-    imageList = DP1_20002_buildImageList(self, nProductID, nRow, start_date, end_date, start_time, end_time)
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
 
-    DP1_20002_downloadImages(self, imageList, downloadsFilePath)
+    if nRow <= -1:
+        return []
+
+    if not os.path.exists(downloadsFilePath):
+        os.makedirs(downloadsFilePath)
+
+    total_days = (end_date - start_date).days + 1
+
+    cancel_requested = {"value": False}
+    counters = {"downloaded": 0, "done": 0}
+    lock = threading.Lock()
+
+    def request_cancel():
+        cancel_requested["value"] = True
+
+    progressBar = QProgressWheel(on_close=request_cancel)
+    progressBar.setRange(0, total_days)
+    progressBar.setWindowTitle('Scanning & downloading images...')
+    progressBar.show()
+
+    def _fetch(img):
+        if cancel_requested["value"]:
+            return
+        filename = os.path.basename(img.fullPathAndFilename)
+        dest = os.path.join(downloadsFilePath, filename)
+        got = 0
+        if not os.path.isfile(dest):
+            try:
+                urllib.request.urlretrieve(img.fullPathAndFilename, dest)
+                got = 1
+            except Exception as e:
+                print(f"[NEON DP1.20002] Error downloading {filename}: {e}")
+        with lock:
+            counters["done"] += 1
+            counters["downloaded"] += got
+
+    dailyImagesList.clear()
+    product_str = str(nProductID).zfill(5)
+    futures = []
+    pool = ThreadPoolExecutor(max_workers=4)
+    try:
+        current, day_idx = start_date, 0
+        while current <= end_date:
+            if cancel_requested["value"] or not progressBar.isVisible():
+                cancel_requested["value"] = True
+                break
+
+            day_idx += 1
+            dailyURLvisible = (
+                f"https://phenocam.nau.edu/webcam/browse/NEON.{DOMAINCODE}.{SITECODE}.DP1.{product_str}/"
+                f"{current.year}/{str(current.month).zfill(2)}/{str(current.day).zfill(2)}"
+            )
+
+            try:
+                day_images = GRIME_AI_PhenoCam().getVisibleImages(
+                    dailyURLvisible, start_time, end_time
+                ).getVisibleList()
+            except Exception as e:
+                print(f"[NEON DP1.20002] Error scanning {current}: {e}")
+                day_images = []
+
+            dailyImagesList.setVisibleList(day_images)
+            for img in day_images:
+                futures.append(pool.submit(_fetch, img))
+
+            with lock:
+                dl = counters["downloaded"]
+            progressBar.setWindowTitle(
+                f"{current.strftime('%Y-%m-%d')} - {len(futures)} found, {dl} downloaded"
+            )
+            progressBar.setValue(day_idx)
+            QCoreApplication.processEvents()
+
+            current += datetime.timedelta(days=1)
+
+        # Scanning finished: wait for the download tail, keeping the UI alive.
+        total = len(futures)
+        while not cancel_requested["value"]:
+            with lock:
+                done = counters["done"]
+            if done >= total:
+                break
+            progressBar.setWindowTitle(f"Downloading... {done}/{total}")
+            QCoreApplication.processEvents()
+            time.sleep(0.05)
+    finally:
+        pool.shutdown(wait=not cancel_requested["value"],
+                      cancel_futures=cancel_requested["value"])
+        if progressBar and progressBar.isVisible():
+            progressBar.close()
+
+    gWebImageCount = len(dailyImagesList.getVisibleList())
+
+    # Generate the completeness/gap report (HTML + CSV + optional PDF) in the
+    # download folder.  Skipped if the user cancelled; never fatal.
+    if not cancel_requested["value"]:
+        try:
+            from GRIME_AI.reporting.gap_report import generate_gap_report
+            generate_gap_report(downloadsFilePath)
+        except Exception as e:
+            print(f"[NEON DP1.20002] Gap report skipped: {e}")
+
+    return dailyImagesList.getVisibleList()
 
 # ======================================================================================================================
 #
@@ -5194,6 +5348,17 @@ def DP1_20002_downloadImages(self, imageList, downloadsFilePath):
 
     if progressBarDownloads and progressBarDownloads.isVisible():
         progressBarDownloads.close()
+
+    # Generate the completeness/gap report (HTML + CSV + optional PDF) in the
+    # download folder.  NEON-via-PhenoCam filenames are site-local timestamps,
+    # same as PhenoCam proper, so no timezone conversion is applied.  Skipped
+    # if the user cancelled mid-download; never fatal.
+    if not cancel_requested["value"]:
+        try:
+            from GRIME_AI.reporting.gap_report import generate_gap_report
+            generate_gap_report(downloadsFilePath)
+        except Exception as e:
+            print(f"[NEON DP1.20002] Gap report skipped: {e}")
 
 #jes LET THE CALLING FUNCTION BE RESPONSIBLE FOR REPORTING DOWNLOAD COMPLETION.
 #jes MODIFY THIS IN A FUTURE RELEASE TO RETURN A PASS/FAIL MESSAGE TO THE FUNCTION THAT INVOKED THIS FUNCTION.
@@ -5888,7 +6053,7 @@ def run_cli(args):
         )
 
         compositeSlices = GRIME_AI_CompositeSlices(slice_rect, False)
-        compositeSlices.create_composite_image(filenames, args.folder+'\compositeSlices')
+        compositeSlices.create_composite_image(filenames, os.path.join(args.folder, 'compositeSlices'))
 
         print("Composite slice complete!")
 

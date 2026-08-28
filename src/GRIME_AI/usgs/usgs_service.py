@@ -7,6 +7,7 @@ import pandas as pd
 from typing import Dict, Optional
 
 from .usgs_types import CameraInfo, LatestImage
+from GRIME_AI.reporting.gap_report import generate_gap_report
 from GRIME_AI.dialogs.api_keys import APIKeyManager
 
 # Legacy AWS endpoint - kept as fallback until USGS decommissions it (after July 2026)
@@ -307,6 +308,27 @@ class USGSService:
 
     # ------------------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------
+    def _write_gap_report(self, site_name: str, save_folder: str) -> None:
+        """
+        Emit image_download_report.html / image_gaps.csv into the download
+        folder, summarizing temporal discontinuities in the imagery just
+        downloaded.  Timezone comes from the camera dictionary so the report
+        reads in site-local, DST-aware time.  Never raises: a report failure
+        must not fail a download.
+        """
+        try:
+            tz = None
+            try:
+                tz = self.camera_info(site_name).tz
+            except Exception:
+                pass
+            html_path, _ = generate_gap_report(save_folder, tz=tz)
+            print(f"[USGS] Gap report written: {html_path}")
+        except Exception as e:
+            print(f"[USGS] Gap report skipped: {e}")
+
+    # ------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------
     def download_images(self, site_name: str, start_date: date, end_date: date,
                         start_time: time, end_time: time, save_folder: str,
                         progress: Optional[callable] = None, cancel_check=None) -> Tuple[int, int]:
@@ -367,6 +389,7 @@ class USGSService:
             except Exception as e:
                 print(f"Download failed for {dst}: {e}")
                 missing += 1
+        self._write_gap_report(site_name, save_folder)
         return downloaded, missing
 
     # ------------------------------------------------------------------------------------
@@ -400,6 +423,7 @@ class USGSService:
             except Exception as e:
                 print(f"Download failed for {image}: {e}")
                 missing += 1
+        self._write_gap_report(site_name, save_folder)
         return downloaded, missing
 
     # ------------------------------------------------------------------------------------
