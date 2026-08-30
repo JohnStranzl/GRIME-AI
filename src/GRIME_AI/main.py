@@ -1041,6 +1041,20 @@ class MainWindow(QMainWindow):
         self.USGS_listboxSites.itemClicked.connect(self._usgs_tree_item_clicked)
         self.pushButton_USGSDownload.clicked.connect(self.pushButton_USGSDownloadClicked)
 
+        # Correlate Sensor Data button - added programmatically next to the
+        # USGS Download button (no .ui change required).
+        try:
+            self.pushButton_USGSCorrelate = QtWidgets.QPushButton("Correlate Sensor Data")
+            self.pushButton_USGSCorrelate.setToolTip(
+                "Correlate downloaded image timestamps with co-located NWIS sensor data")
+            _dl_layout = self.pushButton_USGSDownload.parentWidget().layout()
+            if _dl_layout is not None:
+                _idx = _dl_layout.indexOf(self.pushButton_USGSDownload)
+                _dl_layout.insertWidget(_idx, self.pushButton_USGSCorrelate)
+            self.pushButton_USGSCorrelate.clicked.connect(self.pushButton_USGSCorrelate_Clicked)
+        except Exception as _e:
+            print(f"[USGS] Could not add Correlate button: {_e}")
+
         # ============================================================================
         # DEBOUNCE TIMER FOR IMAGE COUNT CHECKING
         # AUTOMATICALLY CHECKS AVAILABILITY 2 SECONDS AFTER USER STOPS CHANGING DATES
@@ -3166,6 +3180,73 @@ class MainWindow(QMainWindow):
     # ==================================================================================================================
     #
     # ==================================================================================================================
+    # ==================================================================================================================
+    #
+    # ==================================================================================================================
+    def pushButton_USGSCorrelate_Clicked(self):
+        """Correlate downloaded USGS images with the sidecar NWIS sensor file
+        and open a report of matches, misalignments, and coverage gaps."""
+        start_dir = self.edit_USGSSaveFilePath.text().strip() or (JsonEditor().getValue("USGS_Root_Folder") or "")
+
+        image_folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Select the folder of downloaded USGS images", start_dir)
+        if not image_folder:
+            return
+
+        sensor_file, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Select the NWIS sensor data file (.txt or .csv)",
+            os.path.dirname(image_folder),
+            "NWIS sensor data (*.txt *.csv);;All files (*.*)")
+        if not sensor_file:
+            return
+
+        # Match tolerance: seconds entered directly; 0 = automatic
+        # (half the sensor sampling interval, e.g. 450 s for 15-min data).
+        tol_seconds, ok = QtWidgets.QInputDialog.getDouble(
+            self, "Match tolerance",
+            "Maximum time difference between an image and a sensor reading\n"
+            "for them to be considered aligned, in SECONDS\n"
+            "(e.g. 90 = 1.5 minutes; 0 = automatic: half the sensor interval):",
+            0.0, 0.0, 86400.0, 1)
+        if not ok:
+            return
+        tolerance_minutes = (tol_seconds / 60.0) if tol_seconds > 0 else None
+
+        from GRIME_AI.GRIME_AI_QProgressWheel import QProgressWheel
+        progressBar = QProgressWheel(0, 1000)
+        progressBar.setWindowTitle("Correlating images with sensor data...")
+        # Keep the wheel visible above the main window
+        progressBar.setWindowFlags(progressBar.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+        progressBar.show()
+
+        def _progress(done, total, label):
+            progressBar.setValue(int(done * 1000 / max(total, 1)))
+            if label:
+                progressBar.setWindowTitle(label)
+            QApplication.processEvents()
+
+        try:
+            from GRIME_AI.GRIME_AI_SensorImageCorrelator import GRIME_AI_SensorImageCorrelator
+            correlator = GRIME_AI_SensorImageCorrelator()
+            csv_path, xlsx_path = correlator.correlate(image_folder, sensor_file,
+                                                       tolerance_minutes=tolerance_minutes,
+                                                       progress=_progress)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                self, "Sensor/Image Correlation",
+                f"Correlation failed:\n{e}")
+            return
+        finally:
+            # Always dismiss the progress wheel, whatever happened above
+            progressBar.close()
+
+        QtWidgets.QMessageBox.information(
+            self, "Sensor/Image Correlation",
+            "Correlation report written:\n\n"
+            f"{csv_path}\n{xlsx_path}\n\n"
+            "The xlsx contains Image Correlation, Sensor Coverage, Gaps, "
+            "and Summary worksheets. Unmatched rows are highlighted.")
+
     def pushButton_USGSDownloadClicked(self):
 
         # VERIFY THAT THE FOLDER HAS BEEN SPECIFIED
